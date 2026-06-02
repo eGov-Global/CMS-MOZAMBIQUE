@@ -1,0 +1,551 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+import 'dart:math' as math;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'app_config.dart';
+
+class WebViewScreen extends StatefulWidget {
+  final AppConfig config;
+  const WebViewScreen({super.key, required this.config});
+
+  @override
+  State<WebViewScreen> createState() => _WebViewScreenState();
+}
+
+class _WebViewScreenState extends State<WebViewScreen>
+    with WidgetsBindingObserver {
+  late final WebViewController _controller;
+  bool _loading = true;
+  bool _offline = false;
+  bool _hasLoadedOnce = false;
+  String _currentUrl = '';
+  String? _pageError;
+  DateTime? _lastBackTime;
+  StreamSubscription<List<ConnectivityResult>>? _connSub;
+
+  double _scrollY = 0;
+  double _pullStartY = 0;
+  double _pullDistance = 0;
+  bool _refreshing = false;
+  static const double _pullThreshold = 140;
+  static const double _pullStart = 24;
+
+  bool get _onCitizen => _currentUrl.contains('/citizen');
+  bool get _onLoginPage => _currentUrl.contains('/login');
+
+  String get _primaryHost => Uri.parse(widget.config.url).host;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _initController();
+    _watchConnectivity();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _connSub?.cancel();
+    super.dispose();
+  }
+
+  void _initController() {
+    late final PlatformWebViewControllerCreationParams params;
+    if (!kIsWeb && Platform.isIOS) {
+      params = WebKitWebViewControllerCreationParams(
+        allowsInlineMediaPlayback: true,
+        mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+      );
+    } else {
+      params = const PlatformWebViewControllerCreationParams();
+    }
+
+    final controller = WebViewController.fromPlatformCreationParams(params)
+      ..setJavaScriptMode(widget.config.javascriptEnabled
+          ? JavaScriptMode.unrestricted
+          : JavaScriptMode.disabled)
+      ..setBackgroundColor(Colors.white)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (url) => setState(() {
+            _loading = true;
+            _currentUrl = url;
+            _pageError = null;
+          }),
+          onPageFinished: (url) => setState(() {
+            _loading = false;
+            _currentUrl = url;
+            _hasLoadedOnce = true;
+          }),
+          onWebResourceError: (err) {
+            if (err.isForMainFrame != true) return;
+            setState(() {
+              _loading = false;
+              _pageError = _describeError(err);
+            });
+          },
+          onHttpError: (err) {
+            final code = err.response?.statusCode;
+            if (code == null) return;
+            if (code >= 400) {
+              setState(() {
+                _loading = false;
+                _pageError = 'Server error ($code). Please try again later.';
+              });
+            }
+          },
+          onNavigationRequest: _onNavigation,
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.config.url));
+
+    if (!kIsWeb && controller.platform is AndroidWebViewController) {
+      final android = controller.platform as AndroidWebViewController;
+      AndroidWebViewController.enableDebugging(false);
+      android.setMediaPlaybackRequiresUserGesture(false);
+    }
+
+    controller.setOnScrollPositionChange((pos) {
+      _scrollY = pos.y;
+    });
+
+    _controller = controller;
+  }
+
+  void _onPointerDown(PointerDownEvent e) {
+    _pullStartY = e.position.dy;
+    if (_pullDistance != 0) {
+      setState(() => _pullDistance = 0);
+    }
+  }
+
+  void _onPointerMove(PointerMoveEvent e) {
+    if (_refreshing) return;
+    if (_scrollY > 1) {
+      if (_pullDistance != 0) setState(() => _pullDistance = 0);
+      return;
+    }
+    final delta = e.position.dy - _pullStartY;
+    if (delta <= 0) {
+      if (_pullDistance != 0) setState(() => _pullDistance = 0);
+      return;
+    }
+    setState(() => _pullDistance = delta);
+  }
+
+  void _onPointerEnd(PointerEvent e) {
+    if (_pullDistance >= _pullThreshold && !_refreshing) {
+      _doPullRefresh();
+    } else if (_pullDistance != 0) {
+      setState(() => _pullDistance = 0);
+    }
+  }
+
+  Future<void> _doPullRefresh() async {
+    setState(() {
+      _refreshing = true;
+      _pullDistance = _pullThreshold;
+    });
+    await _reload();
+    if (!mounted) return;
+    setState(() {
+      _refreshing = false;
+      _pullDistance = 0;
+    });
+  }
+
+  Future<NavigationDecision> _onNavigation(NavigationRequest req) async {
+    final uri = Uri.tryParse(req.url);
+    if (uri == null) return NavigationDecision.navigate;
+    final scheme = uri.scheme.toLowerCase();
+
+    if (scheme == 'mailto' || scheme == 'tel' || scheme == 'sms') {
+      await _launchExternal(uri);
+      return NavigationDecision.prevent;
+    }
+
+    if ((scheme == 'http' || scheme == 'https') &&
+        uri.host.isNotEmpty &&
+        uri.host != _primaryHost) {
+      await _launchExternal(uri);
+      return NavigationDecision.prevent;
+    }
+
+    return NavigationDecision.navigate;
+  }
+
+  Future<void> _launchExternal(Uri uri) async {
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        _showSnack('No app available to handle this link');
+      }
+    } catch (_) {
+      if (mounted) _showSnack('Could not open link');
+    }
+  }
+
+  String _describeError(WebResourceError err) {
+    switch (err.errorType) {
+      case WebResourceErrorType.hostLookup:
+      case WebResourceErrorType.unknown:
+        return 'Could not reach the server. Check your connection and try again.';
+      case WebResourceErrorType.timeout:
+      case WebResourceErrorType.connect:
+      case WebResourceErrorType.io:
+        return 'The connection timed out. Please try again.';
+      case WebResourceErrorType.failedSslHandshake:
+        return 'A secure connection could not be established.';
+      default:
+        return 'Page failed to load. Please try again.';
+    }
+  }
+
+  Future<void> _watchConnectivity() async {
+    final results = await Connectivity().checkConnectivity();
+    _updateOffline(results, silent: true);
+    _connSub = Connectivity().onConnectivityChanged.listen(_updateOffline);
+  }
+
+  void _updateOffline(List<ConnectivityResult> results, {bool silent = false}) {
+    final offline = results.every((r) => r == ConnectivityResult.none);
+    if (offline == _offline) return;
+    setState(() => _offline = offline);
+    if (silent) return;
+    if (offline) {
+      _showSnack('You are offline. Some features may not work.');
+    } else {
+      _showSnack('Back online');
+      if (_pageError != null) _reload();
+    }
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    Connectivity().checkConnectivity().then((r) {
+      _updateOffline(r, silent: true);
+      if (!_offline && (_pageError != null || !_hasLoadedOnce)) {
+        _reload();
+      }
+    });
+  }
+
+  Future<void> _handleBack() async {
+    if (await _controller.canGoBack()) {
+      await _controller.goBack();
+      return;
+    }
+    final now = DateTime.now();
+    if (_lastBackTime != null &&
+        now.difference(_lastBackTime!) < const Duration(seconds: 2)) {
+      await SystemNavigator.pop();
+      return;
+    }
+    _lastBackTime = now;
+    _showSnack('Press back again to exit');
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _loading = true;
+      _pageError = null;
+    });
+    if (_pageError != null || !_hasLoadedOnce) {
+      await _controller.loadRequest(Uri.parse(widget.config.url));
+    } else {
+      await _controller.reload();
+    }
+  }
+
+  Future<void> _toggleAudience() async {
+    final target = _onCitizen ? widget.config.url : widget.config.citizenUrl;
+    setState(() {
+      _loading = true;
+      _pageError = null;
+    });
+    await _controller.loadRequest(Uri.parse(target));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: widget.config.primaryColor,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.white,
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+      child: PopScope<Object?>(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _handleBack();
+        },
+        child: Scaffold(
+          backgroundColor: widget.config.primaryColor,
+          appBar: widget.config.showAppBar
+              ? AppBar(
+                  backgroundColor: widget.config.primaryColor,
+                  foregroundColor: Colors.white,
+                  title: Text(widget.config.appName),
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: _reload,
+                    ),
+                  ],
+                )
+              : null,
+          body: SafeArea(
+            child: _buildBody(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_pageError != null) {
+      return _ErrorView(
+        color: widget.config.primaryColor,
+        message: _pageError!,
+        icon: _offline ? Icons.wifi_off : Icons.error_outline,
+        onRetry: _reload,
+      );
+    }
+    if (!_hasLoadedOnce && _offline) {
+      return _ErrorView(
+        color: widget.config.primaryColor,
+        message: 'No internet connection. Please check your network.',
+        icon: Icons.wifi_off,
+        onRetry: _reload,
+      );
+    }
+    final stack = Stack(
+      children: [
+        WebViewWidget(controller: _controller),
+        if (widget.config.pullToRefresh &&
+            (_pullDistance > _pullStart || _refreshing))
+          _PullIndicator(
+            color: widget.config.primaryColor,
+            pullDistance: _pullDistance,
+            startAt: _pullStart,
+            threshold: _pullThreshold,
+            refreshing: _refreshing,
+          ),
+        if (_loading)
+          LinearProgressIndicator(
+            minHeight: 2,
+            backgroundColor: Colors.transparent,
+            valueColor: AlwaysStoppedAnimation(widget.config.primaryColor),
+          ),
+        if (widget.config.showCitizenSwitch && _onLoginPage)
+          Positioned(
+            right: 0,
+            bottom: 48,
+            child: _AudienceSwitch(
+              color: _onCitizen
+                  ? const Color(0xFF4B5563)
+                  : widget.config.primaryColor,
+              onTap: _toggleAudience,
+            ),
+          ),
+      ],
+    );
+
+    if (!widget.config.pullToRefresh) return stack;
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _onPointerDown,
+      onPointerMove: _onPointerMove,
+      onPointerUp: _onPointerEnd,
+      onPointerCancel: _onPointerEnd,
+      child: stack,
+    );
+  }
+}
+
+class _PullIndicator extends StatelessWidget {
+  final Color color;
+  final double pullDistance;
+  final double startAt;
+  final double threshold;
+  final bool refreshing;
+
+  const _PullIndicator({
+    required this.color,
+    required this.pullDistance,
+    required this.startAt,
+    required this.threshold,
+    required this.refreshing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress =
+        ((pullDistance - startAt) / (threshold - startAt)).clamp(0.0, 1.0);
+    final scale = refreshing ? 1.0 : 0.6 + 0.4 * progress;
+    final top = refreshing
+        ? 24.0
+        : (8.0 + math.min((pullDistance - startAt) * 0.25, 32.0));
+
+    return Positioned(
+      top: top,
+      left: 0,
+      right: 0,
+      child: IgnorePointer(
+        child: Center(
+          child: Transform.scale(
+            scale: scale,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.18),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: refreshing
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        valueColor: AlwaysStoppedAnimation(color),
+                      ),
+                    )
+                  : Transform.rotate(
+                      angle: progress * math.pi * 1.5,
+                      child: Icon(Icons.refresh, color: color, size: 22),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AudienceSwitch extends StatefulWidget {
+  final Color color;
+  final VoidCallback onTap;
+  const _AudienceSwitch({required this.color, required this.onTap});
+
+  @override
+  State<_AudienceSwitch> createState() => _AudienceSwitchState();
+}
+
+class _AudienceSwitchState extends State<_AudienceSwitch> {
+  bool _pressed = false;
+
+  static const _radius = BorderRadius.only(
+    topLeft: Radius.circular(20),
+    bottomLeft: Radius.circular(20),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Switch portal',
+      child: AnimatedOpacity(
+        opacity: _pressed ? 0.7 : 0.18,
+        duration: const Duration(milliseconds: 180),
+        child: Material(
+          color: widget.color,
+          borderRadius: _radius,
+          elevation: 1,
+          child: InkWell(
+            borderRadius: _radius,
+            onHighlightChanged: (v) => setState(() => _pressed = v),
+            onTap: widget.onTap,
+            child: const SizedBox(
+              width: 18,
+              height: 44,
+              child: Center(
+                child: Icon(
+                  Icons.chevron_left,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  final Color color;
+  final String message;
+  final IconData icon;
+  final VoidCallback onRetry;
+  const _ErrorView({
+    required this.color,
+    required this.message,
+    required this.icon,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 64, color: color),
+            const SizedBox(height: 16),
+            const Text(
+              'Something went wrong',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: color),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              onPressed: onRetry,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
