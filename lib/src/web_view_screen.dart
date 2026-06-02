@@ -14,7 +14,8 @@ import 'app_config.dart';
 
 class WebViewScreen extends StatefulWidget {
   final AppConfig config;
-  const WebViewScreen({super.key, required this.config});
+  final VoidCallback? onReady;
+  const WebViewScreen({super.key, required this.config, this.onReady});
 
   @override
   State<WebViewScreen> createState() => _WebViewScreenState();
@@ -35,8 +36,15 @@ class _WebViewScreenState extends State<WebViewScreen>
   double _pullStartY = 0;
   double _pullDistance = 0;
   bool _refreshing = false;
+  bool _calledReady = false;
   static const double _pullThreshold = 140;
   static const double _pullStart = 24;
+
+  void _fireReady() {
+    if (_calledReady) return;
+    _calledReady = true;
+    widget.onReady?.call();
+  }
 
   bool get _onCitizen => _currentUrl.contains('/citizen');
   bool get _onLoginPage => _currentUrl.contains('/login');
@@ -81,17 +89,21 @@ class _WebViewScreenState extends State<WebViewScreen>
             _currentUrl = url;
             _pageError = null;
           }),
-          onPageFinished: (url) => setState(() {
-            _loading = false;
-            _currentUrl = url;
-            _hasLoadedOnce = true;
-          }),
+          onPageFinished: (url) {
+            setState(() {
+              _loading = false;
+              _currentUrl = url;
+              _hasLoadedOnce = true;
+            });
+            _fireReady();
+          },
           onWebResourceError: (err) {
             if (err.isForMainFrame != true) return;
             setState(() {
               _loading = false;
               _pageError = _describeError(err);
             });
+            _fireReady();
           },
           onHttpError: (err) {
             final code = err.response?.statusCode;
@@ -101,12 +113,13 @@ class _WebViewScreenState extends State<WebViewScreen>
                 _loading = false;
                 _pageError = 'Server error ($code). Please try again later.';
               });
+              _fireReady();
             }
           },
           onNavigationRequest: _onNavigation,
         ),
       )
-      ..loadRequest(Uri.parse(widget.config.url));
+      ..loadRequest(Uri.parse(widget.config.startUrl));
 
     if (!kIsWeb && controller.platform is AndroidWebViewController) {
       final android = controller.platform as AndroidWebViewController;
@@ -274,7 +287,7 @@ class _WebViewScreenState extends State<WebViewScreen>
       _pageError = null;
     });
     if (_pageError != null || !_hasLoadedOnce) {
-      await _controller.loadRequest(Uri.parse(widget.config.url));
+      await _controller.loadRequest(Uri.parse(widget.config.startUrl));
     } else {
       await _controller.reload();
     }
@@ -470,8 +483,8 @@ class _AudienceSwitchState extends State<_AudienceSwitch> {
   bool _pressed = false;
 
   static const _radius = BorderRadius.only(
-    topLeft: Radius.circular(20),
-    bottomLeft: Radius.circular(20),
+    topLeft: Radius.circular(24),
+    bottomLeft: Radius.circular(24),
   );
 
   @override
@@ -480,24 +493,24 @@ class _AudienceSwitchState extends State<_AudienceSwitch> {
       button: true,
       label: 'Switch portal',
       child: AnimatedOpacity(
-        opacity: _pressed ? 0.7 : 0.18,
+        opacity: _pressed ? 0.85 : 0.35,
         duration: const Duration(milliseconds: 180),
         child: Material(
           color: widget.color,
           borderRadius: _radius,
-          elevation: 1,
+          elevation: 2,
           child: InkWell(
             borderRadius: _radius,
             onHighlightChanged: (v) => setState(() => _pressed = v),
             onTap: widget.onTap,
             child: const SizedBox(
-              width: 18,
-              height: 44,
+              width: 26,
+              height: 56,
               child: Center(
                 child: Icon(
                   Icons.chevron_left,
                   color: Colors.white,
-                  size: 16,
+                  size: 20,
                 ),
               ),
             ),

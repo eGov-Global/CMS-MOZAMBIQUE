@@ -8,5 +8,6 @@
   "allowMixedContent": true,
   "javascriptEnabled": true,
   "showAppBar": false,
-  "pullToRefresh": true
+  "pullToRefresh": true,
+  "startWithCitizen": true
 }

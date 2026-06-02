@@ -13,6 +13,9 @@ class AppConfig {
   final bool javascriptEnabled;
   final bool showAppBar;
   final bool pullToRefresh;
+  final bool startWithCitizen;
+
+  String get startUrl => startWithCitizen ? citizenUrl : url;
 
   const AppConfig({
     required this.appName,
@@ -25,6 +28,7 @@ class AppConfig {
     required this.javascriptEnabled,
     required this.showAppBar,
     required this.pullToRefresh,
+    required this.startWithCitizen,
   });
 
   static Future<AppConfig> load() async {
@@ -43,6 +47,7 @@ class AppConfig {
       javascriptEnabled: json['javascriptEnabled'] as bool? ?? true,
       showAppBar: json['showAppBar'] as bool? ?? false,
       pullToRefresh: json['pullToRefresh'] as bool? ?? true,
+      startWithCitizen: json['startWithCitizen'] as bool? ?? true,
     );
   }
 

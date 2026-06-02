@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'src/app_config.dart';
@@ -51,20 +52,41 @@ class _Bootstrap extends StatefulWidget {
 }
 
 class _BootstrapState extends State<_Bootstrap> {
-  bool _showSplash = true;
+  bool _ready = false;
+  Timer? _maxTimer;
 
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _showSplash = false);
-    });
+    _maxTimer = Timer(const Duration(seconds: 8), _markReady);
+  }
+
+  @override
+  void dispose() {
+    _maxTimer?.cancel();
+    super.dispose();
+  }
+
+  void _markReady() {
+    if (!mounted || _ready) return;
+    _maxTimer?.cancel();
+    setState(() => _ready = true);
   }
 
   @override
   Widget build(BuildContext context) {
-    return _showSplash
-        ? SplashScreen(config: widget.config)
-        : WebViewScreen(config: widget.config);
+    return Stack(
+      children: [
+        WebViewScreen(config: widget.config, onReady: _markReady),
+        IgnorePointer(
+          ignoring: _ready,
+          child: AnimatedOpacity(
+            opacity: _ready ? 0 : 1,
+            duration: const Duration(milliseconds: 400),
+            child: SplashScreen(config: widget.config),
+          ),
+        ),
+      ],
+    );
   }
 }
