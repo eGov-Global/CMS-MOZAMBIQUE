@@ -65,7 +65,7 @@ android {
                     ?.identifier
                 val abiSuffix = if (abi.isNullOrEmpty()) "" else "-$abi"
                 output.outputFileName =
-                    "CMS_Mozambique-v${variant.versionName}$abiSuffix-${variant.buildType.name}.apk"
+                    "CMS_Mozambique-v${variant.versionName}-b${variant.versionCode}$abiSuffix-${variant.buildType.name}.apk"
             }
     }
 }
