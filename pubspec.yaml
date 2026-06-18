@@ -17,6 +17,10 @@ dependencies:
   connectivity_plus: ^6.1.0
   url_launcher: ^6.3.0
   package_info_plus: ^8.1.0
+  # Native pickers + runtime permissions for in-WebView location & attachments (#885)
+  permission_handler: ^11.3.1
+  image_picker: ^1.1.2
+  file_picker: ^8.0.0
 
 dev_dependencies:
   flutter_test:
