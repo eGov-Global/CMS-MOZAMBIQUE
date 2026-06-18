@@ -9,8 +9,14 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 
 import 'app_config.dart';
+
+/// Where the user chose to pull a complaint attachment from.
+enum _PickSource { camera, gallery, files }
 
 class WebViewScreen extends StatefulWidget {
   final AppConfig config;
@@ -134,12 +140,21 @@ class _WebViewScreenState extends State<WebViewScreen>
           onNavigationRequest: _onNavigation,
         ),
       )
+      // Camera/microphone requests coming from web content (e.g. getUserMedia).
+      ..setOnPlatformPermissionRequest(_onWebPermissionRequest)
       ..loadRequest(Uri.parse(widget.config.startUrl));
 
     if (!kIsWeb && controller.platform is AndroidWebViewController) {
       final android = controller.platform as AndroidWebViewController;
       AndroidWebViewController.enableDebugging(false);
       android.setMediaPlaybackRequiresUserGesture(false);
+      // navigator.geolocation from the OSM map: ask the OS first, then answer
+      // the WebView prompt accordingly (#885).
+      android.setGeolocationPermissionsPromptCallbacks(
+        onShowPrompt: _onGeolocationPrompt,
+      );
+      // <input type="file"> from the complaint form: bridge to native pickers.
+      android.setOnShowFileSelector(_onShowFileSelector);
     }
 
     controller.setOnScrollPositionChange((pos) {
@@ -220,6 +235,167 @@ class _WebViewScreenState extends State<WebViewScreen>
     } catch (_) {
       if (mounted) _showSnack('Could not open link');
     }
+  }
+
+  // ── Native permission & picker bridges (Android) ─────────────────────────
+
+  Future<bool> _ensureLocationPermission() async {
+    var status = await Permission.location.status;
+    if (status.isGranted) return true;
+    status = await Permission.location.request();
+    if (status.isPermanentlyDenied && mounted) {
+      _showSnack('Location is blocked. Enable it for this app in Settings.');
+    }
+    return status.isGranted;
+  }
+
+  Future<bool> _ensureCameraPermission() async {
+    final status = await Permission.camera.request();
+    if (status.isPermanentlyDenied && mounted) {
+      _showSnack('Camera is blocked. Enable it for this app in Settings.');
+    }
+    return status.isGranted;
+  }
+
+  // WebView asks before honouring navigator.geolocation; we gate it on the OS
+  // permission so the device prompt actually appears.
+  Future<GeolocationPermissionsResponse> _onGeolocationPrompt(
+    GeolocationPermissionsRequestParams request,
+  ) async {
+    final granted = await _ensureLocationPermission();
+    return GeolocationPermissionsResponse(allow: granted, retain: granted);
+  }
+
+  // Camera/mic requested by web content (getUserMedia).
+  Future<void> _onWebPermissionRequest(
+    WebViewPermissionRequest request,
+  ) async {
+    if (request.types.contains(WebViewPermissionResourceType.camera)) {
+      if (!await _ensureCameraPermission()) {
+        await request.deny();
+        return;
+      }
+    }
+    await request.grant();
+  }
+
+  Future<List<String>> _onShowFileSelector(FileSelectorParams params) async {
+    final multiple = params.mode == FileSelectorMode.openMultiple;
+
+    // Non-image inputs (PDF, docs, …): go straight to the system file picker.
+    if (!_acceptsImages(params.acceptTypes)) return _pickFiles(multiple);
+
+    // The web input asked for a direct capture (`capture` attribute).
+    if (params.isCaptureEnabled) return _single(await _capturePhoto());
+
+    switch (await _showSourceSheet(onlyImages: _onlyImages(params.acceptTypes))) {
+      case _PickSource.camera:
+        return _single(await _capturePhoto());
+      case _PickSource.gallery:
+        return _pickImages(multiple);
+      case _PickSource.files:
+        return _pickFiles(multiple);
+      case null:
+        // Dismissed: hand back an empty list so the WebView clears the input.
+        return const <String>[];
+    }
+  }
+
+  Future<_PickSource?> _showSourceSheet({required bool onlyImages}) {
+    if (!mounted) return Future.value(null);
+    return showModalBottomSheet<_PickSource>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(sheetContext, _PickSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(sheetContext, _PickSource.gallery),
+            ),
+            if (!onlyImages)
+              ListTile(
+                leading: const Icon(Icons.attach_file),
+                title: const Text('Choose a file'),
+                onTap: () => Navigator.pop(sheetContext, _PickSource.files),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<String?> _capturePhoto() async {
+    if (!await _ensureCameraPermission()) return null;
+    try {
+      final shot = await ImagePicker()
+          .pickImage(source: ImageSource.camera, imageQuality: 80);
+      return shot?.path;
+    } catch (_) {
+      if (mounted) _showSnack('Could not open the camera');
+      return null;
+    }
+  }
+
+  Future<List<String>> _pickImages(bool multiple) async {
+    try {
+      final picker = ImagePicker();
+      if (multiple) {
+        final shots = await picker.pickMultiImage(imageQuality: 80);
+        return shots.map((x) => _toUri(x.path)).toList();
+      }
+      final shot =
+          await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+      return _single(shot?.path);
+    } catch (_) {
+      if (mounted) _showSnack('Could not open the gallery');
+      return const <String>[];
+    }
+  }
+
+  Future<List<String>> _pickFiles(bool multiple) async {
+    try {
+      final result =
+          await FilePicker.platform.pickFiles(allowMultiple: multiple);
+      if (result == null) return const <String>[];
+      return result.paths.whereType<String>().map(_toUri).toList();
+    } catch (_) {
+      if (mounted) _showSnack('Could not open the file picker');
+      return const <String>[];
+    }
+  }
+
+  // The Android file-chooser callback expects file URIs, not bare paths.
+  List<String> _single(String? path) =>
+      path == null ? const <String>[] : <String>[_toUri(path)];
+
+  String _toUri(String path) => Uri.file(path).toString();
+
+  bool _acceptsImages(List<String> accept) =>
+      accept.isEmpty || accept.any(_isImageType);
+
+  bool _onlyImages(List<String> accept) =>
+      accept.isNotEmpty && accept.every(_isImageType);
+
+  bool _isImageType(String type) {
+    final t = type.toLowerCase().trim();
+    if (t.startsWith('image/')) return true;
+    return const [
+      '.jpg',
+      '.jpeg',
+      '.png',
+      '.gif',
+      '.webp',
+      '.heic',
+      '.heif',
+      '.bmp',
+    ].any(t.endsWith);
   }
 
   String _describeError(WebResourceError err) {
