@@ -140,8 +140,6 @@ class _WebViewScreenState extends State<WebViewScreen>
           onNavigationRequest: _onNavigation,
         ),
       )
-      // Camera/microphone requests coming from web content (e.g. getUserMedia).
-      ..setOnPlatformPermissionRequest(_onWebPermissionRequest)
       ..loadRequest(Uri.parse(widget.config.startUrl));
 
     if (!kIsWeb && controller.platform is AndroidWebViewController) {
@@ -264,19 +262,6 @@ class _WebViewScreenState extends State<WebViewScreen>
   ) async {
     final granted = await _ensureLocationPermission();
     return GeolocationPermissionsResponse(allow: granted, retain: granted);
-  }
-
-  // Camera/mic requested by web content (getUserMedia).
-  Future<void> _onWebPermissionRequest(
-    WebViewPermissionRequest request,
-  ) async {
-    if (request.types.contains(WebViewPermissionResourceType.camera)) {
-      if (!await _ensureCameraPermission()) {
-        await request.deny();
-        return;
-      }
-    }
-    await request.grant();
   }
 
   Future<List<String>> _onShowFileSelector(FileSelectorParams params) async {
