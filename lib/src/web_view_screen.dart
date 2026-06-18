@@ -27,6 +27,7 @@ class _WebViewScreenState extends State<WebViewScreen>
   bool _loading = true;
   bool _offline = false;
   bool _hasLoadedOnce = false;
+  bool _canGoBack = false;
   String _currentUrl = '';
   String? _pageError;
   DateTime? _lastBackTime;
@@ -95,6 +96,7 @@ class _WebViewScreenState extends State<WebViewScreen>
               _currentUrl = url;
               _hasLoadedOnce = true;
             });
+            _refreshCanGoBack();
             _fireReady();
           },
           onWebResourceError: (err) {
@@ -103,18 +105,31 @@ class _WebViewScreenState extends State<WebViewScreen>
               _loading = false;
               _pageError = _describeError(err);
             });
+            _refreshCanGoBack();
             _fireReady();
           },
           onHttpError: (err) {
             final code = err.response?.statusCode;
-            if (code == null) return;
-            if (code >= 400) {
-              setState(() {
-                _loading = false;
-                _pageError = 'Server error ($code). Please try again later.';
-              });
-              _fireReady();
-            }
+            // 4xx responses (401/403/404/validation) are handled in-page by
+            // the DIGIT SPA and must never replace the page with the error
+            // screen. Treating them as fatal trapped the employee in a loop
+            // with no way back home (#884). Only a genuine 5xx server failure
+            // is shown.
+            if (code == null || code < 500) return;
+            // The main document and its background API/XHR calls both report
+            // here; only act when the failing request is the page itself, not
+            // a data fetch the app makes after loading.
+            final failedUrl = err.request?.uri.toString();
+            final isMainDocument = failedUrl != null &&
+                (failedUrl == _currentUrl ||
+                    failedUrl == widget.config.startUrl);
+            if (!isMainDocument) return;
+            setState(() {
+              _loading = false;
+              _pageError = 'Server error ($code). Please try again later.';
+            });
+            _refreshCanGoBack();
+            _fireReady();
           },
           onNavigationRequest: _onNavigation,
         ),
@@ -281,15 +296,36 @@ class _WebViewScreenState extends State<WebViewScreen>
     _showSnack('Press back again to exit');
   }
 
+  Future<void> _refreshCanGoBack() async {
+    final canGoBack = await _controller.canGoBack();
+    if (!mounted || canGoBack == _canGoBack) return;
+    setState(() => _canGoBack = canGoBack);
+  }
+
   Future<void> _reload() async {
+    // Capture before setState clears _pageError — reading it afterwards always
+    // sees null, which silently disabled the "reload from a fresh start" path.
+    final freshStart = !_hasLoadedOnce;
     setState(() {
       _loading = true;
       _pageError = null;
     });
-    if (_pageError != null || !_hasLoadedOnce) {
+    if (freshStart) {
       await _controller.loadRequest(Uri.parse(widget.config.startUrl));
     } else {
       await _controller.reload();
+    }
+  }
+
+  Future<void> _goBackFromError() async {
+    if (await _controller.canGoBack()) {
+      setState(() {
+        _pageError = null;
+        _loading = true;
+      });
+      await _controller.goBack();
+    } else {
+      await _reload();
     }
   }
 
@@ -342,22 +378,10 @@ class _WebViewScreenState extends State<WebViewScreen>
   }
 
   Widget _buildBody() {
-    if (_pageError != null) {
-      return _ErrorView(
-        color: widget.config.primaryColor,
-        message: _pageError!,
-        icon: _offline ? Icons.wifi_off : Icons.error_outline,
-        onRetry: _reload,
-      );
-    }
-    if (!_hasLoadedOnce && _offline) {
-      return _ErrorView(
-        color: widget.config.primaryColor,
-        message: 'No internet connection. Please check your network.',
-        icon: Icons.wifi_off,
-        onRetry: _reload,
-      );
-    }
+    final errorMessage = _pageError ??
+        ((!_hasLoadedOnce && _offline)
+            ? 'No internet connection. Please check your network.'
+            : null);
     final stack = Stack(
       children: [
         WebViewWidget(controller: _controller),
@@ -385,6 +409,16 @@ class _WebViewScreenState extends State<WebViewScreen>
                   ? const Color(0xFF4B5563)
                   : widget.config.primaryColor,
               onTap: _toggleAudience,
+            ),
+          ),
+        if (errorMessage != null)
+          Positioned.fill(
+            child: _ErrorView(
+              color: widget.config.primaryColor,
+              message: errorMessage,
+              icon: _offline ? Icons.wifi_off : Icons.error_outline,
+              onRetry: _reload,
+              onBack: _canGoBack ? _goBackFromError : null,
             ),
           ),
       ],
@@ -526,16 +560,20 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final IconData icon;
   final VoidCallback onRetry;
+  final VoidCallback? onBack;
   const _ErrorView({
     required this.color,
     required this.message,
     required this.icon,
     required this.onRetry,
+    this.onBack,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return Container(
+      color: Colors.white,
+      alignment: Alignment.center,
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -556,6 +594,15 @@ class _ErrorView extends StatelessWidget {
               label: const Text('Retry'),
               onPressed: onRetry,
             ),
+            if (onBack != null) ...[
+              const SizedBox(height: 12),
+              TextButton.icon(
+                style: TextButton.styleFrom(foregroundColor: color),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Go back'),
+                onPressed: onBack,
+              ),
+            ],
           ],
         ),
       ),
