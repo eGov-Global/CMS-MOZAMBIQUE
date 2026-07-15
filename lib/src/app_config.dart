@@ -6,7 +6,6 @@ class AppConfig {
   final String appName;
   final String url;
   final String citizenUrl;
-  final bool showCitizenSwitch;
   final String logoAsset;
   final Color primaryColor;
   final bool allowMixedContent;
@@ -21,7 +20,6 @@ class AppConfig {
     required this.appName,
     required this.url,
     required this.citizenUrl,
-    required this.showCitizenSwitch,
     required this.logoAsset,
     required this.primaryColor,
     required this.allowMixedContent,
@@ -40,7 +38,6 @@ class AppConfig {
           'http://digit.mctd.gov.mz/digit-ui/employee/user/login',
       citizenUrl: json['citizenUrl'] as String? ??
           'http://digit.mctd.gov.mz/digit-ui/citizen/login',
-      showCitizenSwitch: json['showCitizenSwitch'] as bool? ?? true,
       logoAsset: json['logoAsset'] as String? ?? 'assets/icons/app_icon.png',
       primaryColor: _parseHex(json['primaryColorHex'] as String? ?? '#0B4F6C'),
       allowMixedContent: json['allowMixedContent'] as bool? ?? true,
