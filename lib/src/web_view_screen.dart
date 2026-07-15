@@ -53,9 +53,6 @@ class _WebViewScreenState extends State<WebViewScreen>
     widget.onReady?.call();
   }
 
-  bool get _onCitizen => _currentUrl.contains('/citizen');
-  bool get _onLoginPage => _currentUrl.contains('/login');
-
   String get _primaryHost => Uri.parse(widget.config.url).host;
 
   @override
@@ -490,15 +487,6 @@ class _WebViewScreenState extends State<WebViewScreen>
     }
   }
 
-  Future<void> _toggleAudience() async {
-    final target = _onCitizen ? widget.config.url : widget.config.citizenUrl;
-    setState(() {
-      _loading = true;
-      _pageError = null;
-    });
-    await _controller.loadRequest(Uri.parse(target));
-  }
-
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -560,17 +548,6 @@ class _WebViewScreenState extends State<WebViewScreen>
             minHeight: 2,
             backgroundColor: Colors.transparent,
             valueColor: AlwaysStoppedAnimation(widget.config.primaryColor),
-          ),
-        if (widget.config.showCitizenSwitch && _onLoginPage)
-          Positioned(
-            right: 0,
-            bottom: 48,
-            child: _AudienceSwitch(
-              color: _onCitizen
-                  ? const Color(0xFF4B5563)
-                  : widget.config.primaryColor,
-              onTap: _toggleAudience,
-            ),
           ),
         if (errorMessage != null)
           Positioned.fill(
@@ -657,57 +634,6 @@ class _PullIndicator extends StatelessWidget {
                       angle: progress * math.pi * 1.5,
                       child: Icon(Icons.refresh, color: color, size: 22),
                     ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AudienceSwitch extends StatefulWidget {
-  final Color color;
-  final VoidCallback onTap;
-  const _AudienceSwitch({required this.color, required this.onTap});
-
-  @override
-  State<_AudienceSwitch> createState() => _AudienceSwitchState();
-}
-
-class _AudienceSwitchState extends State<_AudienceSwitch> {
-  bool _pressed = false;
-
-  static const _radius = BorderRadius.only(
-    topLeft: Radius.circular(24),
-    bottomLeft: Radius.circular(24),
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'Switch portal',
-      child: AnimatedOpacity(
-        opacity: _pressed ? 0.85 : 0.35,
-        duration: const Duration(milliseconds: 180),
-        child: Material(
-          color: widget.color,
-          borderRadius: _radius,
-          elevation: 2,
-          child: InkWell(
-            borderRadius: _radius,
-            onHighlightChanged: (v) => setState(() => _pressed = v),
-            onTap: widget.onTap,
-            child: const SizedBox(
-              width: 26,
-              height: 56,
-              child: Center(
-                child: Icon(
-                  Icons.chevron_left,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
             ),
           ),
         ),
