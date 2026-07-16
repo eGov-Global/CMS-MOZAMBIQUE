@@ -8,12 +8,23 @@ export const ENVS = {
     stateTenant: 'statea',
     username: __ENV.DIGIT_USERNAME || 'ADMIN',
     password: __ENV.DIGIT_PASSWORD || 'eGov@123',
+    // Search user (Screening Officer) — only this role can search across all
+    // complaints, so the verify step authenticates as it.
+    searchUsername: __ENV.SEARCH_USERNAME || 'loadtest',
+    searchPassword: __ENV.SEARCH_PASSWORD || 'eGov@123',
     // Optional: override PGR ServiceDefs used in load tests.
     // Omit to use all 33 default service codes (requires full-dump.sql data).
     // For minimal/k8s deployments with only default-data-handler bootstrap data:
     // serviceCodes: [
     //   'StreetLightNotWorking', 'NoStreetlight', 'GarbageNeedsTobeCleared',
     //   'BurningOfGarbage', 'DamagedGarbageBin', 'NonSweepingOfRoad',
+    // ],
+    // Optional: override the locality pool (one is picked at random per complaint).
+    // Omit to use the default localities SUN01/02/03 under city "City A".
+    // localities: [
+    //   { code: 'SUN01_ADMIN_LOCALITY', name: 'Locality 01' },
+    //   { code: 'SUN02_ADMIN_LOCALITY', name: 'Locality 02' },
+    //   { code: 'SUN03_ADMIN_LOCALITY', name: 'Locality 03' },
     // ],
   },
   prod: {
@@ -22,6 +33,10 @@ export const ENVS = {
     stateTenant: 'statea',
     username: __ENV.DIGIT_USERNAME || 'ADMIN',
     password: __ENV.DIGIT_PASSWORD || 'eGov@123',
+    // Search user (Screening Officer) — only this role can search across all
+    // complaints, so the verify step authenticates as it.
+    searchUsername: __ENV.SEARCH_USERNAME || 'loadtest',
+    searchPassword: __ENV.SEARCH_PASSWORD || 'eGov@123',
   },
 };
 

@@ -3,3 +3,7 @@ k6/config/environments.js
 ansible/inventory.ini
 *.tar.gz
 seed-1m-*.log
+
+# Test result artifacts — keep the folder (.gitkeep) but ignore all runs
+/results/*
+!/results/.gitkeep

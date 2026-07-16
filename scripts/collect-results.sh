@@ -39,36 +39,42 @@ with open('${dir}summary.json') as f:
 
 metrics = data.get('metrics', {})
 
-# Transaction duration
-td = metrics.get('transaction_duration', {}).get('values', {})
-p50 = td.get('p(50)', 0)
+# k6's --summary-export writes metric fields flat on the metric object.
+# Older k6 nested them under a 'values' key; support both.
+def m(name):
+    v = metrics.get(name, {})
+    return v.get('values', v)
+
+# Transaction duration (falls back to med/max when p(50)/p(99) not exported)
+td = m('transaction_duration')
+p50 = td.get('p(50)', td.get('med', 0))
 p95 = td.get('p(95)', 0)
-p99 = td.get('p(99)', 0)
+p99 = td.get('p(99)', td.get('max', 0))
 
-# Error rate
-hrf = metrics.get('http_req_failed', {}).get('values', {})
-error_rate = hrf.get('rate', 0) * 100
+# Error rate — Rate metric exposes the fraction as 'value' (0..1)
+hrf = m('http_req_failed')
+error_rate = hrf.get('value', hrf.get('rate', 0)) * 100
 
-# Throughput (transactions per minute)
-ts = metrics.get('transaction_success', {}).get('values', {})
-success_rate = ts.get('rate', 0) * 100
+# Success rate — custom Rate metric
+ts = m('transaction_success')
+success_rate = ts.get('value', ts.get('rate', 0)) * 100
 
-# Calculate tx/min from http_reqs count and duration
-reqs = metrics.get('http_reqs', {}).get('values', {})
-count = reqs.get('count', 0)
-# Each transaction has ~6 HTTP requests
-tx_count = count / 6
-# Assume 8 min measurement window (rough)
-tx_min = tx_count / 8
+# Throughput (transactions per minute) from the iteration rate
+it = m('iterations')
+tx_min = it.get('rate', 0) * 60
+if not tx_min:
+    # Fallback: ~6 HTTP requests per transaction over a rough 8-min window
+    tx_min = (m('http_reqs').get('count', 0) / 6) / 8
 
 print(f'{p50:.0f} {p95:.0f} {p99:.0f} {error_rate:.1f} {tx_min:.1f} {success_rate:.1f}')
 " 2>/dev/null || echo "- - - - - -")"
 
-  # Determine pass/fail
+  # Determine pass/fail — mirrors k6/config/thresholds.js baseline gates.
+  # transaction_duration includes ~8s of think time, hence the higher latency bounds.
   pass="PASS"
   if python3 -c "
 p95=${p95:-0}; p99=${p99:-0}; err=${error_rate:-100}; succ=${success_rate:-0}
-if p95 > 10000 or p99 > 20000 or err > 1 or succ < 95: exit(1)
+if p95 > 15000 or p99 > 25000 or err > 1 or succ < 95: exit(1)
 " 2>/dev/null; then
     pass="PASS"
   else
