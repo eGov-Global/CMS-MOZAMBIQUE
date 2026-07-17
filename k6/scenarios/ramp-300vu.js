@@ -1,4 +1,11 @@
 import { pgrLifecycle, transactionDuration, transactionSuccess } from './pgr-lifecycle.js';
+import { makeHandleSummary, reportThresholds } from '../helpers/report.js';
+
+const META = {
+  title: 'Ramp 300 VU',
+  description: '2m warmup (5 VUs), stepped ramp 50→300 VUs, 3m steady at 300, 1m ramp-down.',
+  scenarios: ['warmup', 'main'],
+};
 
 // Relaxed thresholds for 300-VU stress profile — higher latency and error
 // tolerance than the standard THRESHOLDS to avoid noisy failures under load.
@@ -32,8 +39,10 @@ export const options = {
       exec: 'mainFn',
     },
   },
-  thresholds: THRESHOLDS_RAMP_300,
+  thresholds: { ...THRESHOLDS_RAMP_300, ...reportThresholds(META.scenarios) },
 };
+
+export const handleSummary = makeHandleSummary(META);
 
 export function warmupFn() {
   pgrLifecycle();

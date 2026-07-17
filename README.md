@@ -35,7 +35,11 @@ digit-load-tests/
 │       ├── burst.js                 # Constant VUs for ceiling testing
 │       ├── seed-1m.js               # 540K iterations for DB population
 │       ├── seed-calibrate.js        # 1K iterations for quick throughput check
-│       └── pgr-lifecycle.js         # Shared lifecycle logic (CREATE→ASSIGN→RESOLVE→SEARCH)
+│       ├── arrival-rate.js          # Open-model — target req/s (no coordinated omission)
+│       ├── workload-mix.js          # Persona mix — ~70% read / 20% create / 10% lifecycle
+│       ├── soak.js                  # Endurance — steady load for hours
+│       ├── stress-to-failure.js     # Ramp past the knee to the breakpoint
+│       └── pgr-lifecycle.js         # Shared lifecycle logic (CREATE→ASSIGN→ASSIGN→RESOLVE→SEARCH)
 ├── profiles/                        # Docker Compose CPU limit overrides
 │   ├── cpu-2.yml                    # 2 vCPU budget across all services
 │   ├── cpu-4.yml

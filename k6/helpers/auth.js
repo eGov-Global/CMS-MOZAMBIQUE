@@ -1,4 +1,5 @@
 import http from 'k6/http';
+import { apiErrors } from './report.js';
 
 const BASIC_AUTH = 'Basic ZWdvdi11c2VyLWNsaWVudDo=';
 
@@ -33,6 +34,7 @@ export function login(baseUrl, username, password, tenantId, userType) {
 
   if (res.status !== 200) {
     console.error(`Login failed: ${res.status} ${res.body}`);
+    apiErrors.add(1, { name: 'Auth_Login', status: String(res.status) });
     return null;
   }
 

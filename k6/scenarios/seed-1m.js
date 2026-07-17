@@ -9,11 +9,18 @@ import { Trend, Rate, Counter } from 'k6/metrics';
 import exec from 'k6/execution';
 import { login } from '../helpers/auth.js';
 import { createComplaint, updateComplaint } from '../helpers/pgr.js';
+import { makeHandleSummary, reportThresholds } from '../helpers/report.js';
 import { getEnv } from '../config/environments.js';
 
 export const transactionDuration = new Trend('transaction_duration', true);
 export const transactionSuccess = new Rate('transaction_success');
 export const complaintsCreated = new Counter('complaints_created');
+
+const META = {
+  title: 'Seed 1M',
+  description: '540K shared iterations at 50 VUs — populate the DB with realistic volume.',
+  scenarios: ['seed'],
+};
 
 const SERVICE_CODES = [
   'StreetLightNotWorking', 'NoStreetlight', 'GarbageNeedsTobeCleared',
@@ -47,8 +54,11 @@ export const options = {
   thresholds: {
     'transaction_success': ['rate>0.90'],
     'http_req_failed': ['rate<0.05'],
+    ...reportThresholds(META.scenarios),
   },
 };
+
+export const handleSummary = makeHandleSummary(META);
 
 function ensureAuth(env) {
   if (!employeeToken) {

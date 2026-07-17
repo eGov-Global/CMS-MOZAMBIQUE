@@ -3,7 +3,14 @@ import { Trend, Rate } from 'k6/metrics';
 import exec from 'k6/execution';
 import { login } from '../helpers/auth.js';
 import { createComplaint, updateComplaint, searchComplaint } from '../helpers/pgr.js';
+import { makeHandleSummary, reportThresholds } from '../helpers/report.js';
 import { getEnv } from '../config/environments.js';
+
+const META = {
+  title: 'Variable throughput',
+  description: 'Alternating spike/valley/sustained phases (open model) to test elasticity & recovery.',
+  scenarios: ['variable_throughput'],
+};
 
 // Custom metrics — same as other scenarios for consistent reporting
 export const transactionDuration = new Trend('transaction_duration', true);
@@ -92,8 +99,11 @@ export const options = {
     'transaction_success': ['rate>0.90'],
     'http_req_failed': ['rate<0.05'],
     'http_req_duration': ['p(95)<10000'],
+    ...reportThresholds(META.scenarios),
   },
 };
+
+export const handleSummary = makeHandleSummary(META);
 
 function thinkTime() {
   sleep(Math.random() * 2 + 1);

@@ -14,7 +14,7 @@ Use `run-test.sh` to run one scenario:
 |-----------|--------|-------------|
 | `env` | `dev`, `prod` | Target environment (from `environments.js`) |
 | `profile` | `baseline`, `cpu-2`, `cpu-4`, `cpu-8`, `cpu-16` | CPU profile label (informational — profile must be applied separately) |
-| `scenario` | `smoke`, `ramp-2vu`, `ramp-10vu`, `ramp-50vu`, `burst`, `seed-1m`, `seed-calibrate` | k6 scenario file (without `.js`) |
+| `scenario` | `smoke`, `ramp-2vu`, `ramp-10vu`, `ramp-50vu`, `burst`, `seed-1m`, `seed-calibrate`, `arrival-rate`, `workload-mix`, `soak`, `stress-to-failure` | k6 scenario file (without `.js`) |
 
 Example:
 
@@ -135,6 +135,50 @@ k6 run --no-usage-report --env TARGET=prod k6/scenarios/seed-calibrate.js
 ```
 
 **Duration:** 1-3 minutes (1,000 iterations). **VUs:** 50.
+
+### arrival-rate
+
+**Purpose:** Open-model load — drive a target requests/sec independent of latency (avoids the closed-model coordinated-omission bias of the `ramp-*` scenarios).
+**When to use:** Capacity testing where you care about sustained throughput, not just concurrency.
+
+```bash
+RATE=20 ./scripts/run-test.sh dev baseline arrival-rate
+```
+
+**Tunables (env):** `RATE` (iters/s, default 20), `PRE_VUS`, `MAX_VUS`. Reuses `pgrLifecycle()`. At a rate above capacity, watch for rising `dropped_iterations`.
+
+### workload-mix
+
+**Purpose:** Production-like persona mix — ~70% inbox reads (Screening Officer), ~20% create-only, ~10% full lifecycle.
+**When to use:** Realistic "real-use" load rather than a uniform write path.
+
+```bash
+READ_RATE=35 CREATE_RATE=10 LIFECYCLE_RATE=5 ./scripts/run-test.sh dev baseline workload-mix
+```
+
+**Tunables (env):** `READ_RATE`, `CREATE_RATE`, `LIFECYCLE_RATE`, `DURATION`. The read persona needs `searchUsername`/`searchPassword` (Screening Officer) set in `environments.js`.
+
+### soak
+
+**Purpose:** Endurance — steady load for hours to surface memory leaks, connection-pool exhaustion, Kafka/persister lag, and latency drift as data grows.
+**When to use:** Stability validation before a release.
+
+```bash
+RATE=10 DURATION=2h nohup ./scripts/run-test.sh dev baseline soak > soak.log 2>&1 &
+```
+
+**Tunables (env):** `RATE` (default 10/s), `DURATION` (default `2h`), `PRE_VUS`, `MAX_VUS`. Inspect `report.html` time-series for upward trends, not just final percentiles.
+
+### stress-to-failure
+
+**Purpose:** Find the breakpoint — ramp arrival rate past the knee until the saturation ceiling aborts the run.
+**When to use:** Determining maximum sustainable req/s and recovery behavior.
+
+```bash
+PEAK=400 ./scripts/run-test.sh dev baseline stress-to-failure
+```
+
+**Tunables (env):** `PEAK` (top iters/s, default 400), `STEP`, `PRE_VUS`, `MAX_VUS`. Thresholds here are saturation markers with `abortOnFail` (not correctness gates) — the run stops once error rate or latency blows past the ceiling.
 
 ## CPU Profiles
 

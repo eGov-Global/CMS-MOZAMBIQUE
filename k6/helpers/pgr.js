@@ -1,6 +1,7 @@
 import http from 'k6/http';
 import { sleep } from 'k6';
 import { makeRequestInfo } from './auth.js';
+import { apiErrors } from './report.js';
 
 const HEADERS = { 'Content-Type': 'application/json' };
 const HTTP_TIMEOUT = '120s';
@@ -64,6 +65,7 @@ export function createComplaint(baseUrl, token, userInfo, tenantId, serviceCode,
 
   if (res.status !== 200) {
     console.error(`PGR Create failed: ${res.status} ${res.body}`);
+    apiErrors.add(1, { name: 'PGR_Create', status: String(res.status) });
     return null;
   }
 
@@ -119,6 +121,7 @@ export function updateComplaint(baseUrl, token, userInfo, service, action, assig
     }
 
     console.error(`PGR ${action} failed: ${res.status} ${res.body}`);
+    apiErrors.add(1, { name: tagName, status: String(res.status) });
     return null;
   }
   return null;
@@ -155,7 +158,30 @@ export function searchComplaint(baseUrl, token, userInfo, tenantId, serviceReque
     }
 
     console.error(`PGR Search failed: ${res.status} ${res.body}`);
+    apiErrors.add(1, { name: 'PGR_Search', status: String(res.status) });
     return null;
   }
   return null;
+}
+
+/**
+ * List complaints for a tenant (inbox-style read).
+ * Used by the read-heavy persona in workload-mix — must be called as a user
+ * whose role can search across all complaints (e.g. Screening Officer).
+ * @returns {Array} ServiceWrappers list, or null on error.
+ */
+export function listComplaints(baseUrl, token, userInfo, tenantId, limit = 50) {
+  const requestInfo = makeRequestInfo(token, userInfo);
+  const res = http.post(
+    `${baseUrl}/pgr-services/v2/request/_search?tenantId=${tenantId}&limit=${limit}`,
+    JSON.stringify({ RequestInfo: requestInfo }),
+    { headers: HEADERS, tags: { name: 'PGR_List' }, timeout: HTTP_TIMEOUT }
+  );
+
+  if (res.status !== 200) {
+    console.error(`PGR List failed: ${res.status} ${res.body}`);
+    apiErrors.add(1, { name: 'PGR_List', status: String(res.status) });
+    return null;
+  }
+  return res.json().ServiceWrappers || [];
 }
