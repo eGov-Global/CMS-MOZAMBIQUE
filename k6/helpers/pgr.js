@@ -64,7 +64,7 @@ export function createComplaint(baseUrl, token, userInfo, tenantId, serviceCode,
   );
 
   if (res.status !== 200) {
-    console.error(`PGR Create failed: ${res.status} ${res.body}`);
+    console.error(`PGR Create failed: ${res.status} ${res.body || 'null'}`);
     apiErrors.add(1, { name: 'PGR_Create', status: String(res.status) });
     return null;
   }
@@ -110,7 +110,12 @@ export function updateComplaint(baseUrl, token, userInfo, service, action, assig
       return body.ServiceWrappers[0].service;
     }
 
-    // Check if it's an INVALID_UPDATE (async lag) — retry with backoff
+    // Any non-200 is an error — capture it (log + count) even if a later retry
+    // succeeds, so no error is ever swallowed. Body defaults to 'null' when empty.
+    console.error(`PGR ${action} failed: ${res.status} ${res.body || 'null'}`);
+    apiErrors.add(1, { name: tagName, status: String(res.status) });
+
+    // INVALID_UPDATE = async persister lag — retry with backoff.
     const isInvalidUpdate = res.status === 400 &&
       res.body && res.body.includes('INVALID_UPDATE');
 
@@ -120,8 +125,6 @@ export function updateComplaint(baseUrl, token, userInfo, service, action, assig
       continue;
     }
 
-    console.error(`PGR ${action} failed: ${res.status} ${res.body}`);
-    apiErrors.add(1, { name: tagName, status: String(res.status) });
     return null;
   }
   return null;
@@ -157,7 +160,7 @@ export function searchComplaint(baseUrl, token, userInfo, tenantId, serviceReque
       return null;
     }
 
-    console.error(`PGR Search failed: ${res.status} ${res.body}`);
+    console.error(`PGR Search failed: ${res.status} ${res.body || 'null'}`);
     apiErrors.add(1, { name: 'PGR_Search', status: String(res.status) });
     return null;
   }
@@ -179,7 +182,7 @@ export function listComplaints(baseUrl, token, userInfo, tenantId, limit = 50) {
   );
 
   if (res.status !== 200) {
-    console.error(`PGR List failed: ${res.status} ${res.body}`);
+    console.error(`PGR List failed: ${res.status} ${res.body || 'null'}`);
     apiErrors.add(1, { name: 'PGR_List', status: String(res.status) });
     return null;
   }

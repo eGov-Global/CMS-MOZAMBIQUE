@@ -33,7 +33,7 @@ export function login(baseUrl, username, password, tenantId, userType) {
   );
 
   if (res.status !== 200) {
-    console.error(`Login failed: ${res.status} ${res.body}`);
+    console.error(`Login failed: ${res.status} ${res.body || 'null'}`);
     apiErrors.add(1, { name: 'Auth_Login', status: String(res.status) });
     return null;
   }
