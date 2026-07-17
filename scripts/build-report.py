@@ -294,12 +294,42 @@ def _api_from_prefix(prefix):
     return prefix
 
 
-def build_error_summary(console_path):
-    """Parse console.log failure logs into unique (API, status, response body)
-    groups, count-desc. Returns None if console.log is absent.
+def _extract_error(body):
+    """From a response body return (code_label, message).
 
-    Helpers log each failure as `console.error("<endpoint> failed: <status> <body>")`;
-    k6 wraps that as `... msg="..." source=console`.
+    Recognizes the eGov envelope {"Errors":[{"code","message"}]}; falls back to a
+    top-level `code`. Returns (None, body) for non-JSON / codeless bodies (e.g. the
+    'null' body of a transport timeout) so grouping can label them generically.
+    """
+    try:
+        obj = json.loads(body)
+    except (ValueError, TypeError):
+        return None, body
+    if isinstance(obj, dict):
+        errs = obj.get('Errors')
+        if isinstance(errs, list) and errs:
+            codes = sorted({str(e.get('code')) for e in errs if isinstance(e, dict) and e.get('code')})
+            msg = ''
+            for e in errs:
+                if isinstance(e, dict) and e.get('message'):
+                    msg = str(e['message'])
+                    break
+            if codes:
+                return ', '.join(codes), (msg or body)
+        if obj.get('code'):
+            return str(obj['code']), str(obj.get('message') or body)
+    return None, body
+
+
+def build_error_summary(console_path):
+    """Parse console.log failure logs into unique (API, status, error code) groups,
+    count-desc. Returns None if console.log is absent.
+
+    Grouping by the body's error code (not the full body) collapses the same logical
+    error (e.g. many INVALID_UPDATE responses that differ only in message details) into
+    a single row. Helpers log each failure as
+    `console.error("<endpoint> failed: <status> <body>")`; k6 wraps that as
+    `... msg="..." source=console`.
     """
     if not console_path or not os.path.exists(console_path):
         return None
@@ -313,9 +343,16 @@ def build_error_summary(console_path):
                 continue
             api = _api_from_prefix(fm.group(1))
             status, body = fm.group(2), fm.group(3).strip()
-            key = (api, status, body)
-            groups[key] = groups.get(key, 0) + 1
-    out = [{'api': a, 'status': s, 'body': b, 'count': c} for (a, s, b), c in groups.items()]
+            code, message = _extract_error(body)
+            code_label = code or '(no error code)'
+            key = (api, status, code_label)
+            g = groups.get(key)
+            if g:
+                g['count'] += 1
+            else:
+                groups[key] = {'api': api, 'status': status, 'code': code_label,
+                               'message': message, 'body': body, 'count': 1}
+    out = list(groups.values())
     out.sort(key=lambda e: -e['count'])
     return out
 
@@ -436,17 +473,18 @@ def build(result_dir):
     else:
         esrows = ''
         for e in err_summary:
-            body = e['body']
-            disp = body if len(body) <= 500 else body[:500] + '…'
+            msg = e['message'] or ''
+            disp = msg if len(msg) <= 300 else msg[:300] + '…'
             esrows += (f'<tr class="badrow"><td>{esc(e["api"])}</td>'
                        f'<td class="r">{esc(e["status"])}</td>'
-                       f'<td class="ebody" title="{esc(body)}">{esc(disp)}</td>'
+                       f'<td>{esc(e["code"])}</td>'
+                       f'<td class="ebody" title="{esc(e["body"])}">{esc(disp)}</td>'
                        f'<td class="r">{f0(e["count"])}</td></tr>')
         error_summary_section = (
             f'<h2>Error summary <span class="badge">({len(err_summary)})</span> — '
-            'all error types per API (status + response body)</h2>'
-            '<table><thead><tr><th>API</th><th class="r">Status</th>'
-            '<th>Response body</th><th class="r">Count</th></tr></thead>'
+            'error types per API (grouped by error code)</h2>'
+            '<table><thead><tr><th>API</th><th class="r">Status</th><th>Error code</th>'
+            '<th>Example message</th><th class="r">Count</th></tr></thead>'
             f'<tbody>{esrows}</tbody></table>')
 
     # Charts — interactive uPlot when vendored, else static SVG fallback.
