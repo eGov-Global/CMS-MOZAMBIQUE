@@ -14,6 +14,7 @@ import csv
 import html
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -279,6 +280,46 @@ def _short(name):
     return name.replace('PGR_', '').replace('Auth_', '')
 
 
+# ---- error summary (from console.log: API + status + response body) ------
+
+_MSG_RE = re.compile(r'msg="((?:[^"\\]|\\.)*)"')
+_FAIL_RE = re.compile(r'^(Login|PGR [A-Za-z]+) failed: (\d+) (.*)$', re.S)
+
+
+def _api_from_prefix(prefix):
+    if prefix == 'Login':
+        return 'Auth_Login'
+    if prefix.startswith('PGR '):
+        return 'PGR_' + prefix[4:].strip().title()
+    return prefix
+
+
+def build_error_summary(console_path):
+    """Parse console.log failure logs into unique (API, status, response body)
+    groups, count-desc. Returns None if console.log is absent.
+
+    Helpers log each failure as `console.error("<endpoint> failed: <status> <body>")`;
+    k6 wraps that as `... msg="..." source=console`.
+    """
+    if not console_path or not os.path.exists(console_path):
+        return None
+    groups = {}
+    with open(console_path, errors='replace') as fh:
+        for line in fh:
+            mm = _MSG_RE.search(line)
+            msg = (mm.group(1) if mm else line).replace('\\"', '"').replace('\\\\', '\\').strip()
+            fm = _FAIL_RE.match(msg)
+            if not fm:
+                continue
+            api = _api_from_prefix(fm.group(1))
+            status, body = fm.group(2), fm.group(3).strip()
+            key = (api, status, body)
+            groups[key] = groups.get(key, 0) + 1
+    out = [{'api': a, 'status': s, 'body': b, 'count': c} for (a, s, b), c in groups.items()]
+    out.sort(key=lambda e: -e['count'])
+    return out
+
+
 # ---- main ----------------------------------------------------------------
 
 def build(result_dir):
@@ -385,6 +426,29 @@ def build(result_dir):
     breach_html = ('<ul>' + ''.join(f'<li class="bad">{esc(b)}</li>' for b in breaches) + '</ul>'
                    if breaches else '<p class="ok">All thresholds passed</p>')
 
+    # Error summary (API + status + response body) parsed from console.log.
+    err_summary = build_error_summary(os.path.join(result_dir, 'console.log'))
+    if err_summary is None:
+        error_summary_section = ('<h2>Error summary</h2>'
+                                 '<p class="nodata">console.log not found — response bodies unavailable.</p>')
+    elif not err_summary:
+        error_summary_section = '<h2>Error summary</h2><p class="ok">No logged errors 🎉</p>'
+    else:
+        esrows = ''
+        for e in err_summary:
+            body = e['body']
+            disp = body if len(body) <= 500 else body[:500] + '…'
+            esrows += (f'<tr class="badrow"><td>{esc(e["api"])}</td>'
+                       f'<td class="r">{esc(e["status"])}</td>'
+                       f'<td class="ebody" title="{esc(body)}">{esc(disp)}</td>'
+                       f'<td class="r">{f0(e["count"])}</td></tr>')
+        error_summary_section = (
+            f'<h2>Error summary <span class="badge">({len(err_summary)})</span> — '
+            'all error types per API (status + response body)</h2>'
+            '<table><thead><tr><th>API</th><th class="r">Status</th>'
+            '<th>Response body</th><th class="r">Count</th></tr></thead>'
+            f'<tbody>{esrows}</tbody></table>')
+
     # Charts — interactive uPlot when vendored, else static SVG fallback.
     ts = build_timeseries(os.path.join(result_dir, 'metrics.csv'))
     uplot_js, uplot_css = load_uplot()
@@ -485,6 +549,7 @@ h1{{margin:0 0 4px;font-size:22px;color:var(--head)}}h2{{font-size:16px;color:va
 table{{border-collapse:collapse;width:100%;margin-top:6px}}th,td{{border:1px solid var(--bd);padding:6px 10px;text-align:left}}
 th{{background:#f7f7f7}}td.r,th.r{{text-align:right}}.ok{{color:var(--ok)}}.bad{{color:var(--bad)}}
 .badrow{{background:#fdecea}}.badrow td{{color:var(--bad)}}.badge{{font-weight:600}}ul{{margin:6px 0;padding-left:20px}}
+.ebody{{max-width:520px;white-space:pre-wrap;word-break:break-all;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}}
 .chart .u-title{{font-size:13px;font-weight:600;color:var(--head)}}.chart .u-legend{{font-size:11px}}
 </style>{uplot_css_tag}</head><body>
 <h1>{esc(title)}</h1>
@@ -510,6 +575,8 @@ th{{background:#f7f7f7}}td.r,th.r{{text-align:right}}.ok{{color:var(--ok)}}.bad{
 <h2>Failures <span class="badge">({len(failure_rows)})</span></h2>
 <table><thead><tr><th>API</th><th class="r">HTTP status</th><th class="r">Count</th><th>Likely reason</th></tr></thead>
 <tbody>{failures_html}</tbody></table>
+
+{error_summary_section}
 
 <h2>Threshold breaches</h2>
 {breach_html}
