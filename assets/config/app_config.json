@@ -1,7 +1,7 @@
 {
   "appName": "CMS Mozambique",
-  "url": "http://digit.mctd.gov.mz/digit-ui/employee/user/login",
-  "citizenUrl": "http://digit.mctd.gov.mz/digit-ui/citizen/login",
+  "url": "https://cms-pilot.digit.org/digit-ui/employee/user/login",
+  "citizenUrl": "https://cms-pilot.digit.org/digit-ui/citizen/login",
   "logoAsset": "assets/icons/app_icon.png",
   "primaryColorHex": "#0B4F6C",
   "allowMixedContent": true,
