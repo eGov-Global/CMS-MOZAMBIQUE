@@ -30,7 +30,6 @@ class WebViewScreen extends StatefulWidget {
 class _WebViewScreenState extends State<WebViewScreen>
     with WidgetsBindingObserver {
   late final WebViewController _controller;
-  bool _loading = true;
   bool _offline = false;
   bool _hasLoadedOnce = false;
   bool _canGoBack = false;
@@ -89,13 +88,11 @@ class _WebViewScreenState extends State<WebViewScreen>
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) => setState(() {
-            _loading = true;
             _currentUrl = url;
             _pageError = null;
           }),
           onPageFinished: (url) {
             setState(() {
-              _loading = false;
               _currentUrl = url;
               _hasLoadedOnce = true;
             });
@@ -105,7 +102,6 @@ class _WebViewScreenState extends State<WebViewScreen>
           onWebResourceError: (err) {
             if (err.isForMainFrame != true) return;
             setState(() {
-              _loading = false;
               _pageError = _describeError(err);
             });
             _refreshCanGoBack();
@@ -128,7 +124,6 @@ class _WebViewScreenState extends State<WebViewScreen>
                     failedUrl == widget.config.startUrl);
             if (!isMainDocument) return;
             setState(() {
-              _loading = false;
               _pageError = 'Server error ($code). Please try again later.';
             });
             _refreshCanGoBack();
@@ -465,7 +460,6 @@ class _WebViewScreenState extends State<WebViewScreen>
     // sees null, which silently disabled the "reload from a fresh start" path.
     final freshStart = !_hasLoadedOnce;
     setState(() {
-      _loading = true;
       _pageError = null;
     });
     if (freshStart) {
@@ -479,7 +473,6 @@ class _WebViewScreenState extends State<WebViewScreen>
     if (await _controller.canGoBack()) {
       setState(() {
         _pageError = null;
-        _loading = true;
       });
       await _controller.goBack();
     } else {
@@ -542,12 +535,6 @@ class _WebViewScreenState extends State<WebViewScreen>
             startAt: _pullStart,
             threshold: _pullThreshold,
             refreshing: _refreshing,
-          ),
-        if (_loading)
-          LinearProgressIndicator(
-            minHeight: 2,
-            backgroundColor: Colors.transparent,
-            valueColor: AlwaysStoppedAnimation(widget.config.primaryColor),
           ),
         if (errorMessage != null)
           Positioned.fill(
