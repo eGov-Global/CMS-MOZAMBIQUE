@@ -15,6 +15,6 @@
     "tenantCode": "mz.igsae",
     "tenantId": "mz",
     "displayOrder": 2,
-    "active": true
+    "active": false
   }
 ]
