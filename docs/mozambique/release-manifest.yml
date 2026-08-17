@@ -1,0 +1,342 @@
+product: "DIGIT Complaint Management System — Mozambique"
+product_version: cms-mozambique-v1.0.0
+release_date: "2026-08-17"
+release_type: "documentation-only — this release makes NO application code changes; it ships release documentation for the already-built, pilot-verified code"
+
+upstream_repository: egovernments/Citizen-Complaint-Resolution-System
+
+upstream_baseline_commit:
+  sha: 343617ceab56b28ced9ad276286d9afc0ef613a8
+  branch: release-v2.12-moz
+  subject: "Merge pull request #1757"
+  date: "2026-08-14"
+  proof: "git diff --stat 343617ce 124678e5 => 2 files changed, 293 insertions(+), 0 deletions(-) (.github/CODEOWNERS +3, local-setup/ansible/inventory/host_vars/stateige.yml.example +290)"
+  note: "A commit SHA is used as the baseline on purpose. The upstream tag v2.12-beta MUST NOT be used: it was force-moved (8c7c4fe6 -> 5f86a102) and contains ZERO moz-line commits."
+
+upstream_master_contained: 815b23747a6064736a5449cd2ecf7aae81b0c567
+upstream_current_commit: b55c8533a7e48d97045742188308ab4da81a97b9
+
+commits_behind_upstream: 9
+commits_ahead_of_upstream: 4
+upstream_sync_status: DIVERGED
+fast_forward_possible: false
+resync_notes:
+  - "A fast-forward resync onto b55c8533 is not possible; `git reset --hard` onto upstream would destroy the 2 fork-only files."
+  - "The 9 upstream commits landed after the fork's last sync. This release deliberately ships the analyzed, pilot-verified code as-is; upstream sync is a separate post-v1.0.0 activity."
+commits_not_included:
+  - ticket: CCSD-1937
+    shas: [6c19c0c1, 3ea00efc, 6e9f1fe5, a697917d]
+    description: "Registers CMS_ADMIN + CMS_DASHBOARD_VIEWER + CONFIDENTIAL_COMPLAINT_VIEWER in ccrs-migrate --cms, and adds deploy-time CMS seeding to the ansible playbook. NOT in this release."
+  - ticket: CCSD-2171
+    shas: [1dfc82cd, 45ee087a, 943c42de, 1f082e60, b55c8533]
+    description: "Analytics boundaryPath subtree parameter + dashboard geography drill-down filter. NOT in this release."
+
+mozambique_repository: eGov-Global/CMS-MOZAMBIQUE
+
+release_commit:
+  sha: 124678e55b6f59aeba61bae753e6b00ef842dfb7
+  subject: "Create stateige.yml.example (#3)"
+  date: "2026-08-14"
+
+release_branch: master
+
+git_tag:
+  name: cms-mozambique-v1.0.0
+  type: annotated
+  points_at: 124678e55b6f59aeba61bae753e6b00ef842dfb7
+  note: "The tag name is cms-mozambique-v1.0.0, NOT plain v1.0.0. It is created as part of this release; the pre-release clone carries only CCRS-2.10, v2.11, v2.12-beta."
+
+delta_shape:
+  fork_local:
+    range: "343617ce..124678e5"
+    commits: 4
+    files_changed: 2
+    insertions: 293
+    deletions: 0
+    files:
+      - .github/CODEOWNERS
+      - local-setup/ansible/inventory/host_vars/stateige.yml.example
+  mozambique_product_customization_vs_upstream_master:
+    range: "815b2374..124678e5"
+    commits: 556
+    files_changed: 256
+    insertions: 31277
+    deletions: 2288
+    date_span: "2026-06-12 .. 2026-08-14"
+    commits_by_month: {jun_2026: 31, jul_2026: 454, aug_2026: 71}
+    provenance: "552 of the 556 commits were authored, reviewed and merged INSIDE the upstream repo on branch release-v2.12-moz. The fork MIRRORS them; they must NOT be attributed to the fork."
+  classified_customizations:
+    total_in_release: 118
+    production_critical: 74
+    excluded_not_in_release: 3
+
+database_migrations:
+  mozambique_specific_migrations: 0
+  state: none
+  note: "ZERO Mozambique-specific database migrations. `git diff --name-only 815b2374...master -- '*.sql'` returns nothing; all 22 Flyway migrations are byte-identical to upstream. Consequence: no Moz-specific migration is required for a fresh install or an upgrade, and nothing in the database blocks an image rollback."
+  flyway_migrations_total: 22
+  flyway_migrations_identical_to_upstream: true
+  down_migrations_available: false
+  rollback_procedure: "No down-migrations or undo scripts exist anywhere in the tree. Database rollback = restore from a pre-deploy dump."
+  gaps:
+    - "The MDMS seeding layer has no version table, no checksum and no applied-state tracking; re-running is the only way to know what is present."
+    - "A newly-created workflow BusinessService requires an egov-workflow-v2 RESTART, because that service caches BusinessServices."
+    - "Two migrations end with a NON-CONCURRENT REFRESH MATERIALIZED VIEW; their duration on production-sized data is NOT VERIFIED (table lock risk)."
+
+major_features:
+  - name: "CMS multi-tier PGR workflow business service"
+    area: workflow-roles
+    production_critical: true
+    description: "New CmsPgrWorkflowConfig.json state machine (REFERRED / INVESTIGATION / INFOFROMCITIZEN and the reception -> screening -> supervisor -> case-manager chain), selected per environment by the pgr.workflow.variant deploy switch. Auto-escalation is removed relative to the upstream PGR workflow."
+    jira: NOT VERIFIED
+  - name: "CMS_* role taxonomy and role->action grants"
+    area: workflow-roles
+    production_critical: true
+    description: "13 new role codes (CMS / scope / permission families; CMS_SCREENING_OFFICER already existed upstream, so 6 of the 7 CMS_* roles are new) plus 335 new role->action grants (roleactions 396 -> 731 rows)."
+    jira: CCSD-1937
+  - name: "Employee department-scoped complaint search (opt-in ABAC)"
+    area: backend-pgr
+    production_critical: true
+    description: "New EmployeeDepartmentScopeService invoked from PGRService search / count / plainSearch, gated by the new property pgr.department.scope.roles (default EMPTY = feature off, fail-closed when enabled)."
+    jira: NOT VERIFIED
+  - name: "Cross-department admin complaint search endpoint"
+    area: backend-pgr
+    production_critical: true
+    description: "New POST /pgr-services/v2/request/_admin/_search returning rows plus count in one call, with department scoping deliberately bypassed. See known_limitations item 1 — this endpoint currently has NO server-side authorization gate."
+    jira: NOT VERIFIED
+  - name: "Confidential complaints: selective field visibility"
+    area: backend-pgr
+    production_critical: true
+    description: "MDMS schema directive x-no-mask (parsed into ComplaintTemplateTypeConfig.noMaskFields) plus allowedViewerRoles replaces the all-or-nothing masking of dynamic fields, with a plaintext-safe masking overload."
+    jira: NOT VERIFIED
+  - name: "Assignee accepted on TERMINAL workflow transitions"
+    area: backend-pgr
+    production_critical: true
+    description: "WorkflowService inspects the BusinessService state machine and suppresses assignees only where egov-workflow-v2 would reject them, so citizen reopen routes to the Supervisor and rate routes to the Case Manager."
+    jira: CCSD-2167
+  - name: "createdBy search filter for the reception-officer inbox"
+    area: backend-pgr
+    production_critical: true
+    description: "RequestSearchCriteria gains a Set<String> createdBy filter (previously an unknown createdBy param was silently ignored), powering the 'complaints I filed' inbox."
+    jira: CCSD-2135
+  - name: "Notification department resolution hardening"
+    area: backend-pgr
+    production_critical: true
+    description: "3-tier department fallback with null-safety and no-throw degradation, removing the hard ComplaintHierarchy dependency that raised JSONPATH_ERROR / PARSING_ERROR; notifications also resolve the NEWEST matching process instance instead of the oldest."
+    jira: CCSD-2167
+  - name: "Citizen authority dispatcher + per-category dynamic fields"
+    area: frontend-pgr
+    production_critical: true
+    description: "Citizen picks the authority (IGE / IGSAE) which selects the tenant, and the complaint form renders MDMS-driven extendedAttributes per category. With exactly one active authority row the picker is hidden and the tenant auto-selects."
+    jira: "NOT VERIFIED (related: CCSD-2071, CCSD-2072, CCSD-2123)"
+  - name: "Fully workflow-driven employee action modal"
+    area: frontend-pgr
+    production_critical: true
+    description: "The employee action modal is driven by the workflow definition instead of hardcoded action config, so the CMS multi-tier states are supported without frontend changes; includes history-derived assignee routing for reopen / rate / route-back."
+    jira: "CCSD-2124, CCSD-2081, CCSD-2167"
+  - name: "Attachments across PGR surfaces + per-step timeline attachments"
+    area: frontend-pgr
+    production_critical: true
+    description: "Shared PgrFileUpload component wired into every PGR surface (every action modal), with per-step timeline attachments and PII masking rules."
+    jira: "CCSD-1965, CCSD-2082, CCSD-1976"
+  - name: "Confidential complaints and Complainant Details on the employee details page"
+    area: frontend-pgr
+    production_critical: true
+    description: "Employee complaint details renders a Complainant Details card and honours confidential-complaint visibility rules."
+    jira: "CCSD-2130, CCSD-2123"
+  - name: "Citizen create wizard restructure, reopen overhaul and employee create-complaint fields"
+    area: frontend-pgr
+    production_critical: true
+    description: "3-step citizen wizard with a validation sweep, reopen flow with additionalDetail merge preserving routing data, and employee create with channel of receipt, complainant address, map pin and dynamic fields."
+    jira: "CCSD-1952, CCSD-1955, CCSD-1956, CCSD-2012, CCSD-2119, CCSD-2131"
+  - name: "Boundary cascade and map corrections for the MZ hierarchy"
+    area: frontend-pgr
+    production_critical: true
+    description: "Jurisdiction gate disabled, childless-leaf handling, lazy tenant-scoped initialisation, tenant-scoped MapConfig / ward tree and a reverse-geocode loop guard."
+    jira: "CCSD-1974, CCSD-1993, CCSD-1971"
+  - name: "Localization infrastructure and Portuguese (pt_PT) packs"
+    area: "frontend-pgr / mdms-l10n"
+    production_critical: true
+    description: "pt_PT localization packs and locale registration, city-tenant overlay (state + city merge, city wins), default-locale bootstrap, double-resolve fixes, and the 'Fala Cidadao' rebrand of the en_IN / default packs."
+    jira: "CCSD-1987, CCSD-2067, CCSD-2068, CCSD-2076, CCSD-2077, CCSD-2083, CCSD-2161"
+  - name: "PGR dynamic-fields master-data model"
+    area: mdms-l10n
+    production_critical: true
+    description: "ComplaintRelatedToMap / ComplaintTemplateType / ComplaintExtendedAttributeSchema masters plus their MDMS schema definitions, seed data and one-shot seeder."
+    jira: NOT VERIFIED
+  - name: "Unified idempotent migration runner (ccrs-migrate.cjs)"
+    area: "mdms-l10n / docs-tests"
+    production_critical: true
+    description: "docs/migration/ccrs-migrate.cjs is THE migration entry point: 9 idempotent phases, continue-on-error, never overwrites existing localization or master rows (--update-masters is opt-in), with documented environment quirks encoded as executable workarounds."
+    jira: CCSD-1937
+  - name: "Config-driven public landing page + Visual Landing Page Builder"
+    area: "frontend-dash-conf / mdms-l10n"
+    production_critical: true
+    description: "MDMS landing master model with default seeds and rollout script, plus a 3-pane WYSIWYG builder in the configurator (click-to-edit, instant localization preview, staged per-locale upsert and cache-bust)."
+    jira: "CCSD-2004, CCSD-2005, CCSD-2008, CCSD-2009"
+  - name: "Configurator (DIGIT Studio) master-data and localization improvements"
+    area: frontend-dash-conf
+    production_critical: true
+    description: "Previously-empty Edit forms fixed (UI Homepage / Security Policy / Encryption Policy), Role-Actions creatable and editable from the UI, immediate localization propagation via 3-cache invalidation, and boot in the environment's default locale."
+    jira: "CCSD-1996, CCSD-1998, CCSD-2000, CCSD-2002, CCSD-2157"
+  - name: "Password-gated /digit-ui-test testing entrance (default OFF)"
+    area: deploy-infra
+    production_critical: true
+    description: "Ansible-rendered parallel UI entrance bound to a dedicated testing tenant, HTTP basic auth plus a red testing banner; opt-in per host_vars. Tenant scoping is driven by the configurator isTestingTenant flag."
+    jira: NOT VERIFIED
+  - name: "digit-ui bundle gzip + Cache-Control, and deploy-pilot-fe.sh"
+    area: deploy-infra
+    production_critical: true
+    description: "gzip and Cache-Control: no-cache scoped to the /digit-ui static location in all three nginx render paths, plus a one-shot Mozambique pilot/prod frontend build and deploy script. See known_limitations item 8 (missing nginx ansible tag)."
+    jira: NOT VERIFIED
+  - name: "Filestore ALLOWED_FORMATS_MAP extended"
+    area: deploy-infra
+    production_critical: true
+    description: "Video, audio-capable containers and pptx accepted as complaint attachments."
+    jira: CCSD-2027
+  - name: "MDMS v2 tenant scoping + IndexedDB persistence"
+    area: frontend-pgr
+    production_critical: true
+    description: "Master data is fetched at the correct tenant and cached in IndexedDB instead of localStorage, resolving browser storage-quota failures."
+    jira: NOT VERIFIED
+  - name: "tenant.citymodule bannerImage support and drift repair"
+    area: "mdms-l10n / docs-tests"
+    production_critical: true
+    description: "New schema property, a banner seeding phase in the runner, and fix-citymodule.sh to repair the schema drift on already-provisioned boxes (no MDMS schema-update API exists)."
+    jira: CCSD-1959
+
+breaking_changes:
+  - id: BC-1
+    change: "CMS multi-tier PGR workflow replaces the upstream PGR workflow on CMS tenants"
+    impact: "Auto-escalation is removed; COMMENT is dropped from open states (staff records the citizen's answer); reopen / rate terminal routing is rewritten. Behavioural narrowing versus upstream, on CMS tenants only."
+    scope: "CMS/mz tenants"
+  - id: BC-2
+    change: "Privacy-policy master relocated from commonUiConfig to commonMDMSConfig"
+    impact: "A frontend still reading commonUiConfig.PrivacyPolicy finds nothing, because the module code changed. No such consumer was found in-tree."
+    scope: "all deployments built from this branch"
+  - id: BC-3
+    change: "Boundary cascade jurisdiction gate disabled"
+    impact: "The jurisdiction gate is off for every deployment built from this branch, not only for Mozambique."
+    scope: "all deployments built from this branch"
+  - id: BC-4
+    change: "Checked-in container-mode digit-ui boot config defaults to pt_PT / PT"
+    impact: "A non-Mozambique deployment that uses the checked-in default boots in Portuguese. Ansible-managed hosts are unaffected because they render from the .j2 template."
+    scope: "non-ansible deployments using the checked-in file"
+  - id: BC-5
+    change: "Citizen sidebar entries repointed from all-services to pgr-home"
+    impact: "Hardcodes the single-module assumption into a shared seed file; breaks navigation for a multi-module deployment."
+    scope: "multi-module deployments"
+  - id: BC-6
+    change: "default-data-handler compose service removed"
+    impact: "PGR_WORKFLOW_VARIANT is no longer set anywhere in the tree; the CMS workflow now reaches a fresh tenant only via the manual ccrs-migrate --only cms step. NEEDS VERIFICATION on a live environment."
+    scope: "all deployments built from this branch"
+  - id: BC-7
+    change: "'Fala Cidadao' rebrand changes localization message values"
+    impact: "Key codes are stable so no consumer breaks, but an already-seeded environment keeps the OLD text: the runner never overwrites existing localization, so a force update is required to see the new copy."
+    scope: "previously seeded environments"
+
+known_limitations:
+  - id: KL-1
+    severity: security
+    title: "POST /pgr-services/v2/request/_admin/_search has NO authorization gate"
+    detail: "The controller performs no role check and its javadoc claims gateway gating that does not exist. No ACCESSCONTROL action is registered for the URI (0 hits in both action masters), there is no @PreAuthorize, and there is no Kong route entry. AdminComplaintSearchService validates only tenantId and sets skipEmployeeDepartmentScope(true), deliberately bypassing department ABAC; its two 'SUPERUSER' mentions are COMMENTS only."
+    proof: "On the cms-pilot environment a user holding only CMS_SCREENING_OFFICER + EMPLOYEE received HTTP 200 with complaint rows."
+    only_existing_gate: "Client-side ADMIN_SEARCH_ROLES in digit-ui-esbuild/products/pgr/src/pages/employee/AdminSearch.js — bypassable by calling the API directly."
+    status: "NOT fixed in this release (documentation-only release)."
+    recommended_fix: "Enforce the role in the service/controller, or register the ACCESSCONTROL action plus the roleactions grant."
+  - id: KL-2
+    severity: high
+    title: "Only 5 of the 7 seeded CMS_* roles are auto-registered"
+    detail: "Seed files contain 8 roles (7 CMS_* plus CONFIDENTIAL_COMPLAINT_VIEWER), but this release's docs/migration/ccrs-migrate.cjs registers only CMS_RECEPTION_OFFICER, CMS_SCREENING_OFFICER, CMS_SUPERVISOR, CMS_CASE_MANAGER and CMS_VIEWER. CMS_ADMIN, CMS_DASHBOARD_VIEWER and CONFIDENTIAL_COMPLAINT_VIEWER are NOT auto-registered even though features that need them ARE in the release."
+    workaround: "Register the three missing roles manually after deployment."
+  - id: KL-3
+    severity: high
+    title: "Deploy-time CMS seeding is not in this release"
+    detail: "The ansible playbook step that seeds CMS access control at deploy time is one of the 9 excluded upstream commits."
+    workaround: "`node docs/migration/ccrs-migrate.cjs --only cms` is a MANUAL post-deploy step."
+  - id: KL-4
+    severity: medium
+    title: "CCSD-2171 geography drill-down is not in this release"
+    detail: "The analytics boundaryPath subtree parameter and the dashboard geography drill-down filter are excluded; the dashboard ships without geography drill-down."
+  - id: KL-5
+    severity: low
+    title: "develop branch has diverged from master"
+    detail: "develop is 2 ahead / 1 behind master, but their TREES ARE IDENTICAL — pure history duplication of stateige.yml.example. Technical debt, not a release blocker."
+  - id: KL-6
+    severity: low
+    title: "stateige.yml.example carries a stale header"
+    detail: "local-setup/ansible/inventory/host_vars/stateige.yml.example still shows the bomet.yml.example header ('deploy.sh bomet') and sets domain: localhost. Misleading example header; all credentials in it are example/test defaults that MUST be changed."
+  - id: KL-7
+    severity: medium
+    title: "PGR_WORKFLOW_VARIANT is no longer set anywhere"
+    detail: "After default-data-handler was removed from the compose stack, no component sets PGR_WORKFLOW_VARIANT. NEEDS VERIFICATION on a live environment before rollout."
+  - id: KL-8
+    severity: medium
+    title: "The `nginx` ansible tag is missing at the release tip"
+    detail: "The surgical deploy command documented in docs/ops/digit-ui-compression.md is a silent no-op because the tags: ['nginx'] markers are gone; a full playbook run is required to apply nginx changes."
+  - id: KL-9
+    severity: medium
+    title: "CENTRAL_USER / DEPARTMENT_USER grants hardcoded to tenantId 'pb'"
+    detail: "Seeded role->action grants carry the upstream Indian tenant code 'pb' and therefore do not apply on mz tenants."
+  - id: KL-10
+    severity: medium
+    title: "Notification routing and templates were never extended to the CMS states"
+    detail: "The CMS multi-tier workflow adds states for which no notification routing or template exists; transitions through those states send nothing."
+  - id: KL-11
+    severity: low
+    title: "CMS_VIEWER is a 'viewer'-named role that holds full write authority"
+    detail: "The role name misrepresents its grants; operators must not treat it as read-only."
+  - id: KL-12
+    severity: high
+    title: "No automated test coverage for the Mozambique feature set"
+    detail: "No automated coverage exists for workflow transitions, notifications, extended attributes, roles/permissions or localization. This is the single largest release-readiness gap."
+  - id: KL-13
+    severity: medium
+    title: "No down-migrations and no MDMS applied-state tracking"
+    detail: "Rollback of database state requires restoring a dump; the MDMS seeding layer has no version table, checksum or applied-state record. A new workflow BusinessService additionally requires an egov-workflow-v2 restart, and two migrations end with a non-concurrent REFRESH MATERIALIZED VIEW of unmeasured duration on production data."
+  - id: KL-14
+    severity: medium
+    title: "Authority-to-tenant mapping must be narrowed by the operator after deployment, and pilot state disagrees with the seed"
+    detail: "The product seed docs/migration/seed/ComplaintRelatedToMap.json ships BOTH authorities active (IGE -> mz.ige, IGSAE -> mz.igsae). For an IGE-only launch the operator narrows the environment AFTER deployment so exactly one row is active; the citizen flow then auto-selects it and hides the authority picker. Verified live cms-pilot state is exactly 1 row — IGE, tenantCode=mz, active=true — i.e. the pilot maps IGE -> mz while the seed maps IGE -> mz.ige. Which mapping is intended is NOT VERIFIED; both are documented and neither should be silently 'corrected'."
+
+tests:
+  added: 1
+  modified: 2
+  total_across_556_commits: 3
+  files_added:
+    - configurator/src/providers/resolveInitialLocale.test.ts
+  files_modified:
+    - backend/pgr-services/src/test/java/org/egov/pgr/service/PGRServiceCountScopingTest.java
+    - configurator/packages/data-provider/src/providers/dataProvider.test.ts
+  coverage_gaps:
+    - workflow transitions
+    - notifications
+    - extended attributes
+    - roles and permissions
+    - localization
+  note: "No automated coverage for the areas above. Verification of this release was manual, on the cms-pilot environment."
+
+contributors:
+  scope: "556 commits in range 815b2374..124678e5 (2026-06-12 .. 2026-08-14)"
+  list:
+    - name: Hari-egov
+      commits: 481
+      share: "86.5%"
+    - name: pradeep-egov
+      commits: 22
+    - name: nozotrox
+      commits: 19
+    - name: priyanshu-egov
+      commits: 11
+    - name: Admin
+      commits: 11
+    - name: subhashini-egov
+      commits: 6
+    - name: Shivam Upadhyay
+      commits: 3
+    - name: "Feliciano Mazoio"
+      commits: 1
+    - name: "Subhashini Srinivasan"
+      commits: 1
+    - name: vinothrallapalli-egov
+      commits: 1
