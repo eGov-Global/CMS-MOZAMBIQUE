@@ -1,0 +1,32 @@
+# Per-tenant overlay for `ige` — Apple Silicon / Docker Desktop, 14 GiB VM.
+#
+# node-exporter: binds /:/rootfs:ro,rslave. Docker Desktop mounts / private, so
+#   `up -d` aborts the whole stack. The playbook's make-rshared remedy is gated
+#   on WSL2 kernels only, and the monitoring overlay is layered unconditionally.
+# grafana cluster: parked as a UNIT — only its own members depend on its members.
+#   Frees RAM for the emulated JVMs on a 16 GiB Mac.
+#
+# otel-collector is NOT parked: 16 JVM services declare depends_on it, and a
+# profile-excluded service reads as "undefined" to an active depender.
+services:
+  node-exporter:
+    profiles: ["disabled-on-darwin"]
+  grafana:
+    profiles: ["disabled-on-darwin"]
+  promtail:
+    profiles: ["disabled-on-darwin"]
+  prometheus:
+    profiles: ["disabled-on-darwin"]
+  tempo:
+    profiles: ["disabled-on-darwin"]
+  loki:
+    profiles: ["disabled-on-darwin"]
+  # postgres-db: run NATIVE arm64. egovio/postgres:16 is amd64-only, and the
+  # emulated build aborted a backend 29 times in one afternoon — each abort
+  # kills every open connection and leaves the Flyway one-shot migrations
+  # exited(1), which compose then never re-runs. Upstream postgres:16 is a
+  # drop-in (same entrypoint/cmd/volumes, no extra env; this DB uses only
+  # plpgsql) and ships arm64. DOCKER_DEFAULT_PLATFORM stays linux/amd64.
+  postgres-db:
+    image: postgres:16
+    platform: linux/arm64
