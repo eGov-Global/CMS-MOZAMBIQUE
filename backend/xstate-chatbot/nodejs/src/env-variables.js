@@ -19,6 +19,12 @@ const envVariables = {
 
     supportedLocales: process.env.SUPPORTED_LOCALES || 'en_IN',
 
+    // Phone identity is per-country CONFIG, not code. countryCode is the dialling
+    // prefix without '+'; mobileNumberLength is the national number length.
+    // MZ: 258 / 9 (^8[0-9]{8}$).   IN: 91 / 10.
+    countryCode: process.env.COUNTRY_CODE || '91',
+    mobileNumberLength: parseInt(process.env.MOBILE_NUMBER_LENGTH || '10', 10),
+
     // Sandbox mode configuration
     enableSandboxMode: process.env.ENABLE_SANDBOX_MODE === 'true',
     tenantManagementHost: process.env.TENANT_MANAGEMENT_HOST || 'https://sandbox.digit.org',
