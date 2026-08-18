@@ -56,6 +56,7 @@ function constructListPromptAndGrammer(keys, message_bundle, locale, more = fals
   });
   return {prompt, grammer};
 }
+
 function constructLiteralGrammer(keys, message_bundle, locale) {
   var grammer = [];
   keys.forEach((element) => {
@@ -70,10 +71,12 @@ function constructLiteralGrammer(keys, message_bundle, locale) {
   });
   return grammer;
 }
+
 function validateInputType(event, type) {
   let inputType = event.message.type;
-  return inputType === type;
+  return Array.isArray(type) ? type.includes(inputType) : inputType === type;
 }
+
 function sendMessage(context, message, immediate = true) {
   if(!context.output) {
     context.output = [];

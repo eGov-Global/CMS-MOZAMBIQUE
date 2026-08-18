@@ -148,8 +148,105 @@ const pgr =  {
         },
         location: {
           id: 'location',
-          initial: 'geoLocationSharingInfo',
+          initial: 'boundary',
           states: {
+            boundary: {
+              id: 'boundary',
+              initial: 'fetch',
+              states: {
+                fetch: {
+                  invoke: {
+                    src: (context) => pgrService.fetchBoundaryStep(
+                      context.extraInfo.tenantId,
+                      context.slots.pgr.boundaryPath || []
+                    ),
+                    id: 'fetchBoundaryStep',
+                    onDone: {
+                      target: 'evaluate',
+                      actions: assign((context, event) => {
+                        context.boundaryStep = event.data;
+                      })
+                    },
+                    onError: {
+                      target: '#system_error'
+                    }
+                  }
+                },
+                evaluate: {
+                  always: [
+                    {
+                      target: '#persistComplaint',
+                      cond: (context) => (context.boundaryStep.options || []).length === 0,
+                      actions: assign((context) => {
+                        let path = context.slots.pgr.boundaryPath || [];
+                        context.slots.pgr.city = context.extraInfo.tenantId;
+                        context.slots.pgr.locality = path[path.length - 1];
+                      })
+                    },
+                    {
+                      target: 'question'
+                    }
+                  ]
+                },
+                question: {
+                  onEntry: assign((context) => {
+                    let { options, messageBundle, levelLabel } = context.boundaryStep;
+                    let atRoot = (context.slots.pgr.boundaryPath || []).length === 0;
+                    let preamble = dialog
+                      .get_message(messages.fileComplaint.boundary.question.preamble, context.user.locale)
+                      .replace('{{level}}', levelLabel);
+                    let { prompt, grammer } = dialog.constructListPromptAndGrammer(
+                      options, messageBundle, context.user.locale, false, !atRoot
+                    );
+                    context.grammer = grammer;
+                    dialog.sendMessage(context, `${preamble}${prompt}`);
+                  }),
+                  on: {
+                    USER_MESSAGE: 'process'
+                  }
+                },
+                process: {
+                  onEntry: assign((context, event) => {
+                    context.intention = dialog.get_intention(context.grammer, event, true)
+                  }),
+                  always: [
+                    {
+                      target: 'fetch',
+                      cond: (context) => context.intention == dialog.INTENTION_GOBACK,
+                      actions: assign((context) => {
+                        context.slots.pgr.boundaryPath = (context.slots.pgr.boundaryPath || []).slice(0, -1);
+                      })
+                    },
+                    {
+                      target: '#persistComplaint',
+                      cond: (context) => context.intention != dialog.INTENTION_UNKOWN && context.boundaryStep.isLeafLevel,
+                      actions: assign((context) => {
+                        context.slots.pgr.boundaryPath = [...(context.slots.pgr.boundaryPath || []), context.intention];
+                        context.slots.pgr.city = context.extraInfo.tenantId;
+                        context.slots.pgr.locality = context.intention;
+                      })
+                    },
+                    {
+                      target: 'fetch',
+                      cond: (context) => context.intention != dialog.INTENTION_UNKOWN,
+                      actions: assign((context) => {
+                        context.slots.pgr.boundaryPath = [...(context.slots.pgr.boundaryPath || []), context.intention];
+                      })
+                    },
+                    {
+                      target: 'error'
+                    }
+                  ]
+                },
+                error: {
+                  onEntry: assign((context) => {
+                    dialog.sendMessage(context, dialog.get_message(dialog.global_messages.error.retry, context.user.locale), false);
+                  }),
+                  always: 'question'
+                }
+              }
+            },
+
             geoLocationSharingInfo: {
               id: 'geoLocationSharingInfo',
               onEntry: assign( (context, event) => {
@@ -703,8 +800,60 @@ const pgr =  {
         other: {
           // get other info
           id: 'other',
-          initial: 'imageUpload',
+          initial: 'description',
           states: {
+            description: {
+              id: 'description',
+              initial: 'question',
+              states: {
+                question: {
+                  onEntry: assign((context, event) => {
+                    let message = dialog.get_message(messages.fileComplaint.description.question, context.user.locale)
+                      .replace('{{minLength}}', config.descriptionMinLength);
+                    dialog.sendMessage(context, message);
+                  }),
+                  on: {
+                    USER_MESSAGE: 'process'
+                  }
+                },
+                process: {
+                  onEntry: assign((context, event) => {
+                    if (!dialog.validateInputType(event, 'text')) {
+                      context.message = { isValid: false, isText: false };
+                      return;
+                    }
+                    let description = String(event.message.input).trim();
+                    context.message = {
+                      isValid: description.length >= config.descriptionMinLength,
+                      isText: true
+                    };
+                    if (context.message.isValid) {
+                      context.slots.pgr.description = description;
+                    }
+                  }),
+                  always: [
+                    {
+                      target: 'error',
+                      cond: (context) => !context.message.isValid
+                    },
+                    {
+                      target: '#imageUpload',
+                      cond: (context) => context.message.isValid
+                    }
+                  ]
+                },
+                error: {
+                  onEntry: assign((context) => {
+                    let message = context.message.isText
+                      ? dialog.get_message(messages.fileComplaint.description.tooShort, context.user.locale)
+                          .replace('{{minLength}}', config.descriptionMinLength)
+                      : dialog.get_message(dialog.global_messages.error.retry, context.user.locale);
+                    dialog.sendMessage(context, message, false);
+                  }),
+                  always: 'question'
+                }
+              }
+            },
             imageUpload: {
               id: 'imageUpload',
               initial: 'question',
@@ -720,7 +869,7 @@ const pgr =  {
                 },
                 process: {
                   onEntry: assign((context, event) => {
-                    if(dialog.validateInputType(event, 'image')) {
+                    if(dialog.validateInputType(event, ['image', 'document'])) {
                       context.slots.pgr.image = event.message.input;
                       context.message = {
                         isValid: true
@@ -880,6 +1029,14 @@ let messages = {
         }
       },
     }, // complaintType2Step
+    boundary: {
+      question: {
+        preamble: {
+          en_IN: 'Please type and send the number to select the {{level}} for your grievance 👇\n',
+          hi_IN: 'कृपया अपनी शिकायत के लिए {{level}} का विकल्प संख्या टाइप करें और भेजें 👇\n'
+        }
+      }
+    },
     geoLocation: {
       question: {
         en_IN :'Please share your location if you are at the grievance site.\n\n👉  Refer the image below to understand steps for sharing the location.\n\n👉  To continue without sharing the location, type and send  *1*.',
@@ -914,9 +1071,19 @@ let messages = {
         }
       }
     }, // locality
+    description: {
+      question: {
+        en_IN: 'Please describe your grievance in one message, using at least {{minLength}} characters.',
+        hi_IN: 'कृपया अपनी शिकायत एक संदेश में लिखें, कम से कम {{minLength}} अक्षरों का प्रयोग करें।'
+      },
+      tooShort: {
+        en_IN: 'That description is too short. Please describe your grievance in at least {{minLength}} characters, in a single message.',
+        hi_IN: 'यह विवरण बहुत छोटा है। कृपया एक ही संदेश में कम से कम {{minLength}} अक्षरों में अपनी शिकायत लिखें।'
+      }
+    },
     imageUpload: {
       question: {
-        en_IN: 'If possible, attach a photo of your grievance.\n\nTo continue without photo, type and send *1*',
+        en_IN: 'If possible, attach a photo or document of your grievance.\n\nTo continue without attaching, type and send *1*',
         hi_IN: 'यदि संभव हो तो अपनी शिकायत का फोटो संलग्न करें।\n\nफोटो के बिना जारी रखने के लिए, टाइप करें और 1 भेजें',
         pa_IN: ' ਨਾਮ ਦੀ ਪੁਸ਼ਟੀ ਕਰਨ ਲਈ 1 ਟਾਈਪ ਕਰੋ ਅਤੇ ਭੇਜੋ'
       },

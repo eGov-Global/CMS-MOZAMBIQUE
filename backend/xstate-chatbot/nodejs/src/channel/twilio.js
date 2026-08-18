@@ -2,17 +2,7 @@ const config = require('../env-variables');
 const fetch = require("node-fetch");
 const axios = require('axios');
 var FormData = require("form-data");
-
-const MIME_TYPE_EXTENSIONS = {
-    'image/jpeg': '.jpg',
-    'image/jpg': '.jpg',
-    'image/png': '.png',
-    'image/gif': '.gif',
-    'image/webp': '.webp',
-    'application/pdf': '.pdf',
-    'application/msword': '.doc',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
-};
+const mediaTypes = require('../media-types');
 
 class TwilioWhatsAppProvider {
 
@@ -29,7 +19,25 @@ class TwilioWhatsAppProvider {
     }
 
     getExtensionForMimeType(contentType) {
-        return MIME_TYPE_EXTENSIONS[contentType] || '';
+        return mediaTypes.extensionForMimeType(contentType);
+    }
+
+    async fileStoreAPICall(fileName, fileData, contentType = null, tenantId = null) {
+        var url = config.egovServices.egovServicesHost + config.egovServices.egovFilestoreServiceUploadEndpoint;
+        url = url + '&tenantId=' + (tenantId || config.rootTenantId);
+        var form = new FormData();
+        form.append("file", fileData, {
+            filename: fileName,
+            contentType: mediaTypes.filestoreContentType(fileName) || contentType || 'application/octet-stream'
+        });
+        let response = await axios.post(url, form, {
+            headers: {
+                ...form.getHeaders()
+            }
+        });
+
+        var filestore = response.data;
+        return filestore['files'][0]['fileStoreId'];
     }
 
     getMimeTypeFromBase64(fileInBase64String) {
@@ -192,7 +200,10 @@ class TwilioWhatsAppProvider {
             const mediaType = requestBody.MediaContentType0 || '';
             const fileExtension = this.getExtensionForMimeType(mediaType);
 
-            if (mediaType.startsWith('image/')) {
+            if (mediaType && !mediaTypes.isSupportedMimeType(mediaType)) {
+                type = 'unsupported';
+                input = ' ';
+            } else if (mediaType.startsWith('image/')) {
                 type = 'image';
             } else if (mediaType) {
                 type = 'document';

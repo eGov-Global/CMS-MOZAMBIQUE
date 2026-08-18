@@ -8,6 +8,7 @@ const moment = require("moment-timezone");
 const fs = require("fs");
 const axios = require("axios");
 var FormData = require("form-data");
+const mediaTypes = require("../../media-types");
 var geturl = require("url");
 var path = require("path");
 require("url-search-params-polyfill");
@@ -169,6 +170,93 @@ class PGRService {
     for (const code of codes) {
       messageBundle[code] = localisationService.getMessageBundleForCode(
         "COMPLAINT_HIERARCHY." + code.toUpperCase()
+      );
+    }
+    return messageBundle;
+  }
+
+  async fetchBoundaryHierarchy(tenantId) {
+    const url =
+      config.egovServices.egovServicesHost +
+      "boundary-service/boundary-hierarchy-definition/_search";
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        RequestInfo: {},
+        BoundaryTypeHierarchySearchCriteria: { tenantId },
+      }),
+    });
+    const data = await response.json();
+    const definition = (data.BoundaryHierarchy ?? [])[0] ?? {};
+    const levels = (definition.boundaryHierarchy ?? []).filter(
+      (level) => level.active !== false
+    );
+    return {
+      hierarchyType: definition.hierarchyType,
+      levels: this.orderBoundaryLevels(levels),
+    };
+  }
+
+  // Levels declare parentBoundaryType, not an index; follow the chain from the root.
+  orderBoundaryLevels(levels) {
+    const byParent = {};
+    for (const level of levels) {
+      byParent[level.parentBoundaryType ?? "\u0000root"] = level;
+    }
+    const ordered = [];
+    let key = "\u0000root";
+    while (byParent[key] && ordered.length <= levels.length) {
+      ordered.push(byParent[key]);
+      key = byParent[key].boundaryType;
+    }
+    return ordered.length ? ordered : levels;
+  }
+
+  async fetchBoundaryStep(tenantId, boundaryPath = []) {
+    const { hierarchyType, levels } = await this.fetchBoundaryHierarchy(tenantId);
+    if (!hierarchyType) {
+      return { options: [], messageBundle: {}, levelLabel: "", isLeafLevel: true };
+    }
+
+    const url =
+      config.egovServices.egovServicesHost +
+      "boundary-service/boundary-relationships/_search?tenantId=" +
+      encodeURIComponent(tenantId) +
+      "&hierarchyType=" +
+      encodeURIComponent(hierarchyType) +
+      "&includeChildren=true";
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ RequestInfo: {} }),
+    });
+    const data = await response.json();
+
+    let nodes = (data.TenantBoundary ?? []).flatMap((entry) => entry.boundary ?? []);
+    for (const code of boundaryPath) {
+      const match = nodes.find((node) => node.code === code);
+      nodes = match?.children ?? [];
+    }
+
+    const options = nodes
+      .map((node) => node.code)
+      .sort((a, b) => String(a).localeCompare(String(b)));
+
+    return {
+      options,
+      messageBundle: this.boundaryMessageBundle(options),
+      levelLabel:
+        nodes[0]?.boundaryType ?? levels[boundaryPath.length]?.boundaryType ?? "",
+      isLeafLevel: nodes.every((node) => (node.children ?? []).length === 0),
+    };
+  }
+
+  boundaryMessageBundle(codes) {
+    const messageBundle = {};
+    for (const code of codes) {
+      messageBundle[code] = localisationService.getMessageBundleForCode(
+        String(code).toUpperCase()
       );
     }
     return messageBundle;
@@ -730,7 +818,7 @@ class PGRService {
     requestBody["RequestInfo"]["authToken"] = authToken;
     requestBody["service"]["tenantId"] = city;
     requestBody["service"]["address"]["city"] = city;
-    requestBody["service"]["address"]["locality"]["code"] = "ADMIN_" + locality;
+    requestBody["service"]["address"]["locality"]["code"] = locality;
 
     // Add localized locality name if available
     if (slots.localityName) {
@@ -758,7 +846,7 @@ class PGRService {
           const data = await response.json();
           if (data.messages) {
             // Look for ADMIN_<locality> code
-            const localityCode = `ADMIN_${locality}`;
+            const localityCode = locality;
             const message = data.messages.find(m => m.code === localityCode);
             if (message) {
               requestBody["service"]["address"]["locality"]["name"] = message.message;
@@ -770,6 +858,7 @@ class PGRService {
     }
 
     requestBody["service"]["serviceCode"] = complaintType;
+    requestBody["service"]["description"] = slots.description ?? "";
     requestBody["service"]["accountId"] = userId;
     requestBody["RequestInfo"]["userInfo"] = userInfo;
 
@@ -948,7 +1037,7 @@ class PGRService {
     });
   }
 
-  async fileStoreAPICall(fileName, fileData, tenantId) {
+  async fileStoreAPICall(fileName, fileData, tenantId, contentType = null) {
     var url =
       config.egovServices.egovServicesHost +
       config.egovServices.egovFilestoreServiceUploadEndpoint;
@@ -956,7 +1045,7 @@ class PGRService {
     var form = new FormData();
     form.append("file", fileData, {
       filename: fileName,
-      contentType: "image/jpg",
+      contentType: mediaTypes.filestoreContentType(fileName) || contentType || "image/jpg",
     });
     let response = await axios.post(url, form, {
       headers: {

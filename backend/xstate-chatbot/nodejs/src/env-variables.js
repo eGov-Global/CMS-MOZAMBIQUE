@@ -25,6 +25,8 @@ const envVariables = {
     countryCode: process.env.COUNTRY_CODE || '91',
     mobileNumberLength: parseInt(process.env.MOBILE_NUMBER_LENGTH || '10', 10),
 
+    descriptionMinLength: parseInt(process.env.DESCRIPTION_MIN_LENGTH || '20', 10),
+
     // Sandbox mode configuration
     enableSandboxMode: process.env.ENABLE_SANDBOX_MODE === 'true',
     tenantManagementHost: process.env.TENANT_MANAGEMENT_HOST || 'https://sandbox.digit.org',
