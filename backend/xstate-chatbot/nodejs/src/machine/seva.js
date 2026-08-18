@@ -5,6 +5,28 @@ const emailTenantService = require("./service/email-tenant-service");
 const config = require("../env-variables");
 const dialog = require("./util/dialog.js");
 
+const localisationService = require("./util/localisation-service");
+
+const localeOptions = () => {
+  const renderable = Object.keys(messages.onboarding.onboardingWelcome);
+  const offered = localisationService.getLocales().filter((l) => renderable.includes(l.value));
+  return offered.length ? offered : [{ value: "en_IN", label: "ENGLISH" }];
+};
+
+const localeMenuText = () =>
+  "To select the language simply type and send the number of the preferred option  👇\n\n" +
+  localeOptions().map((l, i) => `${i + 1}.   ${l.label}`).join("\n");
+
+const localeGrammer = () =>
+  localeOptions().map((l, i) => ({
+    intention: l.value,
+    recognize: [
+      String(i + 1),
+      l.label.toLowerCase(),
+      l.label.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "")
+    ]
+  }));
+
 const sevaMachine = Machine({
   id: "mseva",
   initial: "start",
@@ -39,8 +61,8 @@ const sevaMachine = Machine({
             question: {
               onEntry: assign((context, event) => {
                 context.onboarding = {};
-                let message = messages.onboarding.onboardingLocale.question;
-                context.grammer = grammer.locale.question;
+                let message = localeMenuText();
+                context.grammer = localeGrammer();
                 var templateContent = {
                   output: "3797433",
                   type: "template",
@@ -586,10 +608,6 @@ let messages = {
       pa_IN:
         "ਪਿਆਰੇ ਨਾਗਰਿਕ,\n\neGov ਪੰਜਾਬ ਵਿਚ ਤੁਹਾਡਾ ਸਵਾਗਤ ਹੈ 🙏\n\nਹੁਣ ਤੁਸੀਂ ਵਟਸਐਪ ਰਾਹੀਂ ਆਪਣੀ ਸ਼ਿਕਾਇਤ ਦਰਜ ਕਰ ਸਕਦੇ ਹੋ.",
     },
-    onboardingLocale: {
-      question:
-        "To select the language simply type and send the number of the preferred option  👇\n\n1.   English\n2.   हिन्दी\n3.   ਪੰਜਾਬੀ",
-    },
     email: {
       question: {
         en_IN: "Please enter your registered email address:",
@@ -693,13 +711,6 @@ let messages = {
 };
 
 let grammer = {
-  locale: {
-    question: [
-      { intention: "en_IN", recognize: ["1", "english"] },
-      { intention: "hi_IN", recognize: ["2", "hindi"] },
-      { intention: "pa_IN", recognize: ["3", "punjabi"] },
-    ],
-  },
   confirmation: {
     choice: [
       { intention: "Yes", recognize: ["1", "yes", "Yes"] },
