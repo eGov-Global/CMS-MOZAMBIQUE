@@ -1084,25 +1084,18 @@ const pgr =  {
             onDone: {
               target: '#endstate',
               actions: assign((context, event) => {
-                let templateList;
                 let complaintDetails = event.data;
-                let message = dialog.get_message(messages.fileComplaint.persistComplaint, context.user.locale);
-                
-                // Add null checks for complaintDetails
-                if (complaintDetails && complaintDetails.complaintNumber) {
-                  message = message.replace('{{complaintNumber}}', complaintDetails.complaintNumber);
-                } else {
-                  message = message.replace('{{complaintNumber}}', 'N/A');
-                }
-                
-                if (complaintDetails && complaintDetails.complaintLink) {
-                  message = message.replace('{{complaintLink}}', complaintDetails.complaintLink);
-                } else {
-                  message = message.replace('{{complaintLink}}', '#');
-                }
-                
-                let closingStatement = dialog.get_message(messages.fileComplaint.closingStatement, context.user.locale);
-                message = message + closingStatement;
+                let categoryCode = (context.slots.pgr.hierarchyPath || [])[0] || context.slots.pgr.complaint;
+                let categoryBundle = categoryCode
+                  ? localisationService.getMessageBundleForCode('COMPLAINT_HIERARCHY.' + String(categoryCode).toUpperCase())
+                  : undefined;
+                let category = (categoryBundle && dialog.get_message(categoryBundle, context.user.locale)) || categoryCode || '-';
+
+                let message = dialog.get_message(messages.fileComplaint.persistComplaint, context.user.locale)
+                  .replace('{{1}}', category)
+                  .replace('{{2}}', (complaintDetails && complaintDetails.complaintNumber) || '-')
+                  .replace('{{3}}', moment().tz(config.timeZone).format(config.dateFormat));
+
                 dialog.sendMessage(context, message);
               //  let localeList = config.supportedLocales.split(',');
                // let localeIndex = localeList.indexOf(context.user.locale);
@@ -1282,9 +1275,8 @@ let messages = {
       }
     },
     persistComplaint: {
-      en_IN: 'Thank You 😃 Your complaint is registered successfully with eGov.\n\nThe Complaint No is : *{{complaintNumber}}*\n\nClick on the link below to view and track your complaint:\n{{complaintLink}}\n',
-      hi_IN: 'धन्यवाद 😃 आपकी शिकायत eGov के साथ सफलतापूर्वक दर्ज हो गई है।\nशिकायत संख्या है: {{complaintNumber}}\n अपनी शिकायत देखने और ट्रैक करने के लिए नीचे दिए गए लिंक पर क्लिक करें:\n {{complaintLink}}\n',
-      pa_IN: 'ਧੰਨਵਾਦ 😃 ਤੁਹਾਡੀ ਸ਼ਿਕਾਇਤ eGov ਨਾਲ ਸਫਲਤਾਪੂਰਵਕ ਰਜਿਸਟਰ ਹੋਈ ਹੈ.\nਸ਼ਿਕਾਇਤ ਨੰਬਰ ਹੈ: {{complaintNumber}}\n ਆਪਣੀ ਸ਼ਿਕਾਇਤ ਨੂੰ ਵੇਖਣ ਅਤੇ ਟਰੈਕ ਕਰਨ ਲਈ ਹੇਠਾਂ ਦਿੱਤੇ ਲਿੰਕ ਤੇ ਕਲਿੱਕ ਕਰੋ:\n {{complaintLink}}\n'
+      en_IN: 'Reclamação registada com sucesso.\n\nCategoria: {{1}}\nReferência: {{2}}\nData: {{3}}\n\nA sua reclamação será analisada pela instituição responsável.\nPode acompanhar o estado no *Portal Fala Cidadão* ou na aplicação móvel.\nObrigado por contribuir para a melhoria dos serviços públicos.\n\nFala Cidadão\nhttps://www.falacidadao.co.mz',
+      pt_PT: 'Reclamação registada com sucesso.\n\nCategoria: {{1}}\nReferência: {{2}}\nData: {{3}}\n\nA sua reclamação será analisada pela instituição responsável.\nPode acompanhar o estado no *Portal Fala Cidadão* ou na aplicação móvel.\nObrigado por contribuir para a melhoria dos serviços públicos.\n\nFala Cidadão\nhttps://www.falacidadao.co.mz'
     },
     closingStatement: {
       en_IN: '\nIn case of any help please type and send "egov"',

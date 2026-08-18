@@ -985,6 +985,9 @@ class PGRService {
       },
     };
     let response = await fetch(url, options);
+    if (!response.ok) {
+      return finalPath;
+    }
     let data = await response.text();
     return data;
   }
