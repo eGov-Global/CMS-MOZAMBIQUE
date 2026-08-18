@@ -175,7 +175,7 @@ const pgr =  {
                 evaluate: {
                   always: [
                     {
-                      target: '#persistComplaint',
+                      target: '#consent',
                       cond: (context) => (context.boundaryStep.options || []).length === 0,
                       actions: assign((context) => {
                         let path = context.slots.pgr.boundaryPath || [];
@@ -218,7 +218,7 @@ const pgr =  {
                       })
                     },
                     {
-                      target: '#persistComplaint',
+                      target: '#consent',
                       cond: (context) => context.intention != dialog.INTENTION_UNKOWN && context.boundaryStep.isLeafLevel,
                       actions: assign((context) => {
                         context.slots.pgr.boundaryPath = [...(context.slots.pgr.boundaryPath || []), context.intention];
@@ -962,6 +962,120 @@ const pgr =  {
             }
           }
         },
+        consent: {
+          id: 'consent',
+          initial: 'question',
+          states: {
+            question: {
+              invoke: {
+                src: (context) => localisationService.fetchMessagesForCodes(
+                  ['PGR_CONSENT_DATA_PROCESSING_LABEL', 'PGR_CONSENT_TRUTHFULNESS_LABEL'],
+                  context.extraInfo.tenantId
+                ),
+                id: 'fetchConsentStatements',
+                onDone: {
+                  actions: assign((context, event) => {
+                    let statements = Object.values(event.data)
+                      .map((bundle) => dialog.get_message(bundle, context.user.locale))
+                      .filter(Boolean)
+                      .map((statement) => `• ${statement}`)
+                      .join('\n');
+                    let message = dialog.get_message(messages.fileComplaint.consent.question, context.user.locale)
+                      .replace('{{statements}}', statements);
+                    dialog.sendMessage(context, message);
+                  })
+                },
+                onError: {
+                  target: '#system_error'
+                }
+              },
+              on: {
+                USER_MESSAGE: 'process'
+              }
+            },
+            process: {
+              onEntry: assign((context, event) => {
+                context.intention = dialog.get_intention(grammer.confirmation.choice, event, true);
+              }),
+              always: [
+                {
+                  target: '#confidentiality',
+                  cond: (context) => context.intention == 'Yes'
+                },
+                {
+                  target: '#endstate',
+                  cond: (context) => context.intention == 'No',
+                  actions: assign((context) => {
+                    dialog.sendMessage(context, dialog.get_message(messages.fileComplaint.consent.declined, context.user.locale));
+                  })
+                },
+                {
+                  target: 'error'
+                }
+              ]
+            },
+            error: {
+              onEntry: assign((context) => {
+                dialog.sendMessage(context, dialog.get_message(dialog.global_messages.error.retry, context.user.locale), false);
+              }),
+              always: 'question'
+            }
+          }
+        },
+        confidentiality: {
+          id: 'confidentiality',
+          initial: 'question',
+          states: {
+            question: {
+              invoke: {
+                src: (context) => localisationService.fetchMessagesForCodes(
+                  ['PGR_EXT_IS_CONFIDENTIAL_LABEL', 'PGR_EXT_IS_CONFIDENTIAL_HINT'],
+                  context.extraInfo.tenantId
+                ),
+                id: 'fetchConfidentialityTexts',
+                onDone: {
+                  actions: assign((context, event) => {
+                    let label = dialog.get_message(event.data['PGR_EXT_IS_CONFIDENTIAL_LABEL'], context.user.locale);
+                    let hint = dialog.get_message(event.data['PGR_EXT_IS_CONFIDENTIAL_HINT'], context.user.locale);
+                    let message = dialog.get_message(messages.fileComplaint.confidentiality.question, context.user.locale)
+                      .replace('{{label}}', label || '')
+                      .replace('{{hint}}', hint || '');
+                    dialog.sendMessage(context, message);
+                  })
+                },
+                onError: {
+                  target: '#system_error'
+                }
+              },
+              on: {
+                USER_MESSAGE: 'process'
+              }
+            },
+            process: {
+              onEntry: assign((context, event) => {
+                context.intention = dialog.get_intention(grammer.confirmation.choice, event, true);
+              }),
+              always: [
+                {
+                  target: '#persistComplaint',
+                  cond: (context) => context.intention == 'Yes' || context.intention == 'No',
+                  actions: assign((context) => {
+                    context.slots.pgr.isConfidential = context.intention == 'Yes';
+                  })
+                },
+                {
+                  target: 'error'
+                }
+              ]
+            },
+            error: {
+              onEntry: assign((context) => {
+                dialog.sendMessage(context, dialog.get_message(dialog.global_messages.error.retry, context.user.locale), false);
+              }),
+              always: 'question'
+            }
+          }
+        },
         persistComplaint: {
           id: 'persistComplaint',
           invoke: {
@@ -1123,6 +1237,19 @@ let messages = {
         }
       }
     }, // locality
+    consent: {
+      question: {
+        en_IN: 'Before your grievance is filed, please confirm the following:\n\n{{statements}}\n\n👉 Type and send *1* to accept.\n👉 Type and send *2* to decline.'
+      },
+      declined: {
+        en_IN: 'Your grievance has not been filed, as consent is required to process it.\n\nType *Hi* whenever you would like to start again.'
+      }
+    },
+    confidentiality: {
+      question: {
+        en_IN: '{{label}}\n\n{{hint}}\n\n👉 Type and send *1* to keep your details confidential.\n👉 Type and send *2* to continue without confidentiality.'
+      }
+    },
     institution: {
       question: {
         en_IN: 'Which institution is your grievance about?\n\nPlease type and send its name.',

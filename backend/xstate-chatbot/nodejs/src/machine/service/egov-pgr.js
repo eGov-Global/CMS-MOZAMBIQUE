@@ -862,6 +862,7 @@ class PGRService {
     requestBody["service"]["extendedAttributes"] = {
       caseRelatedTo: config.caseRelatedTo,
       instituteName: slots.instituteName,
+      isConfidential: slots.isConfidential === true,
     };
     requestBody["service"]["accountId"] = userId;
     requestBody["RequestInfo"]["userInfo"] = userInfo;

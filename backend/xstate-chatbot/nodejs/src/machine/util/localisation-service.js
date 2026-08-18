@@ -58,6 +58,22 @@ class LocalisationService {
         }));
     }
 
+    async fetchMessagesForCodes(codes, tenantId) {
+        const bundles = {};
+        for (const code of codes) {
+            bundles[code] = {};
+        }
+        for (const locale of this.supportedLocales || ['en_IN']) {
+            const messages = await this.fetchMessagesForLocale(locale, tenantId, codes).catch(() => []);
+            (messages || []).forEach((record) => {
+                if (bundles[record.code]) {
+                    bundles[record.code][locale] = record.message;
+                }
+            });
+        }
+        return bundles;
+    }
+
     getMessageForCode(code, locale) {
         return this.messages[locale][code];
     }
@@ -94,8 +110,14 @@ class LocalisationService {
         return messageBundle;
     }
 
-    async fetchMessagesForLocale(locale, tenantId) {
+    // Without codes, localisation returns only the most specific tenant that has
+    // messages for the locale; ancestor tenants are not merged. Passing codes makes
+    // it resolve up the chain, which is the only way to reach keys held on the state root.
+    async fetchMessagesForLocale(locale, tenantId, codes) {
         var url = config.egovServices.egovlocalizationhost + config.egovServices.localisationServiceSearchPath + '?tenantId=' + tenantId + '&locale=' + locale;
+        if (codes && codes.length) {
+            url = url + '&codes=' + encodeURIComponent(codes.join(','));
+        }
         
         var options = {
             method: 'POST',
