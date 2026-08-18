@@ -32,6 +32,46 @@ If you have never seen this repository before, read [What's Included](#whats-inc
 
 ---
 
+
+## UAT Status
+
+This release **freezes the Mozambique implementation that has been deployed for UAT validation**. The application code is unchanged by this release; only documentation was added.
+
+### What is verified, and by what evidence
+
+| Item | Status | Evidence |
+|---|---|---|
+| Release candidate commit | `124678e5` (branch `master`) | `git rev-parse origin/master` |
+| Release commit (docs only) | `d6fd60ab` — parented directly on `124678e5` | 0 non-documentation files changed |
+| UAT environment | `cms-pilot.digit.org` reachable, employee UI serving (HTTP 200) | direct probe at release time |
+| Frontend bundle served in UAT | contains the analytics dashboard and the admin complaint search; contains **no** CCSD-2171 geography drill-down — consistent with this release's scope | served `/digit-ui/index.js` (8.5 MB) inspected for markers |
+| Formal UAT sign-off | **NOT VERIFIED** | no sign-off record is derivable from the repository |
+| UAT test plan / test cases executed | **NOT VERIFIED** | not present in the repository |
+| Dates and duration of UAT validation | **NOT VERIFIED** | not derivable |
+
+### Environment/release drift — read this before assuming parity
+
+The UAT environment is **not guaranteed to be byte-identical to this release commit**:
+
+- The **frontend** currently served in UAT matches this release's scope (no CCSD-2171).
+- The **backend** `pgr-services` image observed on the environment during analysis was `release-v2.12-moz-943c42d`, which is built from the upstream Mozambique line **after** this release's baseline and therefore **includes** the CCSD-2171 `boundaryPath` analytics parameter that is *not* part of this release.
+
+Consequence: an environment may expose backend capability that this release does not contain. This is recorded as **UAT observation D-1** below rather than corrected, because this release does not change application code or deployment behaviour.
+
+### Functional flows exercised on the environment during release analysis
+
+These were executed directly against `cms-pilot.digit.org` while preparing this release. They are evidence that the flows operate; they are **not** a substitute for a formal UAT test report.
+
+- Citizen complaint creation, employee assignment chain (screening → supervisor → case manager), resolve, reopen and rate — complaints `P-2026-000119` … `P-2026-000122`.
+- Notification delivery for four workflow transitions (assign, reassign, reopen, rate), verified as `SENT` in the notification dispatch log with one named recipient per transition.
+- Document upload across the advertised formats (JPG, PNG, PDF, DOC, DOCX, XLS, XLSX, MP4, MOV, AVI, MKV), including retrieval of an uploaded file.
+- Employee dashboard rendering with the seeded KPI catalogue.
+- Boundary hierarchy and authority configuration reads.
+
+### Areas with no automated coverage
+
+See [Test Coverage](#test-coverage). Across the 556-commit customization delta there is **1 automated test added and 2 modified**. Workflow transitions, notifications, extended attributes, roles/permissions and localization have **no automated regression coverage** and rest entirely on manual/UAT validation.
+
 ## Based On
 
 ### Upstream
@@ -481,6 +521,25 @@ The release commit `124678e5` ("Create stateige.yml.example (#3)") was authored 
 
 
 ---
+
+
+## Future Work
+
+Items deliberately **excluded** from this release. None of them are changed by `cms-mozambique-v1.0.0`; each is recorded so it can be planned as separate work with its own regression testing.
+
+| Ref | Classification | Item | Recommended action |
+|---|---|---|---|
+| **A-1** | Known limitation | `POST /pgr-services/v2/request/_admin/_search` has no server-side authorization; the only gate is client-side. Verified on the environment with an employee holding only `CMS_SCREENING_OFFICER`. | Future hardening task: enforce the role in the service/controller, or register the action and grant it. Requires regression testing of the admin search screen. |
+| **A-2** | Known limitation | 3 of the 8 privileged roles the seed ships (`CMS_ADMIN`, `CMS_DASHBOARD_VIEWER`, `CONFIDENTIAL_COMPLAINT_VIEWER`) are not auto-registered by this release's migration runner. | Register manually (documented in `CONFIGURATION.md`), or adopt the upstream CCSD-1937 change in a future release. |
+| **E-1** | Deployment / manual operational requirement | CMS roles, actions, grants and the PGR workflow are seeded by a **manual** `ccrs-migrate --only cms` step; deploy-time seeding is not part of this release. | Documented in `DEPLOYMENT.md`. Adopt upstream CCSD-1937 in a future release to automate. |
+| **E-2** | Deployment / manual operational requirement | A newly created workflow BusinessService requires an `egov-workflow-v2` restart (it caches BusinessServices); nothing performs this automatically. | Documented in `DEPLOYMENT.md`. |
+| **D-1** | UAT observation | Environment/release drift: the environment's `pgr-services` image may be newer than this release and expose CCSD-2171 backend capability not contained here. | Align the environment to the release tag, or accept and record the drift per environment. |
+| **D-2** | UAT observation | `stateige.yml.example` is a local-development template: it fails preflight (`enable_mcp: true` without `docker_registry`), pins the SPA to a feature branch, enables legacy `digit-ui-v2` from a third-party fork, and points Novu at a live environment. | Operator corrections documented in `DEPLOYMENT.md`. Future task: ship a production-shaped example. |
+| **B-1** | Technical debt | `develop` has diverged from `master` (2 ahead / 1 behind) with **byte-identical trees** — the same file added twice through different pull requests. | Branch-management task; deliberately not reconciled in this release. |
+| **B-2** | Technical debt | No automated regression coverage for the Mozambique feature set (1 test added, 2 modified across 556 commits). | Build a regression suite covering workflow, notifications, extended attributes, roles and localization. |
+| **B-3** | Technical debt | No down-migrations or undo scripts exist anywhere in the tree; data rollback is restore-from-dump. | Adopt expand/contract migrations with rollback scripts for future schema work. |
+| **C-1** | Future improvement | 9 upstream commits (CCSD-1937, CCSD-2171) are not included. | Separate upstream synchronization activity, followed by regression testing and its own release. |
+| **C-2** | Future improvement | `PGR_WORKFLOW_VARIANT` is no longer set anywhere after `default-data-handler` was removed from the compose stack — **NOT VERIFIED** whether anything still consumes it. | Investigate and either restore or remove the remaining references. |
 
 ## ⚠️ Known defects in `stateige.yml.example` — READ BEFORE YOUR FIRST DEPLOY
 

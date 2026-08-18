@@ -70,6 +70,32 @@ delta_shape:
     production_critical: 74
     excluded_not_in_release: 3
 
+
+# ---------------------------------------------------------------------------
+# UAT status — this release freezes the implementation deployed for UAT.
+# Values that cannot be derived from the repository are recorded as NOT VERIFIED
+# rather than assumed.
+# ---------------------------------------------------------------------------
+uat_status:
+  summary: "Frozen for release: the Mozambique implementation deployed for UAT validation. This release changes no application code."
+  environment: "cms-pilot.digit.org"
+  environment_reachable_at_release: true
+  frontend_matches_release_scope: true      # served bundle contains no CCSD-2171 markers
+  backend_image_observed: "release-v2.12-moz-943c42d"
+  environment_release_parity: "PARTIAL — the observed backend image is newer than this release and includes the CCSD-2171 boundaryPath parameter, which is not part of this release. Recorded as UAT observation D-1."
+  flows_exercised_during_release_analysis:
+    - "citizen complaint creation"
+    - "employee assignment chain (screening -> supervisor -> case manager)"
+    - "resolve, reopen, rate"
+    - "notification delivery for assign / reassign / reopen / rate (dispatch log SENT)"
+    - "document upload and retrieval across the advertised formats"
+    - "employee dashboard rendering with the seeded KPI catalogue"
+    - "boundary hierarchy and authority configuration reads"
+  formal_sign_off: "NOT VERIFIED"
+  uat_test_plan: "NOT VERIFIED"
+  uat_period: "NOT VERIFIED"
+  automated_regression_coverage: "none for the Mozambique feature set (1 test added, 2 modified across the 556-commit delta)"
+
 database_migrations:
   mozambique_specific_migrations: 0
   state: none
