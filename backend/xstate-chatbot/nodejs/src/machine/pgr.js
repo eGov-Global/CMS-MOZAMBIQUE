@@ -64,7 +64,7 @@ const pgr =  {
         type: {
           id: 'pgrType',
           // Start with the frequent-complaints menu and fall back to category/item browsing via "more".
-          initial: 'complaintType',
+          initial: 'complaintType2Step',
           states: {
             complaintType: {
               id: 'complaintType',
@@ -126,133 +126,77 @@ const pgr =  {
             }, // complaintType
             complaintType2Step: {
               id: 'complaintType2Step',
-              initial: 'complaintCategory',
+              initial: 'question',
               states: {
-                complaintCategory: {
-                  id: 'complaintCategory',
-                  initial: 'question',
-                  states: {
-                    question: {
-                      invoke:  {                  
-                        src: (context, event)=>pgrService.fetchComplaintCategories(context.extraInfo.tenantId),
-                        id: 'fetchComplaintCategories',
-                        onDone: {
-                          actions: assign((context, event) => {
-                            let { complaintCategories, messageBundle } = event.data;
-                            let preamble = dialog.get_message(messages.fileComplaint.complaintType2Step.category.question.preamble, context.user.locale);
-                            let {prompt, grammer} = dialog.constructListPromptAndGrammer(complaintCategories, messageBundle, context.user.locale);
+                question: {
+                  invoke: {
+                    src: (context) => pgrService.fetchComplaintHierarchyStep(
+                      context.extraInfo.tenantId,
+                      context.slots.pgr.hierarchyPath || []
+                    ),
+                    id: 'fetchComplaintHierarchyStep',
+                    onDone: {
+                      actions: assign((context, event) => {
+                        let { options, messageBundle, levelLabel, isLeafLevel } = event.data;
+                        context.hierarchyIsLeafLevel = isLeafLevel;
 
-                            let lengthOfList = grammer.length;
-                            let otherTypeGrammer = { intention: 'Others', recognize: [ (lengthOfList + 1).toString() ] };
-                            prompt += `\n*${lengthOfList + 1}.* ` + dialog.get_message(messages.fileComplaint.complaintType2Step.category.question.otherType, context.user.locale);
-                            grammer.push(otherTypeGrammer);
+                        let atRoot = (context.slots.pgr.hierarchyPath || []).length === 0;
+                        let preamble = dialog
+                          .get_message(messages.fileComplaint.complaintType2Step.level.question.preamble, context.user.locale)
+                          .replace('{{level}}', levelLabel);
+                        let { prompt, grammer } = dialog.constructListPromptAndGrammer(
+                          options, messageBundle, context.user.locale, false, !atRoot
+                        );
 
-                            context.grammer = grammer; // save the grammer in context to be used in next step
-                            dialog.sendMessage(context, `${preamble}${prompt}`);
-                          }),
-                        }, 
-                        onError: {
-                          target: '#system_error'
-                        }
-                      },
-                      on: {
-                        USER_MESSAGE: 'process'
-                      }
-                    }, //question
-                    process: {
-                      onEntry: assign((context, event) => {
-                        context.intention = dialog.get_intention(context.grammer, event, true) 
-                      }),
-                      always: [
-                        {
-                          target: '#other',
-                          cond: (context) => context.intention == 'Others',
-                          actions: assign((context, event) => {
-                            context.slots.pgr["complaint"] = context.intention;
-                          })
-                        },
-                        {
-                          target: '#complaintItem',
-                          cond: (context) => context.intention != dialog.INTENTION_UNKOWN,
-                          actions: assign((context, event) => {
-                            context.slots.pgr["complaint"] = context.intention;
-                          })
-                        },
-                        {
-                          target: 'error'
-                        }
-                      ]
-                    }, // process
-                    error: {
-                      onEntry: assign( (context, event) => {
-                        dialog.sendMessage(context, dialog.get_message(dialog.global_messages.error.retry, context.user.locale), false);
-                      }),
-                      always:  'question',
-                    } // error
-                  } // states of complaintCategory
-                }, // complaintCategory
-                complaintItem: {
-                  id: 'complaintItem',
-                  initial: 'question',
-                  states: {
-                    question: {
-                      invoke:  {                  
-                        src: (context) => pgrService.fetchComplaintItemsForCategory(context.slots.pgr.complaint,context.extraInfo.tenantId),
-                        id: 'fetchComplaintItemsForCategory',
-                        onDone: {
-                          actions: assign((context, event) => {
-                            let { complaintItems, messageBundle } = event.data;
-                            let preamble = dialog.get_message(messages.fileComplaint.complaintType2Step.item.question.preamble, context.user.locale);
-                            let localisationPrefix = 'CS_COMPLAINT_TYPE_';
-                            let complaintType = localisationService.getMessageBundleForCode(localisationPrefix + context.slots.pgr.complaint.toUpperCase());
-                            let complaint = dialog.get_message(context.slots.pgr.complaint,context.user.locale);
-                            if(complaint != undefined)
-                              preamble = preamble.replace('{{complaint}}', complaint);
-                            else
-                              preamble = preamble.replace('{{complaint}}', context.slots.pgr.complaint);
-                            
-                            let {prompt, grammer} = dialog.constructListPromptAndGrammer(complaintItems, messageBundle, context.user.locale, false, true);
-                            context.grammer = grammer; // save the grammer in context to be used in next step
-                            dialog.sendMessage(context, `${preamble}${prompt}`);
-                          })
-                        }, 
-                        onError: {
-                          target: '#system_error'
-                        }
-                      },
-                      on: {
-                        USER_MESSAGE: 'process'
-                      }
-                    }, //question
-                    process: {
-                      onEntry: assign((context, event) => {
-                        context.intention = dialog.get_intention(context.grammer, event, true) 
-                      }),
-                      always: [
-                        {
-                          target: '#complaintCategory',
-                          cond: (context) => context.intention == dialog.INTENTION_GOBACK
-                        },
-                        {
-                          target: '#other',
-                          cond: (context) => context.intention != dialog.INTENTION_UNKOWN,
-                          actions: assign((context, event) => {
-                            context.slots.pgr["complaint"]= context.intention;
-                          })
-                        },
-                        {
-                          target: 'error'
-                        }
-                      ]
-                    }, // process
-                    error: {
-                      onEntry: assign( (context, event) => {
-                        dialog.sendMessage(context, dialog.get_message(dialog.global_messages.error.retry, context.user.locale), false);
-                      }),
-                      always:  'question',
-                    } // error
-                  } // states of complaintItem
-                }, // complaintItem
+                        context.grammer = grammer;
+                        dialog.sendMessage(context, `${preamble}${prompt}`);
+                      })
+                    },
+                    onError: {
+                      target: '#system_error'
+                    }
+                  },
+                  on: {
+                    USER_MESSAGE: 'process'
+                  }
+                }, //question
+                process: {
+                  onEntry: assign((context, event) => {
+                    context.intention = dialog.get_intention(context.grammer, event, true)
+                  }),
+                  always: [
+                    {
+                      target: 'question',
+                      cond: (context) => context.intention == dialog.INTENTION_GOBACK,
+                      actions: assign((context) => {
+                        context.slots.pgr.hierarchyPath = (context.slots.pgr.hierarchyPath || []).slice(0, -1);
+                      })
+                    },
+                    {
+                      target: '#other',
+                      cond: (context) => context.intention != dialog.INTENTION_UNKOWN && context.hierarchyIsLeafLevel,
+                      actions: assign((context) => {
+                        context.slots.pgr["complaint"] = context.intention;
+                      })
+                    },
+                    {
+                      target: 'question',
+                      cond: (context) => context.intention != dialog.INTENTION_UNKOWN,
+                      actions: assign((context) => {
+                        context.slots.pgr.hierarchyPath = [...(context.slots.pgr.hierarchyPath || []), context.intention];
+                      })
+                    },
+                    {
+                      target: 'error'
+                    }
+                  ]
+                }, // process
+                error: {
+                  onEntry: assign((context) => {
+                    dialog.sendMessage(context, dialog.get_message(dialog.global_messages.error.retry, context.user.locale), false);
+                  }),
+                  always: 'question',
+                } // error
               } // states of complaintType2Step
             }, // complaintType2Step
           }
@@ -994,25 +938,12 @@ let messages = {
       }
     }, // complaintType
     complaintType2Step: {
-      category: {
+      level: {
         question: {
           preamble: {
-            en_IN : 'Please type and send the number to select a complaint type from the list below 👇\n',
-            hi_IN : 'नीचे दी गई सूची से शिकायत प्रकार चुनने के लिए विकल्प संख्या टाइप करें और भेजें 👇'
-          },
-          otherType: {
-            en_IN: 'Others',
-            hi_IN: 'अन्य'
+            en_IN : 'Please type and send the number to select a {{level}} from the list below 👇\n',
+            hi_IN : 'नीचे दी गई सूची से {{level}} चुनने के लिए विकल्प संख्या टाइप करें और भेजें 👇'
           }
-        }
-      },
-      item: {
-        question: {
-          preamble : {
-            en_IN : 'What is the problem you are facing with {{complaint}}?\n',
-            hi_IN : 'आपको {{complaint}} से क्या समस्या आ रही है',
-            pa_IN : '{{complaint}} ਨਾਲ ਤੁਸੀਂ ਕਿਸ ਸਮੱਸਿਆ ਦਾ ਸਾਹਮਣਾ ਕਰ ਰਹੇ ਹੋ',
-          },
         }
       },
     }, // complaintType2Step

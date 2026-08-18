@@ -276,59 +276,76 @@ class PGRService {
     }
   }
 
-
-  async fetchComplaintCategories(tenantId) {
-    // Categories = parent nodes of the active leaf complaint types. ServiceDefs
-    // is gone; the leaf's parentCode replaces the legacy menuPath grouping key.
-    let hierarchyRows = await this.fetchMdmsData(
+  async fetchComplaintHierarchyLevels(tenantId) {
+    const rows = await this.fetchMdmsData(
       tenantId,
       "RAINMAKER-PGR",
-      "ComplaintHierarchy",
+      "ComplaintHierarchyDefinition",
       "$.[?(@.active == true)]"
     );
-    let complaintCategories = this.mapHierarchyToServiceDefs(hierarchyRows).map(
-      (def) => def.menuPath
-    );
-    complaintCategories = [...new Set(complaintCategories)];
-    complaintCategories = complaintCategories.filter(
-      (complaintCategory) => complaintCategory != ""
-    ); // To remove any empty category
-    let localisationPrefix = "COMPLAINT_HIERARCHY.";
-    let messageBundle = {};
-    for (let complaintCategory of complaintCategories) {
-      let message = localisationService.getMessageBundleForCode(
-        localisationPrefix + complaintCategory.toUpperCase()
-      );
-      messageBundle[complaintCategory] = message;
+    const definition = rows?.[0] ?? {};
+    const levels = definition.levels ?? [];
+    if (levels.some((level) => level.isFreeText)) {
+      throw new Error("ComplaintHierarchyDefinition declares an isFreeText level, which the chatbot does not support");
     }
-    return { complaintCategories, messageBundle };
+    return {
+      hierarchyType: definition.hierarchyType,
+      levels: [...levels].sort((a, b) => a.order - b.order)
+    };
   }
 
+  isOtherOption(row) {
+    return /^(other|others|outro|outros)$/i.test(String(row.name ?? "").trim())
+      || String(row.code ?? "").endsWith("Other");
+  }
+
+  async fetchComplaintHierarchyStep(tenantId, hierarchyPath = []) {
+    const [{ hierarchyType, levels }, hierarchyRows] = await Promise.all([
+      this.fetchComplaintHierarchyLevels(tenantId),
+      this.fetchMdmsData(tenantId, "RAINMAKER-PGR", "ComplaintHierarchy", "$.[?(@.active == true)]")
+    ]);
+
+    const parentCode = hierarchyPath[hierarchyPath.length - 1];
+    const children = hierarchyRows
+      .filter((row) => !hierarchyType || row.hierarchyType === hierarchyType)
+      .filter((row) => (parentCode ? row.parentCode === parentCode : row.parentCode == null))
+      .sort(
+        (a, b) =>
+          (this.isOtherOption(a) ? 1 : 0) - (this.isOtherOption(b) ? 1 : 0) ||
+          (a.order ?? 0) - (b.order ?? 0) ||
+          String(a.code).localeCompare(String(b.code))
+      );
+
+    const level =
+      levels.find((candidate) => candidate.levelCode === children[0]?.levelCode) ??
+      levels[hierarchyPath.length];
+    const isLeafLevel = level
+      ? level.isLeafServiceCode === true
+      : children.every((row) => row.department !== undefined || row.slaHours !== undefined);
+
+    const options = children.map((row) => row.code);
+    return {
+      options,
+      messageBundle: this.hierarchyMessageBundle(options),
+      levelLabel: level?.label ?? "",
+      isLeafLevel
+    };
+  }
 
   async fetchComplaintItemsForCategory(category, tenantId) {
-    // Leaf complaint types under a category = leaves whose parentCode (legacy
-    // menuPath) matches the category. ServiceDefs is gone; read ComplaintHierarchy.
-    let hierarchyRows = await this.fetchMdmsData(
-      tenantId,
-      "RAINMAKER-PGR",
-      "ComplaintHierarchy",
-      "$.[?(@.active == true)]"
-    );
-    let complaintItems = this.mapHierarchyToServiceDefs(hierarchyRows)
-      .filter((def) => def.menuPath == category)
-      .map((def) => def.serviceCode);
-    let localisationPrefix = "COMPLAINT_HIERARCHY.";
-    let messageBundle = {};
-    for (let complaintItem of complaintItems) {
-      let message = localisationService.getMessageBundleForCode(
-        localisationPrefix + complaintItem.toUpperCase()
-      );
-      messageBundle[complaintItem] = message;
-    }
-
-    return { complaintItems, messageBundle };
+    const { options, messageBundle } = await this.fetchComplaintHierarchyStep(tenantId, [category]);
+    return { complaintItems: options, messageBundle };
   }
 
+  hierarchyMessageBundle(codes) {
+    const messageBundle = {};
+    for (const code of codes) {
+      messageBundle[code] = localisationService.getMessageBundleForCode(
+        "COMPLAINT_HIERARCHY." + code.toUpperCase()
+      );
+    }
+    return messageBundle;
+  }
 
   async getCityAndLocalityForGeocode(geocode, tenantId) {
     let latlng = geocode.substring(1, geocode.length - 1); // Remove braces
