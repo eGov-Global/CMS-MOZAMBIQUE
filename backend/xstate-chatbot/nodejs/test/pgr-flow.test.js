@@ -157,6 +157,22 @@ function createHappyPathServiceStub(overrides = {}) {
         BrokenWaterPipeOrLeakage: { en_IN: "Pipe broken / leaking" },
       },
     }),
+    fetchComplaintHierarchyStep: async (tenantId, hierarchyPath = []) =>
+      hierarchyPath.length === 0
+        ? {
+            options: ["StreetLights"],
+            messageBundle: { StreetLights: { en_IN: "Street lights" } },
+            trailBundle: {},
+            levelLabel: "Category",
+            isLeafLevel: false,
+          }
+        : {
+            options: ["StreetLightNotWorking"],
+            messageBundle: { StreetLightNotWorking: { en_IN: "Streetlight not working" } },
+            trailBundle: { StreetLights: { en_IN: "Street lights" } },
+            levelLabel: "Sub-Type",
+            isLeafLevel: true,
+          },
     fetchComplaintCategories: async () => ({
       complaintCategories: ["StreetLights"],
       messageBundle: {
@@ -241,7 +257,7 @@ test("happy path files a complaint through fuzzy city and locality search", asyn
   assert.equal(service.state.done, true);
 });
 
-test("invalid complaint choice retries and returns to the frequent complaints question", async () => {
+test("invalid complaint choice retries and returns to the hierarchy question", async () => {
   const { service, outputs } = createHarness({
     serviceStub: createHappyPathServiceStub(),
   });
@@ -261,10 +277,10 @@ test("invalid complaint choice retries and returns to the frequent complaints qu
       /Selected option seems to be invalid/.test(String(message))
     )
   );
-  assert.match(String(outputs.at(-1)), /What is the complaint about/);
+  assert.match(String(outputs.at(-1)), /select a Category/);
   assert.equal(
     service.state.matches({
-      pgr: { fileComplaint: { type: { complaintType: "question" } } },
+      pgr: { fileComplaint: { type: { complaintType2Step: "question" } } },
     }),
     true
   );
@@ -375,7 +391,7 @@ test("persist complaint degrades gracefully when the backend omits complaint dat
 test("service failure on startup routes to system error", async () => {
   const { service, outputs } = createHarness({
     serviceStub: createHappyPathServiceStub({
-      fetchFrequentComplaints: async () => {
+      fetchComplaintHierarchyStep: async () => {
         throw new Error("backend failed");
       },
     }),
