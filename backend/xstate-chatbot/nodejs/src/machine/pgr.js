@@ -63,67 +63,8 @@ const pgr =  {
       states: {
         type: {
           id: 'pgrType',
-          // Start with the frequent-complaints menu and fall back to category/item browsing via "more".
           initial: 'complaintType2Step',
           states: {
-            complaintType: {
-              id: 'complaintType',
-              initial: 'question',
-              states: {
-                question: {
-                  invoke: {
-                    src: (context) => {
-                      return pgrService.fetchFrequentComplaints(context.extraInfo.tenantId, context.user);
-                    },
-                    id: 'fetchFrequentComplaints',
-                    onDone: {
-                      actions: assign((context, event) => {
-                        let preamble = dialog.get_message(messages.fileComplaint.complaintType.question.preamble, context.user.locale);
-                        let {complaintTypes, messageBundle} = event.data;
-                        let {prompt, grammer} = dialog.constructListPromptAndGrammer(complaintTypes, messageBundle, context.user.locale, false);
-                        context.grammer = grammer; // save the grammer in context to be used in next step
-                        dialog.sendMessage(context, `${preamble}${prompt}`);
-                      }) 
-                    },
-                    onError: {
-                      actions: (context, event) => {
-                      },
-                      target: '#system_error'
-                    }
-                  },
-                  on: {
-                    USER_MESSAGE: 'process'
-                  }
-                }, //question
-                process: {
-                  onEntry: assign((context, event) => {
-                    context.intention = dialog.get_intention(context.grammer, event, true) 
-                  }),
-                  always: [
-                    {
-                      target: '#complaintType2Step',
-                      cond: (context) => context.intention == dialog.INTENTION_MORE
-                    },
-                    {
-                      target: '#imageUpload',
-                      cond: (context) => context.intention != dialog.INTENTION_UNKOWN,
-                      actions: assign((context, event) => {
-                        context.slots.pgr["complaint"]= context.intention;
-                      })
-                    },
-                    {
-                      target: 'error'
-                    }
-                  ]
-                }, // process
-                error: {
-                  onEntry: assign( (context, event) => {
-                    dialog.sendMessage(context, dialog.get_message(dialog.global_messages.error.retry, context.user.locale), false);
-                  }),
-                  always: 'question',
-                } // error
-              } // states of complaintType
-            }, // complaintType
             complaintType2Step: {
               id: 'complaintType2Step',
               initial: 'question',
@@ -929,18 +870,6 @@ let messages = {
     }
   },
   fileComplaint: {
-    complaintType: {
-      question: {
-        preamble: {
-          en_IN : 'What is the complaint about ? Please type and send the number of your option 👇',
-          hi_IN : 'कृपया अपनी शिकायत के लिए नंबर दर्ज करें'
-        },
-        other: {
-          en_IN : 'Other ...',
-          hi_IN : 'कुछ अन्य ...'
-        }
-      }
-    }, // complaintType
     complaintType2Step: {
       level: {
         question: {
