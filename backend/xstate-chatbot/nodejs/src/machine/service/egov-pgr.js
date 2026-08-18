@@ -859,6 +859,10 @@ class PGRService {
 
     requestBody["service"]["serviceCode"] = complaintType;
     requestBody["service"]["description"] = slots.description ?? "";
+    requestBody["service"]["extendedAttributes"] = {
+      caseRelatedTo: config.caseRelatedTo,
+      instituteName: slots.instituteName,
+    };
     requestBody["service"]["accountId"] = userId;
     requestBody["RequestInfo"]["userInfo"] = userInfo;
 

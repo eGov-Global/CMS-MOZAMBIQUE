@@ -800,8 +800,60 @@ const pgr =  {
         other: {
           // get other info
           id: 'other',
-          initial: 'description',
+          initial: 'institution',
           states: {
+            institution: {
+              id: 'institution',
+              initial: 'question',
+              states: {
+                question: {
+                  onEntry: assign((context) => {
+                    let message = dialog.get_message(messages.fileComplaint.institution.question, context.user.locale)
+                      .replace('{{maxLength}}', config.instituteNameMaxLength);
+                    dialog.sendMessage(context, message);
+                  }),
+                  on: {
+                    USER_MESSAGE: 'process'
+                  }
+                },
+                process: {
+                  onEntry: assign((context, event) => {
+                    if (!dialog.validateInputType(event, 'text')) {
+                      context.message = { isValid: false, isTooLong: false };
+                      return;
+                    }
+                    let instituteName = String(event.message.input).trim();
+                    context.message = {
+                      isValid: instituteName.length > 0 && instituteName.length <= config.instituteNameMaxLength,
+                      isTooLong: instituteName.length > config.instituteNameMaxLength
+                    };
+                    if (context.message.isValid) {
+                      context.slots.pgr.instituteName = instituteName;
+                    }
+                  }),
+                  always: [
+                    {
+                      target: 'error',
+                      cond: (context) => !context.message.isValid
+                    },
+                    {
+                      target: '#description',
+                      cond: (context) => context.message.isValid
+                    }
+                  ]
+                },
+                error: {
+                  onEntry: assign((context) => {
+                    let message = context.message.isTooLong
+                      ? dialog.get_message(messages.fileComplaint.institution.tooLong, context.user.locale)
+                          .replace('{{maxLength}}', config.instituteNameMaxLength)
+                      : dialog.get_message(dialog.global_messages.error.retry, context.user.locale);
+                    dialog.sendMessage(context, message, false);
+                  }),
+                  always: 'question'
+                }
+              }
+            },
             description: {
               id: 'description',
               initial: 'question',
@@ -1071,6 +1123,16 @@ let messages = {
         }
       }
     }, // locality
+    institution: {
+      question: {
+        en_IN: 'Which institution is your grievance about?\n\nPlease type and send its name.',
+        hi_IN: 'आपकी शिकायत किस संस्था के बारे में है?\n\nकृपया उसका नाम टाइप करें और भेजें।'
+      },
+      tooLong: {
+        en_IN: 'That name is too long. Please send the institution name using at most {{maxLength}} characters.',
+        hi_IN: 'यह नाम बहुत लंबा है। कृपया संस्था का नाम अधिकतम {{maxLength}} अक्षरों में भेजें।'
+      }
+    },
     description: {
       question: {
         en_IN: 'Please describe your grievance in one message, using at least {{minLength}} characters.',

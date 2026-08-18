@@ -27,6 +27,9 @@ const envVariables = {
 
     descriptionMinLength: parseInt(process.env.DESCRIPTION_MIN_LENGTH || '20', 10),
 
+    caseRelatedTo: process.env.CASE_RELATED_TO || 'IGE',
+    instituteNameMaxLength: parseInt(process.env.INSTITUTE_NAME_MAX_LENGTH || '300', 10),
+
     // Sandbox mode configuration
     enableSandboxMode: process.env.ENABLE_SANDBOX_MODE === 'true',
     tenantManagementHost: process.env.TENANT_MANAGEMENT_HOST || 'https://sandbox.digit.org',
