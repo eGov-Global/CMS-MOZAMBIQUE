@@ -137,13 +137,17 @@ const pgr =  {
                     id: 'fetchComplaintHierarchyStep',
                     onDone: {
                       actions: assign((context, event) => {
-                        let { options, messageBundle, levelLabel, isLeafLevel } = event.data;
+                        let { options, messageBundle, trailBundle, levelLabel, isLeafLevel } = event.data;
                         context.hierarchyIsLeafLevel = isLeafLevel;
 
                         let atRoot = (context.slots.pgr.hierarchyPath || []).length === 0;
+                        let trail = (context.slots.pgr.hierarchyPath || [])
+                          .map((code) => (trailBundle[code] ? dialog.get_message(trailBundle[code], context.user.locale) : code))
+                          .join(' › ');
                         let preamble = dialog
                           .get_message(messages.fileComplaint.complaintType2Step.level.question.preamble, context.user.locale)
                           .replace('{{level}}', levelLabel);
+                        if (trail) preamble = `*${trail}*\n${preamble}`;
                         let { prompt, grammer } = dialog.constructListPromptAndGrammer(
                           options, messageBundle, context.user.locale, false, !atRoot
                         );

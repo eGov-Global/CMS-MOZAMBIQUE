@@ -327,6 +327,7 @@ class PGRService {
     return {
       options,
       messageBundle: this.hierarchyMessageBundle(options),
+      trailBundle: this.hierarchyMessageBundle(hierarchyPath),
       levelLabel: level?.label ?? "",
       isLeafLevel
     };
