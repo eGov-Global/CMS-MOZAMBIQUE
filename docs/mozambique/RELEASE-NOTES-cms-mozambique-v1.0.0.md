@@ -6,6 +6,16 @@
 
 This release formally freezes the Mozambique complaint management system that has been deployed for UAT validation. It packages and documents the solution built for the Inspecção Geral do Estado (IGE); it does not change how the application behaves.
 
+**Product identity.** This is an implementation of the **DIGIT Complaint Management System (DIGIT CMS)**, previously known as Public Grievance Redressal (PGR) and the Citizen Complaint Resolution System (CCRS). The source repository keeps the CCRS name, and technical keys such as `RAINMAKER-PGR.*` and `pgr.*` retain the earlier terminology for backward compatibility — they are implementation references, not product or feature names.
+
+| | |
+|---|---|
+| Product release this build contains | **DIGIT CMS v2.12-beta** |
+| Mozambique development line | `release-v2.12-moz` |
+| Product documentation carried in this repository | [`docs/2.12-beta/`](../2.12-beta/) |
+
+DIGIT CMS v2.12-beta is contained in full — its final commit is an ancestor of this build — so every capability of that product release is present. The tables below describe only what Mozambique adds or changes on top of it.
+
 ---
 
 ## Release Summary
@@ -57,6 +67,51 @@ This release formally freezes the Mozambique complaint management system that ha
 
 ---
 
+## Components Deployed
+
+Which parts of the product are switched on for Mozambique, as set in the reference settings file for the IGE deployment (`local-setup/ansible/inventory/host_vars/stateige.yml.example`). That file is development-shaped and must be corrected before a production deployment — see *Known Limitations*.
+
+| Component | What it does | Status |
+|---|---|---|
+| Complaints service | Files, routes, tracks and resolves complaints | Always on |
+| Supervisor dashboard | Live indicators, charts, complaint maps, CSV export | Enabled |
+| Notification services | Sends and tracks messages to citizens and officers | Enabled — SMS, Email and WhatsApp channels configured |
+| Configurator (Admin Console) | Manage departments, categories, notifications, landing page | Enabled |
+| Model context service | Supporting service for tenant bootstrap | Enabled |
+| Audit trail | Tamper-evident record of complaint changes | Always on, from the product |
+| One-time-password service | Real OTP delivery for login | Off — the product's test stub is in use |
+| Location search | Address auto-complete when setting up boundaries | Off |
+| Geography import | Boundary import from OpenStreetMap | Off |
+| Identity provider | External login integration | Off |
+| Search stack | Full-text search infrastructure | Off |
+| Transport security (HTTPS) | Encrypted traffic | **Off in the reference file — must be enabled for production** |
+
+---
+
+## Master Data & Settings
+
+Mozambique is configured through master data rather than code. Every record below is documented with its values, owner and seeding order in [Configuration & Master Data](CONFIGURATION.md).
+
+| Record | Module | What it controls |
+|---|---|---|
+| `ComplaintHierarchyDefinition`, `ComplaintHierarchy` | RAINMAKER-PGR | The complaint category tree, to any depth |
+| `AuthorityConfig` | RAINMAKER-PGR | Oversight authority routing |
+| `ComplaintExtendedAttributeSchema`, `ComplaintRelatedToMap`, `ComplaintTemplateType` | RAINMAKER-PGR | Category-specific questions and confidential complaint fields |
+| `NotificationRouting`, `NotificationTemplate`, `NotificationProviderTemplate` | RAINMAKER-PGR | Who is notified, on which channel, with which message |
+| `EscalationConfig` | RAINMAKER-PGR | Automatic escalation timings |
+| `MapConfig` | RAINMAKER-PGR | Map centring and zoom |
+| `InboxVisibilityConfig` | RAINMAKER-PGR | My Complaints / All Complaints inbox tabs |
+| `LandingPageConfig`, `LandingSection` | RAINMAKER-PGR | Public landing page and privacy notice |
+| `UIConstants` | RAINMAKER-PGR | Interface constants including the complaint reopen window |
+| `MobileNumberValidation` | common-masters | Mozambique phone-number format |
+| `StateInfo`, `ThemeConfig`, `uiHomePage`, `wfSlaConfig`, `IdFormat` | common-masters | Branding, home page, resolution targets, identifier formats |
+| `KpiDefinition`, `DashboardPack`, `DashboardConfig` | dss | Supervisor dashboard indicators and who may see them |
+| `BusinessService` | Workflow | The CMS complaint workflow — states, actions and permitted roles |
+| `SecurityPolicy`, `EncryptionPolicy`, `MaskingPatterns`, `DecryptionABAC` | DataSecurity | Who may see personal data |
+| `tenants`, `citymodule` | tenant | Tenant setup and enabled modules |
+
+---
+
 ## UAT Status
 
 | Item | Status |
@@ -85,6 +140,17 @@ Full evidence: [UAT and verification detail](MOZAMBIQUE-CUSTOMIZATION-MATRIX.md)
 A new environment is set up with the standard DIGIT single-server installation, followed by one command that seeds Mozambique master data, roles, workflow and content.
 
 One step is manual in this release: the CMS roles and workflow seeding command must be run after deployment, and the workflow service restarted once. Both are covered step by step in the [Deployment guide](DEPLOYMENT.md).
+
+---
+
+## Changes That Need Attention Before Deploying
+
+These require action from the operations team; the full procedure is in the [Deployment guide](DEPLOYMENT.md).
+
+1. **Seed the CMS roles and workflow.** One command must be run after deployment — it is not part of the automated installation in this release.
+2. **Restart the workflow service once** after the complaint workflow is created, so the new workflow is picked up.
+3. **Create three privileged roles manually.** They are not registered automatically; an administrator adds them once per environment.
+4. **Correct the reference settings file before production.** It is shaped for local development — transport security is off, and it pins development sources and a live environment hostname.
 
 ---
 
@@ -118,4 +184,6 @@ Nine improvements made in the upstream product after this release was frozen are
 | [Gate 2 Release Checklist](GATE-2-RELEASE-CHECKLIST.md) | [Upstream Baseline](UPSTREAM-BASELINE.md) |
 | [Changelog](CHANGELOG.md) | [Configuration & Master Data](CONFIGURATION.md) |
 | [Documentation index](README.md) | [Deployment Guide](DEPLOYMENT.md) |
-| | [Release Manifest](release-manifest.yml) |
+| [DIGIT CMS v2.12-beta product release notes](../2.12-beta/release-notes-v2.12-beta.md) | [Release Manifest](release-manifest.yml) |
+| [Product upgrade guide v2.11 → v2.12-beta](../2.12-beta/migration-guide-v2.11-to-v2.12-beta.md) | [Product configuration changelog](../2.12-beta/release-config-changelog-v2.12-beta.md) |
+| | [Product QA test cases](../2.12-beta/Test%20Cases%20-%20CMS%202.12-beta.xlsx) |

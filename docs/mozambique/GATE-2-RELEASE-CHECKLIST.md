@@ -8,7 +8,7 @@ Status values: **Yes** — complete · **Partially** — complete with a documen
 |---|---|---|---|---|---|---|
 | 1 | Release scope agreed and documented | Yes | [Release Notes](RELEASE-NOTES-cms-mozambique-v1.0.0.md) | Hariprasad | Pradeep | Scope is the freeze of the UAT-validated implementation |
 | 2 | Release version and tag defined | Yes | [Release](https://github.com/eGov-Global/CMS-MOZAMBIQUE/releases/tag/cms-mozambique-v1.0.0) | Hariprasad | Pradeep | Annotated tag `cms-mozambique-v1.0.0` |
-| 3 | Upstream product baseline identified | Yes | [Upstream Baseline](UPSTREAM-BASELINE.md) | Hariprasad | Pradeep | Baseline recorded with exact commit and reproduction commands |
+| 3 | Upstream product baseline identified | Yes | [Upstream Baseline](UPSTREAM-BASELINE.md) | Hariprasad | Pradeep | Built on the DIGIT CMS v2.12-beta product release; baseline recorded with exact commit and reproduction commands |
 | 4 | Customizations documented against the product | Yes | [Customization Matrix](MOZAMBIQUE-CUSTOMIZATION-MATRIX.md) | Hariprasad | Gurjeet | 118 customizations, 74 production-critical, grouped by product area |
 | 5 | Release notes prepared | Yes | [Release Notes](RELEASE-NOTES-cms-mozambique-v1.0.0.md) | Hariprasad | Pradeep | Follows the DIGIT release-notes structure |
 | 6 | Changelog prepared | Yes | [Changelog](CHANGELOG.md) | Hariprasad | Pradeep | Separates product features from Mozambique additions and changes |
