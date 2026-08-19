@@ -8,14 +8,15 @@ const dialog = require("./util/dialog.js");
 const localisationService = require("./util/localisation-service");
 
 const localeOptions = () => {
-  const renderable = Object.keys(messages.onboarding.onboardingWelcome);
+  const renderable = Object.keys(messages.onboarding.onboardingWelcome).filter((k) => k !== 'code');
   const offered = localisationService.getLocales().filter((l) => renderable.includes(l.value));
   return offered.length ? offered : [{ value: "en_IN", label: "ENGLISH" }];
 };
 
 const localeMenuText = () =>
-  "To select the language simply type and send the number of the preferred option  👇\n\n" +
-  localeOptions().map((l, i) => `${i + 1}.   ${l.label}`).join("\n");
+  dialog
+    .get_message(messages.onboarding.localeMenu, localisationService.getLocales()[0]?.value)
+    .replace('{{options}}', localeOptions().map((l, i) => `${i + 1}.   ${l.label}`).join("\n"));
 
 const localeGrammer = () =>
   localeOptions().map((l, i) => ({
@@ -595,18 +596,18 @@ const sevaMachine = Machine({
 }); // Machine
 
 let messages = {
-  reset: {
-    en_IN: "Ok. Let's start over.",
-    hi_IN: "ठीक। फिर से शुरू करते हैं।",
-  },
   onboarding: {
+    localeMenu: {
+      code: 'chatbot.pgr.locale.question',
+      en_IN: "To select the language simply type and send the number of the preferred option  👇\n\n{{options}}",
+      pt_PT: "Para escolher o idioma, escreva e envie o número da opção pretendida 👇\n\n{{options}}",
+    },
     onboardingWelcome: {
+      code: 'chatbot.pgr.onboarding.welcome',
       en_IN:
         "Dear Citizen,\n\nWelcome to the eGov Whatsapp Chatbot experience 🙏\n\nNow you can file your complaint via WhatsApp.",
-      hi_IN:
-        "प्रिय नागरिक,\n\neGov पंजाब में आपका स्वागत है 🙏\n\nअब आप व्हाट्सएप के माध्यम से अपनी शिकायत दर्ज कर सकते हैं।",
-      pa_IN:
-        "ਪਿਆਰੇ ਨਾਗਰਿਕ,\n\neGov ਪੰਜਾਬ ਵਿਚ ਤੁਹਾਡਾ ਸਵਾਗਤ ਹੈ 🙏\n\nਹੁਣ ਤੁਸੀਂ ਵਟਸਐਪ ਰਾਹੀਂ ਆਪਣੀ ਸ਼ਿਕਾਇਤ ਦਰਜ ਕਰ ਸਕਦੇ ਹੋ.",
+      pt_PT:
+        "Estimado(a) Cidadão(ã),\n\nBem-vindo(a) ao chatbot eGov no WhatsApp 🙏\n\nJá pode apresentar a sua reclamação através do WhatsApp.",
     },
     email: {
       question: {
@@ -649,64 +650,57 @@ let messages = {
     },
     onboardingName: {
       question: {
+        code: 'chatbot.pgr.onboarding.name.question',
         en_IN:
           "As per our records, we have not found any name linked to this mobile number.\n\n👉  Please provide your name to continue.",
-        hi_IN:
-          "हमारे रिकॉर्ड के अनुसार, हमें इस मोबाइल नंबर से जुड़ा कोई नाम नहीं मिला है।\n\n👉 जारी रखने के लिए कृपया अपना नाम प्रदान करें।",
-        pa_IN:
-          "ਸਾਡੇ ਰਿਕਾਰਡ ਦੇ ਅਨੁਸਾਰ, ਸਾਨੂੰ ਇਸ ਮੋਬਾਈਲ ਨੰਬਰ ਨਾਲ ਜੁੜਿਆ ਕੋਈ ਨਾਮ ਨਹੀਂ ਮਿਲਿਆ ਹੈ.\n\n👉 ਜਾਰੀ ਰੱਖਣ ਲਈ ਕਿਰਪਾ ਕਰਕੇ ਆਪਣਾ ਨਾਮ ਦੇਣ ਦੀ ਖ਼ੇਚਲ ਕੀਤੀ ਜਾਵੈ",
+        pt_PT:
+          "Nos nossos registos não encontrámos nenhum nome associado a este número.\n\n👉  Indique o seu nome para continuar.",
       },
     },
     onBoardingUserProfileConfirmation: {
       question: {
+        code: 'chatbot.pgr.onboarding.name.confirmProfile',
         en_IN:
           "As per our records, we have found the name  *“{{name}}”* linked with this mobile number.\n\n👉  Type and send *1* to confirm the name.\n\n👉  Type and send *2* to change the name.",
-        hi_IN:
-          "हमारे रिकॉर्ड के अनुसार, हमें इस मोबाइल नंबर से जुड़ा *“{{name}}”* नाम मिला है।\n\n👉 नाम की पुष्टि करने के लिए 1 टाइप करें और भेजें\n\n👉 नाम बदलने के लिए 2 टाइप करें और भेजें",
-        pa_IN:
-          "ਸਾਡੇ ਰਿਕਾਰਡ ਦੇ ਅਨੁਸਾਰ, ਸਾਨੂੰ ਇਸ ਮੋਬਾਈਲ ਨੰਬਰ ਨਾਲ ਜੋੜਿਆ *“{{name}}”*ਨਾਮ ਮਿਲਿਆ ਹੈ.\n\n👉  ਨਾਮ ਦੀ ਪੁਸ਼ਟੀ ਕਰਨ ਲਈ 1 ਟਾਈਪ ਕਰੋ ਅਤੇ ਭੇਜੋ\n\n👉 ਨਾਮ ਬਦਲਣ ਲਈ 2 ਟਾਈਪ ਕਰੋ ਅਤੇ ਭੇਜੋ",
+        pt_PT:
+          "Nos nossos registos, este número está associado ao nome  *“{{name}}”*.\n\n👉  Escreva e envie *1* para confirmar o nome.\n\n👉  Escreva e envie *2* para alterar o nome.",
       },
     },
     changeName: {
       question: {
+        code: 'chatbot.pgr.onboarding.name.change',
         en_IN: "Please provide your name to continue.",
-        hi_IN: "जारी रखने के लिए कृपया अपना नाम प्रदान करें।",
-        pa_IN: "ਜਾਰੀ ਰੱਖਣ ਲਈ ਕਿਰਪਾ ਕਰਕੇ ਆਪਣਾ ਨਾਮ ਦੇਣ ਦੀ ਖ਼ੇਚਲ ਕੀਤੀ ਜਾਵੈ",
+        pt_PT: "Indique o seu nome para continuar.",
       },
     },
     onboardingNameConfirmation: {
+      code: 'chatbot.pgr.onboarding.name.confirm',
       en_IN:
         "Confirm Name : {{name}}?\n\n👉  Type and send *1* to confirm the name.\n\n👉  Type and send *2* to change the name.",
-      hi_IN:
-        "पुष्टि नाम: {{name}}?\n\n👉  नाम की पुष्टि करने के लिए 1 टाइप करें और भेजें.\n\n👉  नाम बदलने के लिए 2 टाइप करें और भेजें.",
-      pa_IN:
-        "ਨਾਮ ਦੀ ਪੁਸ਼ਟੀ ਕਰੋ: {{name}}?\n\n👉  ਨਾਮ ਦੀ ਪੁਸ਼ਟੀ ਕਰਨ ਲਈ 1 ਟਾਈਪ ਕਰੋ ਅਤੇ ਭੇਜੋ.\n\n👉 ਟਾਈਪ ਕਰੋ ਅਤੇ ਨਾਮ ਬਦਲਣ ਲਈ 2 ਭੇਜੋ.",
+      pt_PT:
+        "Confirmar o nome: {{name}}?\n\n👉  Escreva e envie *1* para confirmar o nome.\n\n👉  Escreva e envie *2* para alterar o nome.",
     },
     onboardingThankYou: {
+      code: 'chatbot.pgr.onboarding.thankYou',
       en_IN:
         "Thanks for providing the confirmation 👍\nWe are happy to serve you 😊",
-      hi_IN:
-        "पुष्टि प्रदान करने के लिए धन्यवाद 👍\nहम आपकी सेवा करके खुश हैं 😊",
-      pa_IN:
-        "ਪੁਸ਼ਟੀ ਪ੍ਰਦਾਨ ਕਰਨ ਲਈ ਧੰਨਵਾਦ 👍\nਅਸੀਂ ਤੁਹਾਡੀ ਸੇਵਾ ਕਰ ਕੇ ਖੁਸ਼ ਹਾਂ 😊",
+      pt_PT:
+        "Obrigado pela confirmação 👍\nÉ um prazer servi-lo(a) 😊",
     },
     nameInformation: {
+      code: 'chatbot.pgr.onboarding.nameInformation',
       en_IN:
         "For a personalized experience, we would like to confirm your name.",
-      hi_IN: "एक व्यक्तिगत अनुभव के लिए, हम आपके नाम की पुष्टि करना चाहेंगे।",
-      pa_IN: "ਇੱਕ ਨਿੱਜੀ ਤਜਰਬੇ ਲਈ, ਅਸੀਂ ਤੁਹਾਡੇ ਨਾਮ ਦੀ ਪੁਸ਼ਟੀ ਕਰਨਾ ਚਾਹੁੰਦੇ ਹਾਂ.",
+      pt_PT:
+        "Para um atendimento personalizado, gostaríamos de confirmar o seu nome.",
     },
   },
   welcome: {
+    code: 'chatbot.pgr.welcome',
     en_IN:
       "Dear {{name}},\n\nWelcome to eGov WhatsApp chatbot 🙏.\n\nYou can now file your complaint via WhatsApp.\n",
-    hi_IN:
-      "नमस्ते {{name}},\n\neGov पंजाब में आपका स्वागत है 🙏।\n\nअब आप WhatsApp द्वारा शिकायत दर्ज कर सकते हैं।",
-  },
-  endstate: {
-    en_IN: "Goodbye. Say hi to start another conversation",
-    hi_IN: "अलविदा। एक और बातचीत शुरू करने के लिए नमस्ते कहें",
-    pa_IN: "ਅਲਵਿਦਾ। ਇੱਕ ਹੋਰ ਗੱਲਬਾਤ ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਹੈਲੋ ਕਹੋ",
+    pt_PT:
+      "Estimado(a) {{name}},\n\nBem-vindo(a) ao chatbot eGov no WhatsApp 🙏.\n\nJá pode apresentar a sua reclamação através do WhatsApp.\n",
   },
 };
 

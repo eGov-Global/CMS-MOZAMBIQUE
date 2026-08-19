@@ -3726,6 +3726,7 @@
       until: cfg_i18n_auth.status == 200
       no_log: true
       when: state_root != 'pg'
+      tags: ['configurator-i18n', 'chatbot', 'chatbot-i18n']
 
     - name: "configurator-i18n — upsert configurator-ui bundle (per locale)"
       ansible.builtin.uri:
@@ -3749,6 +3750,40 @@
       vars:
         configurator_i18n_bundle: "{{ lookup('file', playbook_dir ~ '/files/configurator-localization/configurator-ui.json') | from_json }}"
       loop: "{{ configurator_i18n_bundle | map(attribute='locale') | unique | list }}"
+      when: state_root != 'pg'
+
+    # ────────────────────────────────────────────────────────────────
+    # chatbot-i18n. The WhatsApp chatbot resolves prompts by code against the
+    # localisation service, falling back to in-code text. Its packs live with the
+    # other seeds in default-data-handler, which is not deployed here, so upsert
+    # them directly. Seed the STATE ROOT: localisation returns rows from the first
+    # tenant in the chain that matches and never merges, so keys held at the root
+    # reach the city tenant only while the city has none of its own.
+    # One locale per call — mixed-locale batches are dropped silently.
+    # ────────────────────────────────────────────────────────────────
+    - name: "chatbot-i18n — upsert chatbot bundle (per locale)"
+      ansible.builtin.uri:
+        url: "{{ 'https://' + domain if (tls_enabled | default(true)) else 'http://127.0.0.1' }}/localization/messages/v1/_upsert"
+        method: POST
+        headers: "{{ {'Content-Type': 'application/json'} | combine({'Host': domain} if not (tls_enabled | default(true)) else {}) }}"
+        body_format: json
+        body:
+          RequestInfo:
+            apiId: emp
+            ver: ".01"
+            action: create
+            authToken: "{{ cfg_i18n_auth.json.access_token }}"
+            userInfo: "{{ cfg_i18n_auth.json.UserRequest }}"
+          tenantId: "{{ state_root }}"
+          locale: "{{ item }}"
+          messages: "{{ lookup('file', playbook_dir ~ '/../../utilities/default-data-handler/src/main/resources/localisations/' ~ item ~ '/rainmaker-pgr-chatbot.json') | from_json }}"
+        status_code: [200, 201]
+        timeout: 60
+        validate_certs: "{{ tls_enabled | default(true) }}"
+      loop:
+        - en_IN
+        - pt_PT
+      tags: ['chatbot', 'chatbot-i18n']
       when: state_root != 'pg'
 
     # ────────────────────────────────────────────────────────────────

@@ -12,13 +12,23 @@ class LocalisationService {
             ? declared
             : config.supportedLocales.split(',').map((l) => ({ value: l.trim(), label: l.trim() }));
 
+        // Localisation never merges tenants: a search returns rows from the first tenant
+        // in the chain that matches, then stops. Fetch each tenant separately and merge,
+        // city last so it overrides the state root.
+        const stateTenantId = String(config.rootTenantId).split('.')[0];
+        const tenants = stateTenantId === config.rootTenantId
+            ? [config.rootTenantId]
+            : [stateTenantId, config.rootTenantId];
+
         const covered = [];
         for (const { value, label } of candidates) {
-            const messages = await this.fetchMessagesForLocale(value, config.rootTenantId).catch(() => []);
-            if (!messages || messages.length === 0) continue;
-
             const codeToMessages = {};
-            messages.forEach((record) => { codeToMessages[record.code] = record.message; });
+            for (const tenantId of tenants) {
+                const messages = await this.fetchMessagesForLocale(value, tenantId).catch(() => []);
+                (messages || []).forEach((record) => { codeToMessages[record.code] = record.message; });
+            }
+            if (Object.keys(codeToMessages).length === 0) continue;
+
             this.messages[value] = codeToMessages;
             this.localeLabels[value] = label;
             covered.push(value);

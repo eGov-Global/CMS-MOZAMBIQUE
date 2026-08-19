@@ -1,3 +1,5 @@
+const localisationService = require('./localisation-service');
+
 const INTENTION_UNKOWN = 'INTENTION_UKNOWN';
 const INTENTION_MORE = 'more';
 const INTENTION_GOBACK = 'goback';
@@ -13,6 +15,16 @@ function get_input(event, scrub = true) {
   return scrub ? input.trim().toLowerCase() : input;
 }
 function get_message(bundle, locale = 'en_IN') {
+  if (bundle.code) {
+    let localised;
+    try {
+      localised = localisationService.getMessageBundleForCode?.(bundle.code);
+    } catch (error) {
+      localised = undefined;
+    }
+    const text = localised && localised[locale];
+    if (text && String(text).trim()) return text;
+  }
   return (bundle[locale] === undefined)? bundle['en_IN'] : bundle[locale];
 }
 function get_intention(g, event, strict = false) {
@@ -91,31 +103,25 @@ function sendMessage(context, message, immediate = true) {
 let global_messages = {
   error: {
     retry: {
+      code: 'chatbot.pgr.error.retry',
       en_IN: 'Selected option seems to be invalid 😐\n\nPlease select the valid option to proceed further.',
-      hi_IN: 'चयनित विकल्प अमान्य प्रतीत होता है 😐\n\n कृपया आगे बढ़ने के लिए वैध विकल्प का चयन करें।'
-    },
-    proceeding: {
-      en_IN: 'I am sorry, I didn\'t understand. But proceeding nonetheless',
-      hi_IN: 'मुझे क्षमा करें, मुझे समझ नहीं आया। फिर भी आगे बढ़ें।'
+      pt_PT: 'A opção indicada não parece ser válida 😐\n\nEscolha uma opção válida para continuar.'
     }
   },
-  image_error: {
-    retry: {
-      en_IN: 'Sent Image Does Not Contain Location 😐\n\nPlease attach the valid Image to proceed further.',
-      hi_IN: 'भेजी गई छवि में स्थान की जानकारी नहीं है 😐\n\n कृपया आगे बढ़ने के लिए एक मान्य छवि संलग्न करें।'
-    },
-  },
   system_error: {
+    code: 'chatbot.pgr.error.system',
     en_IN: 'I am sorry, our system has a problem and I cannot fulfill your request right now. Could you try again in a few minutes please?',
-    hi_IN: 'हमारे सिस्टम में एक समस्या है। मैं अभी तुम्हारी मदद नहीं कर सकता, क्या आप कुछ मिनटों में फिर से कोशिश कर सकते हैं?'
+    pt_PT: 'Lamentamos, o nosso sistema tem um problema e não é possível concluir o seu pedido agora. Pode tentar novamente dentro de alguns minutos?'
   },
   [INTENTION_MORE]: {
-    en_IN : "See more ...",
-    hi_IN : "और देखें ..."
+    code: 'chatbot.pgr.option.more',
+    en_IN: 'See more ...',
+    pt_PT: 'Ver mais ...'
   },
   [INTENTION_GOBACK]: {
-    en_IN : 'Go Back',
-    hi_IN : 'पीछे जाना'
+    code: 'BACK',
+    en_IN: 'Go Back',
+    pt_PT: 'Voltar'
   },
 }
 

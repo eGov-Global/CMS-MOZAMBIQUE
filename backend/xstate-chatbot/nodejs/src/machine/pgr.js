@@ -967,28 +967,19 @@ const pgr =  {
           initial: 'question',
           states: {
             question: {
-              invoke: {
-                src: (context) => localisationService.fetchMessagesForCodes(
-                  ['PGR_CONSENT_DATA_PROCESSING_LABEL', 'PGR_CONSENT_TRUTHFULNESS_LABEL'],
-                  context.extraInfo.tenantId
-                ),
-                id: 'fetchConsentStatements',
-                onDone: {
-                  actions: assign((context, event) => {
-                    let statements = Object.values(event.data)
-                      .map((bundle) => dialog.get_message(bundle, context.user.locale))
-                      .filter(Boolean)
-                      .map((statement) => `• ${statement}`)
-                      .join('\n');
-                    let message = dialog.get_message(messages.fileComplaint.consent.question, context.user.locale)
-                      .replace('{{statements}}', statements);
-                    dialog.sendMessage(context, message);
-                  })
-                },
-                onError: {
-                  target: '#system_error'
-                }
-              },
+              onEntry: assign((context) => {
+                let statements = [
+                  messages.fileComplaint.consent.dataProcessing,
+                  messages.fileComplaint.consent.truthfulness
+                ]
+                  .map((bundle) => dialog.get_message(bundle, context.user.locale))
+                  .filter(Boolean)
+                  .map((statement) => `• ${statement}`)
+                  .join('\n');
+                let message = dialog.get_message(messages.fileComplaint.consent.question, context.user.locale)
+                  .replace('{{statements}}', statements);
+                dialog.sendMessage(context, message);
+              }),
               on: {
                 USER_MESSAGE: 'process'
               }
@@ -1027,26 +1018,14 @@ const pgr =  {
           initial: 'question',
           states: {
             question: {
-              invoke: {
-                src: (context) => localisationService.fetchMessagesForCodes(
-                  ['PGR_EXT_IS_CONFIDENTIAL_LABEL', 'PGR_EXT_IS_CONFIDENTIAL_HINT'],
-                  context.extraInfo.tenantId
-                ),
-                id: 'fetchConfidentialityTexts',
-                onDone: {
-                  actions: assign((context, event) => {
-                    let label = dialog.get_message(event.data['PGR_EXT_IS_CONFIDENTIAL_LABEL'], context.user.locale);
-                    let hint = dialog.get_message(event.data['PGR_EXT_IS_CONFIDENTIAL_HINT'], context.user.locale);
-                    let message = dialog.get_message(messages.fileComplaint.confidentiality.question, context.user.locale)
-                      .replace('{{label}}', label || '')
-                      .replace('{{hint}}', hint || '');
-                    dialog.sendMessage(context, message);
-                  })
-                },
-                onError: {
-                  target: '#system_error'
-                }
-              },
+              onEntry: assign((context) => {
+                let label = dialog.get_message(messages.fileComplaint.confidentiality.label, context.user.locale);
+                let hint = dialog.get_message(messages.fileComplaint.confidentiality.hint, context.user.locale);
+                let message = dialog.get_message(messages.fileComplaint.confidentiality.question, context.user.locale)
+                  .replace('{{label}}', label)
+                  .replace('{{hint}}', hint);
+                dialog.sendMessage(context, message);
+              }),
               on: {
                 USER_MESSAGE: 'process'
               }
@@ -1173,8 +1152,9 @@ const pgr =  {
 let messages = {
   menu: {
     question: {
+      code: 'chatbot.pgr.menu.question',
       en_IN: 'Please type and send the number for your option 👇\n\n*1.* File a new complaint\n*2.* Track existing complaints\n\n👉 To go back to the main menu, type and send *egov*.',
-      hi_IN: 'कृपया अपने विकल्प के लिए नंबर टाइप करें और भेजें 👇\n\n*1.* नई शिकायत दर्ज करें\n*2.* पुरानी शिकायतों की स्थिति देखें\n\n👉 मुख्य मेनू पर वापस जाने के लिए, टाइप करें और भेजें *egov*।'
+      pt_PT: 'Escreva e envie o número da sua opção 👇\n\n*1.* Apresentar uma nova reclamação\n*2.* Consultar reclamações existentes\n\n👉 Para voltar ao menu principal, escreva e envie *egov*.'
     }
   },
   fileComplaint: {
@@ -1182,8 +1162,9 @@ let messages = {
       level: {
         question: {
           preamble: {
+            code: 'chatbot.pgr.hierarchy.preamble',
             en_IN : 'Please type and send the number to select a {{level}} from the list below 👇\n',
-            hi_IN : 'नीचे दी गई सूची से {{level}} चुनने के लिए विकल्प संख्या टाइप करें और भेजें 👇'
+            pt_PT : '*{{level}}*\nEscreva e envie o número da opção desejada 👇\n'
           }
         }
       },
@@ -1191,8 +1172,9 @@ let messages = {
     boundary: {
       question: {
         preamble: {
+          code: 'chatbot.pgr.boundary.preamble',
           en_IN: 'Please type and send the number to select the {{level}} for your grievance 👇\n',
-          hi_IN: 'कृपया अपनी शिकायत के लिए {{level}} का विकल्प संख्या टाइप करें और भेजें 👇\n'
+          pt_PT: '*{{level}}*\nEscreva e envie o número correspondente ao local da sua reclamação 👇\n'
         }
       }
     },
@@ -1231,57 +1213,79 @@ let messages = {
       }
     }, // locality
     consent: {
+      dataProcessing: {
+        code: 'PGR_CONSENT_DATA_PROCESSING_LABEL',
+        en_IN: 'I consent to my data being processed to handle this complaint.',
+        pt_PT: 'Autorizo o tratamento dos meus dados pessoais para a tramitação desta manifestação.'
+      },
+      truthfulness: {
+        code: 'PGR_CONSENT_TRUTHFULNESS_LABEL',
+        en_IN: 'I declare that the information provided is true and accurate.',
+        pt_PT: 'Declaro que as informações prestadas são verdadeiras e exactas.'
+      },
       question: {
-        en_IN: 'Before your grievance is filed, please confirm the following:\n\n{{statements}}\n\n👉 Type and send *1* to accept.\n👉 Type and send *2* to decline.'
+        code: 'chatbot.pgr.consent.question',
+        en_IN: 'Before your grievance is filed, please confirm the following:\n\n{{statements}}\n\n👉 Type and send *1* to accept.\n👉 Type and send *2* to decline.',
+        pt_PT: 'Antes de registarmos a sua reclamação, confirme o seguinte:\n\n{{statements}}\n\n👉 Escreva e envie *1* para aceitar.\n👉 Escreva e envie *2* para não aceitar.'
       },
       declined: {
-        en_IN: 'Your grievance has not been filed, as consent is required to process it.\n\nType *Hi* whenever you would like to start again.'
+        code: 'chatbot.pgr.consent.declined',
+        en_IN: 'Your grievance has not been filed, as consent is required to process it.\n\nType *egov* whenever you would like to start again.',
+        pt_PT: 'A sua reclamação não foi registada, pois o consentimento é necessário para o seu tratamento.\n\nEscreva *egov* quando quiser começar de novo.'
       }
     },
     confidentiality: {
+      label: {
+        code: 'PGR_EXT_IS_CONFIDENTIAL_LABEL',
+        en_IN: 'Keep details confidential.',
+        pt_PT: 'Mantenha os detalhes confidenciais.'
+      },
+      hint: {
+        code: 'PGR_EXT_IS_CONFIDENTIAL_HINT',
+        en_IN: 'Visibility is enforced once secure handling is enabled; for now this flags the complaint for staff awareness.',
+        pt_PT: 'A visibilidade é garantida assim que o processamento seguro é ativado; por enquanto, isso sinaliza a reclamação para que a equipe esteja ciente.'
+      },
       question: {
-        en_IN: '{{label}}\n\n{{hint}}\n\n👉 Type and send *1* to keep your details confidential.\n👉 Type and send *2* to continue without confidentiality.'
+        code: 'chatbot.pgr.confidentiality.question',
+        en_IN: '{{label}}\n\n{{hint}}\n\n👉 Type and send *1* to keep your details confidential.\n👉 Type and send *2* to continue without confidentiality.',
+        pt_PT: '{{label}}\n\n{{hint}}\n\n👉 Escreva e envie *1* para manter os seus dados confidenciais.\n👉 Escreva e envie *2* para continuar sem confidencialidade.'
       }
     },
     institution: {
       question: {
+        code: 'chatbot.pgr.institution.question',
         en_IN: 'Which institution is your grievance about?\n\nPlease type and send its name.',
-        hi_IN: 'आपकी शिकायत किस संस्था के बारे में है?\n\nकृपया उसका नाम टाइप करें और भेजें।'
+        pt_PT: 'A que instituição se refere a sua reclamação?\n\nEscreva e envie o nome da instituição.'
       },
       tooLong: {
+        code: 'chatbot.pgr.institution.tooLong',
         en_IN: 'That name is too long. Please send the institution name using at most {{maxLength}} characters.',
-        hi_IN: 'यह नाम बहुत लंबा है। कृपया संस्था का नाम अधिकतम {{maxLength}} अक्षरों में भेजें।'
+        pt_PT: 'Esse nome é demasiado longo. Envie o nome da instituição com um máximo de {{maxLength}} caracteres.'
       }
     },
     description: {
       question: {
+        code: 'chatbot.pgr.description.question',
         en_IN: 'Please describe your grievance in one message, using at least {{minLength}} characters.',
-        hi_IN: 'कृपया अपनी शिकायत एक संदेश में लिखें, कम से कम {{minLength}} अक्षरों का प्रयोग करें।'
+        pt_PT: 'Descreva a sua reclamação numa única mensagem, com pelo menos {{minLength}} caracteres.'
       },
       tooShort: {
+        code: 'chatbot.pgr.description.tooShort',
         en_IN: 'That description is too short. Please describe your grievance in at least {{minLength}} characters, in a single message.',
-        hi_IN: 'यह विवरण बहुत छोटा है। कृपया एक ही संदेश में कम से कम {{minLength}} अक्षरों में अपनी शिकायत लिखें।'
+        pt_PT: 'Essa descrição é demasiado curta. Descreva a sua reclamação com pelo menos {{minLength}} caracteres, numa única mensagem.'
       }
     },
     imageUpload: {
       question: {
+        code: 'chatbot.pgr.attachment.question',
         en_IN: 'If possible, attach a photo or document of your grievance.\n\nTo continue without attaching, type and send *1*',
-        hi_IN: 'यदि संभव हो तो अपनी शिकायत का फोटो संलग्न करें।\n\nफोटो के बिना जारी रखने के लिए, टाइप करें और 1 भेजें',
-        pa_IN: ' ਨਾਮ ਦੀ ਪੁਸ਼ਟੀ ਕਰਨ ਲਈ 1 ਟਾਈਪ ਕਰੋ ਅਤੇ ਭੇਜੋ'
-      },
-      error:{
-        en_IN : 'Sorry, I didn\'t understand',
-        hi_IN: 'क्षमा करें, मुझे समझ नहीं आया ।',
+        pt_PT: 'Se possível, anexe uma fotografia ou um documento relativo à sua reclamação.\n\n👉 Para continuar sem anexar, escreva e envie *1*.'
       }
     },
     persistComplaint: {
-      en_IN: 'Reclamação registada com sucesso.\n\nCategoria: {{1}}\nReferência: {{2}}\nData: {{3}}\n\nA sua reclamação será analisada pela instituição responsável.\nPode acompanhar o estado no *Portal Fala Cidadão* ou na aplicação móvel.\nObrigado por contribuir para a melhoria dos serviços públicos.\n\nFala Cidadão\nhttps://www.falacidadao.co.mz',
+      code: 'chatbot.pgr.confirmation',
+      en_IN: 'Your complaint has been registered successfully.\n\nCategory: {{1}}\nReference: {{2}}\nDate: {{3}}\n\nYour complaint will be reviewed by the responsible institution.\nYou can follow its progress on the *Fala Cidadão Portal* or in the mobile app.\nThank you for helping improve public services.\n\nFala Cidadão\nhttps://www.falacidadao.co.mz',
       pt_PT: 'Reclamação registada com sucesso.\n\nCategoria: {{1}}\nReferência: {{2}}\nData: {{3}}\n\nA sua reclamação será analisada pela instituição responsável.\nPode acompanhar o estado no *Portal Fala Cidadão* ou na aplicação móvel.\nObrigado por contribuir para a melhoria dos serviços públicos.\n\nFala Cidadão\nhttps://www.falacidadao.co.mz'
-    },
-    closingStatement: {
-      en_IN: '\nIn case of any help please type and send "egov"',
-      hi_IN: '\nकिसी भी मदद के मामले में कृपया "egov" टाइप करें और भेजें',
-      pa_IN: '\nਕਿਸੇ ਵੀ ਮਦਦ ਦੀ ਸਥਿਤੀ ਵਿੱਚ, ਕਿਰਪਾ ਕਰਕੇ ਟਾਈਪ ਕਰੋ ਅਤੇ ਭੇਜੋ'
     },
     cityFuzzySearch: {
       question: {
