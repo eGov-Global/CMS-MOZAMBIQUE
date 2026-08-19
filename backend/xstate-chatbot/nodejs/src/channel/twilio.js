@@ -279,9 +279,20 @@ class TwilioWhatsAppProvider {
         return reformattedMessage;
     }
 
+    // Twilio wants E.164. `to` may arrive national (849904390) or already
+    // prefixed (258849904390), so strip the country code before re-adding it.
+    toWhatsAppNumber(to) {
+        const digits = String(to).replace(/\D/g, '');
+        const countryCode = String(config.countryCode).replace(/\D/g, '');
+        const national = countryCode && digits.startsWith(countryCode)
+            ? digits.slice(countryCode.length)
+            : digits;
+        return `whatsapp:+${countryCode}${national}`;
+    }
+
     async sendTextMessage(to, body) {
         const params = new URLSearchParams();
-        params.append('To', `whatsapp:+91${to}`);
+        params.append('To', this.toWhatsAppNumber(to));
         params.append('From', `whatsapp:${this.whatsappNumber.startsWith('+') ? this.whatsappNumber : '+' + this.whatsappNumber}`);
         params.append('Body', body);
 
@@ -290,7 +301,7 @@ class TwilioWhatsAppProvider {
 
     async sendMediaMessage(to, mediaUrl, caption = '') {
         const params = new URLSearchParams();
-        params.append('To', `whatsapp:+91${to}`);
+        params.append('To', this.toWhatsAppNumber(to));
         params.append('From', `whatsapp:${this.whatsappNumber.startsWith('+') ? this.whatsappNumber : '+' + this.whatsappNumber}`);
         params.append('MediaUrl', mediaUrl);
         if (caption) {
@@ -302,7 +313,7 @@ class TwilioWhatsAppProvider {
 
     async sendTemplateMessage(to, contentSid, contentVariables = {}) {
         const params = new URLSearchParams();
-        params.append('To', `whatsapp:+91${to}`);
+        params.append('To', this.toWhatsAppNumber(to));
         params.append('From', `whatsapp:${this.whatsappNumber.startsWith('+') ? this.whatsappNumber : '+' + this.whatsappNumber}`);
         params.append('ContentSid', contentSid);
         if (Object.keys(contentVariables).length > 0) {
