@@ -133,6 +133,16 @@
                 "CMS_VIEWER"
               ],
               "active": true
+            },
+            {
+              "tenantId": "{tenantid}",
+              "currentState": "REFERRED",
+              "action": "ESCALATE",
+              "nextState": "REFERRED",
+              "roles": [
+                "CMS_SUPERVISOR"
+              ],
+              "active": true
             }
           ]
         },
@@ -176,6 +186,16 @@
               "roles": [
                 "CMS_CASE_MANAGER",
                 "CMS_VIEWER"
+              ],
+              "active": true
+            },
+            {
+              "tenantId": "{tenantid}",
+              "currentState": "INVESTIGATION",
+              "action": "ESCALATE",
+              "nextState": "INVESTIGATION",
+              "roles": [
+                "SYSTEM"
               ],
               "active": true
             }

@@ -7492,5 +7492,8 @@
         "message": "Complainant Details",
         "module": "rainmaker-pgr",
         "locale": "default"
-    }
+    },
+    {"code": "ESCALATE", "message": "Escalate", "module": "rainmaker-pgr", "locale": "default"},
+    {"code": "CS_ACTION_ESCALATE", "message": "Escalate Complaint", "module": "rainmaker-pgr", "locale": "default"},
+    {"code": "WF_PGR_ESCALATE", "message": "Escalated", "module": "rainmaker-pgr", "locale": "default"}
 ]

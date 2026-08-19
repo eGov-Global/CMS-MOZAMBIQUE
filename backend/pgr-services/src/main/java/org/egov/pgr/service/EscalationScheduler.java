@@ -71,8 +71,26 @@ public class EscalationScheduler {
         List<Long> defaultSlaByLevel = getDefaultSlaByLevel(escalationConfig);
         Map<String, List<Long>> overrides = getOverrides(escalationConfig);
 
-        // Search for complaints in PENDINGATLME and PENDINGFORASSIGNMENT
-        Set<String> statuses = new HashSet<>(Arrays.asList(PENDINGATLME, PENDINGFORASSIGNMENT));
+        // Search for complaints in the configured applicationStatus values
+        // (pgr.escalation.states) — deployments customize this to match
+        // whichever states in their BusinessService workflow carry a named
+        // assignee and have an ESCALATE action wired on them. The Mozambique
+        // CMS workflow uses INVESTIGATION; the urban PGR default is retained
+        // so existing deployments are unaffected.
+        Set<String> statuses = Arrays.stream(config.getEscalationStates().split(","))
+                .map(String::trim)
+                .filter(str -> !str.isEmpty())
+                .collect(Collectors.toSet());
+
+        // An explicitly empty value is a misconfiguration, not "escalate nothing":
+        // @Value's default only applies when the property is ABSENT, so
+        // PGR_ESCALATION_STATES="" would otherwise disable the feature while the
+        // scan still reported a healthy-looking scanned=0.
+        if (statuses.isEmpty()) {
+            log.warn("pgr.escalation.states is empty — escalation scan will do nothing");
+            return;
+        }
+        log.info("Escalation scan states: {}", statuses);
 
         // Get all tenants — for now, use the state-level tenant from config
         // In a multi-tenant setup, this would iterate over all tenants
@@ -85,13 +103,26 @@ public class EscalationScheduler {
         int scanned = 0;
         int escalated = 0;
         int skipped = 0;
+        int failed = 0;
 
         for (String status : statuses) {
+            List<ServiceWrapper> complaints;
             try {
-                List<ServiceWrapper> complaints = searchComplaintsByStatus(stateLevelTenantId, status);
+                complaints = searchComplaintsByStatus(stateLevelTenantId, status);
+            } catch (Exception e) {
+                log.error("Search failed for status {} on tenant {} — status skipped entirely",
+                        status, stateLevelTenantId, e);
+                continue;
+            }
 
-                for (ServiceWrapper wrapper : complaints) {
-                    scanned++;
+            // One bad complaint must not abandon the rest of the batch. A single
+            // unresolvable user reference (e.g. a deactivated employee, which
+            // egov-user excludes from search) used to propagate out of the whole
+            // per-status block and silently leave the remaining complaints
+            // unevaluated, while the summary still printed a plausible count.
+            for (ServiceWrapper wrapper : complaints) {
+                scanned++;
+                try {
                     Service complaint = wrapper.getService();
 
                     // Determine SLA for this complaint's serviceCode + escalation level
@@ -142,13 +173,17 @@ public class EscalationScheduler {
                     } else {
                         skipped++;
                     }
+                } catch (Exception e) {
+                    failed++;
+                    log.error("Escalation failed for complaint {} in status {}",
+                            wrapper.getService() != null ? wrapper.getService().getServiceRequestId() : null,
+                            status, e);
                 }
-            } catch (Exception e) {
-                log.error("Error scanning complaints in status {} for tenant {}", status, stateLevelTenantId, e);
             }
         }
 
-        log.info("Escalation scan complete: scanned={}, escalated={}, skipped={}", scanned, escalated, skipped);
+        log.info("Escalation scan complete: scanned={}, escalated={}, skipped={}, failed={}",
+                scanned, escalated, skipped, failed);
     }
 
     /**
