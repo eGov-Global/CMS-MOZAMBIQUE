@@ -37,5 +37,5 @@ Status values: **Yes** — complete · **Partially** — complete with a documen
 | 29 | Repository clean before tagging | Yes | — | Hariprasad | Pradeep | Verified before the release commit |
 | 30 | Tag points to the release commit | Yes | [Release](https://github.com/eGov-Global/CMS-MOZAMBIQUE/releases/tag/cms-mozambique-v1.0.0) | Hariprasad | Pradeep | Verified |
 | 31 | Release published | Yes | [Release](https://github.com/eGov-Global/CMS-MOZAMBIQUE/releases/tag/cms-mozambique-v1.0.0) | Hariprasad | Pradeep | GitHub release published against the tag |
-| 32 | Release documentation merged to the main branch | Partially | [PR #6](https://github.com/eGov-Global/CMS-MOZAMBIQUE/pull/6) | Hariprasad | Pradeep | Awaiting code-owner review; the tag already carries the documentation |
+| 32 | Release documentation merged to the main branch | Partially | [PR #6](https://github.com/eGov-Global/CMS-MOZAMBIQUE/pull/6) | Hariprasad | Pradeep | Awaiting code-owner review on PR 6. The tag carries the release documents but not this checklist, which was added after tagging |
 | 33 | Upgrade path from the previous release | Not applicable | [Release Notes](RELEASE-NOTES-cms-mozambique-v1.0.0.md) | Hariprasad | Pradeep | First Mozambique release; no predecessor |
