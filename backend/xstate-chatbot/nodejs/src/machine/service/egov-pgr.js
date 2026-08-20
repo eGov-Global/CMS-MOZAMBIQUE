@@ -938,7 +938,7 @@ class PGRService {
     };
 
     // Use tenant from extraInfo in sandbox mode, otherwise use root tenant
-    let tenantId = (config.enableSandboxMode && extraInfo && extraInfo.tenantId)
+    let tenantId = (config.isSandboxMode && extraInfo && extraInfo.tenantId)
       ? extraInfo.tenantId
       : config.rootTenantId;
 
@@ -996,10 +996,10 @@ class PGRService {
     let encodedPath = urlencode(serviceRequestId, "utf8");
 
     // Use sandbox-ui for sandbox mode, digit-ui otherwise
-    const uiPath = config.enableSandboxMode ? 'sandbox-ui' : 'digit-ui';
+    const uiPath = config.isSandboxMode ? 'sandbox-ui' : 'digit-ui';
 
     let url;
-    if (config.enableSandboxMode) {
+    if (config.isSandboxMode) {
       // For sandbox mode, use the proper login page with redirect
       const sandboxHost = config.sandboxHost || 'https://sandbox.digit.org';
       url = `${sandboxHost}/sandbox-ui/user/login?redirectTo=/sandbox-ui/citizen/pgr/complaints/${encodedPath}`;

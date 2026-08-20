@@ -6,6 +6,9 @@ const config = require("../env-variables");
 const dialog = require("./util/dialog.js");
 
 const localisationService = require("./util/localisation-service");
+const legacyOrganizationStates = require("./flow/legacy-organization");
+const { buildSteps } = require("./flow/steps-seva");
+const { generate, mergeStates, assertTargets } = require("./flow/generate");
 
 const localeOptions = () => {
   const renderable = Object.keys(messages.onboarding.onboardingWelcome).filter((k) => k !== 'code');
@@ -28,7 +31,7 @@ const localeGrammer = () =>
     ]
   }));
 
-const sevaMachine = Machine({
+const sevaConfig = {
   id: "mseva",
   initial: "start",
   on: {
@@ -94,434 +97,6 @@ const sevaMachine = Machine({
               always: "#onboardingWelcome"
             },
           },
-        },
-        organizationCode: {
-          id: "organizationCode",
-          initial: "question",
-          states: {
-            question: {
-              onEntry: assign((context, event) => {
-                let message = dialog.get_message(
-                  messages.onboarding.email.question,
-                  context.user.locale
-                );
-                dialog.sendMessage(context, message);
-              }),
-              on: {
-                USER_MESSAGE: "process"
-              }
-            },
-            process: {
-              invoke: {
-                id: 'validateEmail',
-                src: (context, event) => {
-                  const email = event.message.input.trim().toLowerCase();
-                  context.onboarding.email = email;
-                  return emailTenantService.findTenantByEmail(email);
-                },
-                onDone: [
-                  {
-                    target: 'selectOrganization',
-                    cond: (context, event) => event.data !== null && event.data.multiple === true,
-                    actions: assign((context, event) => {
-                      context.onboarding.availableTenants = event.data.tenants;
-                      context.onboarding.email = context.onboarding.email;
-                    })
-                  },
-                  {
-                    target: 'checkUserRegistration',
-                    cond: (context, event) => event.data !== null && event.data.multiple === false,
-                    actions: assign((context, event) => {
-                      const tenant = event.data.tenants[0];
-                      context.onboarding.organizationCode = tenant.code;
-                      context.onboarding.organizationName = tenant.name;
-                      context.onboarding.organizationEmail = tenant.email;
-                      context.extraInfo.tenantId = tenant.code;
-                    })
-                  },
-                  {
-                    target: 'error'
-                  }
-                ],
-                onError: 'error'
-              }
-            },
-            selectOrganization: {
-              id: "selectOrganization",
-              initial: "question",
-              states: {
-                question: {
-                  onEntry: assign((context, event) => {
-                    let tenantList = context.onboarding.availableTenants
-                      .map((tenant, index) => `${index + 1}. ${tenant.name} (${tenant.code})`)
-                      .join('\n');
-
-                    let message = `Multiple organizations found for email ${context.onboarding.email}:\n\n${tenantList}\n\nPlease enter the number of the organization you want to use:`;
-                    dialog.sendMessage(context, message);
-                  }),
-                  on: {
-                    USER_MESSAGE: 'process'
-                  }
-                },
-                process: {
-                  onEntry: assign((context, event) => {
-                    const input = event.message.input.trim();
-                    const selectedIndex = parseInt(input) - 1;
-
-                    if (selectedIndex >= 0 && selectedIndex < context.onboarding.availableTenants.length) {
-                      const selectedTenant = context.onboarding.availableTenants[selectedIndex];
-                      context.onboarding.organizationCode = selectedTenant.code;
-                      context.onboarding.organizationName = selectedTenant.name;
-                      context.onboarding.organizationEmail = selectedTenant.email;
-                      context.extraInfo.tenantId = selectedTenant.code;
-                      context.onboarding.validSelection = true;
-                    } else {
-                      context.onboarding.validSelection = false;
-                    }
-                  }),
-                  always: [
-                    {
-                      target: '#checkUserRegistration',
-                      cond: (context) => context.onboarding.validSelection === true
-                    },
-                    {
-                      target: 'invalidSelection'
-                    }
-                  ]
-                },
-                invalidSelection: {
-                  onEntry: assign((context, event) => {
-                    let message = `Invalid selection. Please enter a number between 1 and ${context.onboarding.availableTenants.length}.`;
-                    dialog.sendMessage(context, message);
-                  }),
-                  always: 'question'
-                }
-              }
-            },
-            checkUserRegistration: {
-              id: 'checkUserRegistration',
-              invoke: {
-                id: 'checkUserRegistrationService',
-                src: (context, event) => {
-                  // Now we have tenant from email, check if user exists in this tenant
-                  return emailTenantService.authenticateUser(
-                    context.user.mobileNumber,
-                    context.onboarding.organizationCode
-                  );
-                },
-                onDone: [
-                  {
-                    target: 'userFound',
-                    cond: (context, event) => event.data && event.data.exists === true,
-                    actions: assign((context, event) => {
-                      context.onboarding.userExistsInOrg = true;
-                      context.onboarding.userInfo = event.data;
-                    })
-                  },
-                  {
-                    target: 'notRegistered'
-                  }
-                ],
-                onError: 'error'
-              }
-            },
-            userFound: {
-              onEntry: assign((context, event) => {
-                // User exists and is validated - proceed to welcome
-                let message = dialog.get_message(
-                  messages.onboarding.email.userFound || "Email verified successfully!",
-                  context.user.locale
-                );
-                dialog.sendMessage(context, message);
-
-                // Store org tenant for the session - use tenantId which PGR service expects
-                context.extraInfo.tenantId = context.onboarding.organizationCode;
-                context.extraInfo.organizationTenantId = context.onboarding.organizationCode;
-
-                // Store user auth info if available
-                if (context.onboarding.userInfo) {
-                  context.user.authToken = context.onboarding.userInfo.authToken;
-                  context.user.refreshToken = context.onboarding.userInfo.refreshToken;
-                  if (context.onboarding.userInfo.userInfo) {
-                    context.user.userInfo = context.onboarding.userInfo.userInfo;
-                  }
-                }
-              }),
-              always: '#onboardingWelcome'
-            },
-            notRegistered: {
-              onEntry: assign((context, event) => {
-                const registrationUrl = emailTenantService.getSandboxRegistrationUrl(
-                  context.onboarding.organizationEmail
-                );
-                let message = dialog.get_message(
-                  messages.onboarding.email.notRegistered,
-                  context.user.locale
-                ) || `You are not registered with {{organizationName}}. Please register first at:\n{{registrationUrl}}`;
-                message = message.replace('{{registrationUrl}}', registrationUrl);
-                message = message.replace('{{organizationName}}', context.onboarding.organizationName || context.onboarding.organizationCode);
-                dialog.sendMessage(context, message);
-
-                // Store org code for future attempts
-                context.extraInfo.organizationTenantId = context.onboarding.organizationCode;
-              }),
-              always: '#endstate'
-            },
-            error: {
-              onEntry: assign((context, event) => {
-                let message = dialog.get_message(
-                  messages.onboarding.email.invalidEmail,
-                  context.user.locale
-                );
-                dialog.sendMessage(context, message, false);
-              }),
-              always: 'question'
-            }
-          }
-        },
-        onboardingWelcome: {
-          id: "onboardingWelcome",
-          onEntry: assign((context, event) => {
-            let message = dialog.get_message(
-              messages.onboarding.onboardingWelcome,
-              context.user.locale
-            );
-            dialog.sendMessage(context, message);
-          }),
-          always: "#onboardingName",
-        },
-        onboardingName: {
-          id: "onboardingName",
-          initial: "preCondition",
-          states: {
-            preCondition: {
-              always: [
-                {
-                  target: "#onBoardingUserProfileConfirmation",
-                  cond: (context) => context.user.name,
-                },
-                {
-                  target: "question",
-                },
-              ],
-            },
-            question: {
-              onEntry: assign((context, event) => {
-                (async () => {
-                  await new Promise((resolve) => setTimeout(resolve, 3000));
-                  let nameInformationMessage = dialog.get_message(
-                    messages.onboarding.nameInformation,
-                    context.user.locale
-                  );
-                  dialog.sendMessage(context, nameInformationMessage);
-                  await new Promise((resolve) => setTimeout(resolve, 1000));
-                  let message = dialog.get_message(
-                    messages.onboarding.onboardingName.question,
-                    context.user.locale
-                  );
-                  dialog.sendMessage(context, message);
-                })();
-              }),
-              on: {
-                USER_MESSAGE: "process",
-              },
-            },
-            process: {
-              onEntry: assign((context, event) => {
-                if (!dialog.validateInputType(event, "text")) return;
-                context.onboarding.name = dialog.get_input(event, false);
-              }),
-              always: [
-                {
-                  cond: (context) => context.onboarding.name,
-                  target: "#onboardingNameConfirmation",
-                },
-                {
-                  target: "#onboardingUpdateUserProfile",
-                },
-              ],
-            },
-          },
-        },
-        onBoardingUserProfileConfirmation: {
-          id: "onBoardingUserProfileConfirmation",
-          initial: "question",
-          states: {
-            question: {
-              onEntry: assign((context, event) => {
-                (async () => {
-                  await new Promise((resolve) => setTimeout(resolve, 3000));
-                  let nameInformationMessage = dialog.get_message(
-                    messages.onboarding.nameInformation,
-                    context.user.locale
-                  );
-                  dialog.sendMessage(context, nameInformationMessage, false);
-                  await new Promise((resolve) => setTimeout(resolve, 1000));
-                  let message = dialog.get_message(
-                    messages.onboarding.onBoardingUserProfileConfirmation
-                      .question,
-                    context.user.locale
-                  );
-                  message = message.replace("{{name}}", context.user.name);
-                  dialog.sendMessage(context, message);
-                })();
-              }),
-              on: {
-                USER_MESSAGE: "process",
-              },
-            },
-            process: {
-              onEntry: assign((context, event) => {
-                if (dialog.validateInputType(event, "text"))
-                  context.intention = dialog.get_intention(
-                    grammer.confirmation.choice,
-                    event,
-                    true
-                  );
-                else context.intention = dialog.INTENTION_UNKOWN;
-              }),
-              always: [
-                {
-                  target: "#onboardingUpdateUserProfile",
-                  cond: (context) => context.intention == "Yes",
-                },
-                {
-                  target: "#changeName",
-                  cond: (context) => context.intention == "No",
-                },
-              ],
-            },
-          },
-        },
-        changeName: {
-          id: "changeName",
-          initial: "invoke",
-          states: {
-            invoke: {
-              onEntry: assign((context, event) => {
-                let message = dialog.get_message(
-                  messages.onboarding.changeName.question,
-                  context.user.locale
-                );
-                dialog.sendMessage(context, message);
-              }),
-              on: {
-                USER_MESSAGE: "process",
-              },
-            },
-            process: {
-              onEntry: assign((context, event) => {
-                if (!dialog.validateInputType(event, "text")) return;
-                context.onboarding.name = dialog.get_input(event, false);
-              }),
-              always: {
-                target: "#onboardingNameConfirmation",
-                cond: (context) => context.onboarding.name,
-              },
-            },
-          },
-        },
-        onboardingNameConfirmation: {
-          id: "onboardingNameConfirmation",
-          initial: "question",
-          states: {
-            question: {
-              onEntry: assign((context, event) => {
-                (async () => {
-                  await new Promise((resolve) => setTimeout(resolve, 1000));
-                  let message = dialog.get_message(
-                    messages.onboarding.onboardingNameConfirmation,
-                    context.user.locale
-                  );
-                  message = message.replace(
-                    "{{name}}",
-                    context.onboarding.name
-                  );
-                  dialog.sendMessage(context, message);
-                })();
-              }),
-              on: {
-                USER_MESSAGE: "process",
-              },
-            },
-            process: {
-              onEntry: assign((context, event) => {
-                if (dialog.validateInputType(event, "text"))
-                  context.intention = dialog.get_intention(
-                    grammer.confirmation.choice,
-                    event,
-                    true
-                  );
-                else context.intention = dialog.INTENTION_UNKOWN;
-              }),
-              always: [
-                {
-                  target: "#onboardingUpdateUserProfile",
-                  actions: assign((context, event) => {
-                    context.user.name = context.onboarding.name;
-                  }),
-                  cond: (context) => context.intention == "Yes",
-                },
-                {
-                  target: "#changeName",
-                  cond: (context) => context.intention == "No",
-                },
-                {
-                  target: "error",
-                },
-              ],
-            },
-            error: {
-              onEntry: assign((context, event) => {
-                let message = dialog.get_message(
-                  dialog.global_messages.error.retry,
-                  context.user.locale
-                );
-                dialog.sendMessage(context, message, true);
-              }),
-              always: "question",
-            },
-          },
-        },
-        onboardingUpdateUserProfile: {
-          id: "onboardingUpdateUserProfile",
-          invoke: {
-            id: "updateUserProfile",
-            src: (context, event) =>
-              userProfileService.updateUser(
-                context.user,
-                context.onboarding,
-                context.extraInfo.tenantId
-              ),
-            onDone: [
-              {
-                target: "#onboardingThankYou",
-                actions: assign((context, event) => {
-                  context.user.name = context.onboarding.name;
-                  context.user.locale = context.onboarding.locale;
-                  context.onboarding = undefined;
-                }),
-                cond: (context) => context.onboarding.name,
-              },
-              {
-                target: "#onboardingThankYou",
-              },
-            ],
-            onError: {
-              target: "#welcome",
-            },
-          },
-        },
-        onboardingThankYou: {
-          id: "onboardingThankYou",
-          onEntry: assign((context, event) => {
-            let message = dialog.get_message(
-              messages.onboarding.onboardingThankYou,
-              context.user.locale
-            );
-            dialog.sendMessage(context, message, true);
-          }),
-          always: "#pgr",
         },
       },
     },
@@ -593,7 +168,7 @@ const sevaMachine = Machine({
       },
     },
   }, // states
-}); // Machine
+}; // sevaConfig
 
 let messages = {
   onboarding: {
@@ -712,5 +287,18 @@ let grammer = {
     ],
   },
 };
+
+mergeStates(
+  sevaConfig.states.onboarding.states,
+  generate(buildSteps({ messages, userProfileService }))
+);
+Object.assign(
+  sevaConfig.states.onboarding.states,
+  legacyOrganizationStates({ messages, emailTenantService })
+);
+
+assertTargets(sevaConfig.states);
+
+const sevaMachine = Machine(sevaConfig);
 
 module.exports = sevaMachine;
