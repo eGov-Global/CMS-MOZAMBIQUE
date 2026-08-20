@@ -161,13 +161,9 @@ module.exports = {
       key: 'system_error',
       kind: 'say',
       prompt: dialog.global_messages.system_error,
-      next: {
-        to: 'welcome',
-        // event.data is undefined here: xstate resolves `always` transitions
-        // under the null event, so the error.platform payload never arrives.
-        // Faithful to the hand-written version; fixed separately.
-        set: (context, event) => context.chatInterface.system_error(event.data)
-      }
+      // reported from the entry action so the error.platform payload survives
+      effect: (context, event) => context.chatInterface.system_error(event.data),
+      next: 'welcome'
     }
   ]
 };

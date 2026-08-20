@@ -344,6 +344,10 @@ const emitters = {
     id: step.id || step.key,
     onEntry: assign((context, event) => {
       sendPrompts(step, context, event);
+      // `effect` runs here rather than on the transition because xstate resolves
+      // `always` under the null event: a transition action sees event.data as
+      // undefined, an entry action sees the real triggering event.
+      if (step.effect) step.effect(context, event);
     }),
     always: transitions(step.next, null, step.key)
   }),

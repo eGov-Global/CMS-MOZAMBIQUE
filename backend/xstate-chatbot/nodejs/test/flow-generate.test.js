@@ -646,3 +646,60 @@ test("assertTargets validates the machine root's own event handlers", () => {
     assertTargets({ states, on: { USER_RESET: { target: "#welcome" } } })
   );
 });
+
+test("a say step's effect runs at entry, so it sees the triggering event", async () => {
+  const seen = [];
+  const { outputs, service } = run(
+    [
+      {
+        key: "boom",
+        kind: "call",
+        src: async () => { throw new Error("backend down"); },
+        onDone: [{ to: "#endstate" }],
+        onError: "reporter",
+      },
+      {
+        key: "reporter",
+        kind: "say",
+        prompt: PROMPT,
+        effect: (context, event) => seen.push(event.data ? String(event.data) : "<undefined>"),
+        next: "#endstate",
+      },
+    ],
+    "boom"
+  );
+  service.start();
+  await settle();
+  assert.deepEqual(outputs, ["PROMPT"], "the prompt is still sent");
+  assert.deepEqual(seen, ["Error: backend down"], "the error payload reaches the effect");
+});
+
+test("effect runs after the prompt, preserving send-then-report order", async () => {
+  // sends and the effect append to the SAME list, so the order is observable
+  const order = [];
+  const machine = Machine({
+    id: "root",
+    initial: "notice",
+    context: {
+      user: { locale: "en_IN", userId: "u1" },
+      extraInfo: { tenantId: "pg" },
+      slots: { pgr: {} },
+      chatInterface: { toUser: (user, messages) => order.push(...messages.map((m) => `send:${m}`)) },
+    },
+    states: Object.assign(
+      generate([
+        {
+          key: "notice",
+          kind: "say",
+          prompt: { en_IN: "MSG" },
+          effect: () => order.push("effect"),
+          next: "#done",
+        },
+      ]),
+      { done: { id: "done", type: "final" } }
+    ),
+  });
+  interpret(machine).start();
+  await settle();
+  assert.deepEqual(order, ["send:MSG", "effect"], "the message goes out before the report");
+});
