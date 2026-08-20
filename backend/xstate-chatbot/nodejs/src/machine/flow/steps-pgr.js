@@ -1,15 +1,7 @@
 const dialog = require('../util/dialog');
 const moment = require('moment-timezone');
 
-const wrappers = {
-  'fileComplaint.type': { id: 'pgrType' },
-  'fileComplaint.location': { id: 'location' },
-  'fileComplaint.other': { id: 'other' }
-};
-
 module.exports = {
-  wrappers,
-
   buildSteps: ({ messages, pgrService, localisationService, config }) => {
     const consentStatements = (context) =>
       [messages.fileComplaint.consent.dataProcessing, messages.fileComplaint.consent.truthfulness]
@@ -42,9 +34,6 @@ module.exports = {
     return [
       {
         key: 'complaintType2Step',
-        id: 'complaintType2Step',
-        path: ['fileComplaint', 'type'],
-        first: true,
         kind: 'walk',
         pathSlot: 'hierarchyPath',
         stepSlot: 'hierarchyStep',
@@ -53,14 +42,11 @@ module.exports = {
           pgrService.fetchComplaintHierarchyStep(context.extraInfo.tenantId, hierarchyPath),
         preamble: messages.fileComplaint.complaintType2Step.level.question.preamble,
         trail: true,
-        onLeaf: { slot: 'complaint', to: '#other' }
+        onLeaf: { slot: 'complaint', to: 'other' }
       },
 
       {
         key: 'boundary',
-        id: 'boundary',
-        path: ['fileComplaint', 'location'],
-        first: true,
         kind: 'walk',
         pathSlot: 'boundaryPath',
         stepSlot: 'boundaryStep',
@@ -70,14 +56,14 @@ module.exports = {
         preamble: messages.fileComplaint.boundary.question.preamble,
         onLeaf: {
           slot: 'locality',
-          to: '#consent',
+          to: 'consent',
           set: (context) => {
             context.slots.pgr.city = context.extraInfo.tenantId;
           }
         },
         onEmpty: {
           slot: 'locality',
-          to: '#consent',
+          to: 'consent',
           set: (context) => {
             context.slots.pgr.city = context.extraInfo.tenantId;
           }
@@ -90,14 +76,11 @@ module.exports = {
         kind: 'choose',
         options: ['fileComplaint', 'trackComplaint'],
         prompt: messages.menu.question,
-        next: { fileComplaint: '#fileComplaint', trackComplaint: '#trackComplaint' }
+        next: { fileComplaint: 'fileComplaint', trackComplaint: 'trackComplaint' }
       },
 
       {
         key: 'institution',
-        id: 'institution',
-        path: ['fileComplaint', 'other'],
-        first: true,
         kind: 'ask',
         accept: 'text',
         prompt: messages.fileComplaint.institution.question,
@@ -109,13 +92,11 @@ module.exports = {
             : name.length > config.instituteNameMaxLength
               ? messages.fileComplaint.institution.tooLong
               : true,
-        next: '#description'
+        next: 'description'
       },
 
       {
         key: 'description',
-        id: 'description',
-        path: ['fileComplaint', 'other'],
         kind: 'ask',
         accept: 'text',
         prompt: messages.fileComplaint.description.question,
@@ -123,45 +104,37 @@ module.exports = {
         slot: 'description',
         validate: (text) =>
           text.length >= config.descriptionMinLength ? true : messages.fileComplaint.description.tooShort,
-        next: '#imageUpload'
+        next: 'imageUpload'
       },
 
       {
         key: 'imageUpload',
-        id: 'imageUpload',
-        path: ['fileComplaint', 'other'],
         kind: 'ask',
         accept: ['image', 'document'],
         optional: true,
         prompt: messages.fileComplaint.imageUpload.question,
         slot: 'image',
-        next: '#location'
+        next: 'location'
       },
 
       {
         key: 'consent',
-        id: 'consent',
-        path: ['fileComplaint'],
         kind: 'choose',
         options: ['Yes', 'No'],
         prompt: messages.fileComplaint.consent.question,
         fill: { statements: consentStatements },
-        next: { Yes: '#confidentiality', No: '#consentDeclined' }
+        next: { Yes: 'confidentiality', No: 'consentDeclined' }
       },
 
       {
         key: 'consentDeclined',
-        id: 'consentDeclined',
-        path: ['fileComplaint'],
         kind: 'say',
         prompt: messages.fileComplaint.consent.declined,
-        next: '#endstate'
+        next: 'endstate'
       },
 
       {
         key: 'confidentiality',
-        id: 'confidentiality',
-        path: ['fileComplaint'],
         kind: 'choose',
         options: ['Yes', 'No'],
         prompt: messages.fileComplaint.confidentiality.question,
@@ -171,13 +144,11 @@ module.exports = {
         },
         slot: 'isConfidential',
         value: (intention) => intention === 'Yes',
-        next: { Yes: '#persistComplaint', No: '#persistComplaint' }
+        next: { Yes: 'persistComplaint', No: 'persistComplaint' }
       },
 
       {
         key: 'persistComplaint',
-        id: 'persistComplaint',
-        path: ['fileComplaint'],
         kind: 'call',
         invokeId: 'persistComplaint',
         src: (context) => pgrService.persistComplaint(context.user, context.slots.pgr, context.extraInfo),
@@ -189,14 +160,13 @@ module.exports = {
               2: (context, event) => (event.data && event.data.complaintNumber) || '-',
               3: () => moment().tz(config.timeZone).format(config.dateFormat)
             },
-            to: '#endstate'
+            to: 'endstate'
           }
         ]
       },
 
       {
         key: 'trackComplaint',
-        id: 'trackComplaint',
         kind: 'call',
         invokeId: 'fetchOpenComplaints',
         src: (context) => pgrService.fetchOpenComplaints(context.user, context.extraInfo),
@@ -204,9 +174,9 @@ module.exports = {
           {
             when: (context, event) => Array.isArray(event.data) && event.data.length > 0,
             message: complaintList,
-            to: '#endstate'
+            to: 'endstate'
           },
-          { message: messages.trackComplaint.noRecords, to: '#endstate' }
+          { message: messages.trackComplaint.noRecords, to: 'endstate' }
         ]
       }
     ];

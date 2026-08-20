@@ -4,7 +4,30 @@
 const { assign } = require("xstate");
 const dialog = require("../util/dialog.js");
 
-module.exports = ({ messages, emailTenantService }) => ({
+const email = {
+    question: {
+      en_IN: "Please enter your registered email address:",
+      hi_IN: "कृपया अपना पंजीकृत ईमेल पता दर्ज करें:",
+      pa_IN: "ਕਿਰਪਾ ਕਰਕੇ ਆਪਣਾ ਰਜਿਸਟਰਡ ਈਮੇਲ ਪਤਾ ਦਰਜ ਕਰੋ:"
+    },
+    invalidEmail: {
+      en_IN: "❌ Email not found. Please check your email and try again.",
+      hi_IN: "❌ ईमेल नहीं मिला। कृपया अपना ईमेल जांचें और पुनः प्रयास करें।",
+      pa_IN: "❌ ਈਮੇਲ ਨਹੀਂ ਮਿਲਿਆ। ਕਿਰਪਾ ਕਰਕੇ ਆਪਣਾ ਈਮੇਲ ਜਾਂਚੋ ਅਤੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"
+    },
+    userFound: {
+      en_IN: "✅ Welcome back! How can I help you today?",
+      hi_IN: "✅ स्वागत है! मैं आज आपकी कैसे मदद कर सकता हूं?",
+      pa_IN: "✅ ਵਾਪਸੀ ਦਾ ਸਵਾਗਤ! ਮੈਂ ਅੱਜ ਤੁਹਾਡੀ ਕਿਵੇਂ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ?"
+    },
+    notRegistered: {
+      en_IN: "❌ Your number is not registered with *{{organizationName}}*.\n\n👉 Complete your registration:\n{{registrationUrl}}\n\nAfter registration, type *Hi* to continue.",
+      hi_IN: "❌ आपका नंबर *{{organizationName}}* के साथ पंजीकृत नहीं है।\n\n👉 अपना पंजीकरण पूरा करें:\n{{registrationUrl}}\n\nपंजीकरण के बाद, जारी रखने के लिए *Hi* टाइप करें।",
+      pa_IN: "❌ ਤੁਹਾਡਾ ਨੰਬਰ *{{organizationName}}* ਨਾਲ ਰਜਿਸਟਰਡ ਨਹੀਂ ਹੈ।\n\n👉 ਆਪਣੀ ਰਜਿਸਟ੍ਰੇਸ਼ਨ ਪੂਰੀ ਕਰੋ:\n{{registrationUrl}}\n\nਰਜਿਸਟ੍ਰੇਸ਼ਨ ਤੋਂ ਬਾਅਦ, ਜਾਰੀ ਰੱਖਣ ਲਈ *Hi* ਟਾਈਪ ਕਰੋ।"
+    }
+  };
+
+module.exports = ({ emailTenantService }) => ({
   organizationCode: {
     id: "organizationCode",
     initial: "question",
@@ -12,7 +35,7 @@ module.exports = ({ messages, emailTenantService }) => ({
       question: {
         onEntry: assign((context, event) => {
           let message = dialog.get_message(
-            messages.onboarding.email.question,
+            email.question,
             context.user.locale
           );
           dialog.sendMessage(context, message);
@@ -139,7 +162,7 @@ module.exports = ({ messages, emailTenantService }) => ({
         onEntry: assign((context, event) => {
           // User exists and is validated - proceed to welcome
           let message = dialog.get_message(
-            messages.onboarding.email.userFound || "Email verified successfully!",
+            email.userFound || "Email verified successfully!",
             context.user.locale
           );
           dialog.sendMessage(context, message);
@@ -165,7 +188,7 @@ module.exports = ({ messages, emailTenantService }) => ({
             context.onboarding.organizationEmail
           );
           let message = dialog.get_message(
-            messages.onboarding.email.notRegistered,
+            email.notRegistered,
             context.user.locale
           ) || `You are not registered with {{organizationName}}. Please register first at:\n{{registrationUrl}}`;
           message = message.replace('{{registrationUrl}}', registrationUrl);
@@ -180,7 +203,7 @@ module.exports = ({ messages, emailTenantService }) => ({
       error: {
         onEntry: assign((context, event) => {
           let message = dialog.get_message(
-            messages.onboarding.email.invalidEmail,
+            email.invalidEmail,
             context.user.locale
           );
           dialog.sendMessage(context, message, false);

@@ -25,7 +25,7 @@ function emit(context, text, immediate = true, delay = 0) {
 }
 
 function node(step, states) {
-  return { ...(step.id ? { id: step.id } : {}), initial: 'question', states };
+  return { id: step.id || step.key, initial: 'question', states };
 }
 
 function promptList(step) {
@@ -34,8 +34,11 @@ function promptList(step) {
 }
 
 function sendPrompts(step, context, event) {
+  const fill = step.options
+    ? { options: () => renderOptions(optionsOf(step)), ...step.fill }
+    : step.fill;
   for (const item of promptList(step)) {
-    emit(context, render(item.bundle, step.fill, context, event), item.immediate !== false, item.delay || 0);
+    emit(context, render(item.bundle, fill, context, event), item.immediate !== false, item.delay || 0);
   }
 }
 
@@ -63,6 +66,32 @@ function branch(value) {
   return typeof value === 'string' ? { to: value } : value;
 }
 
+// Step data names other steps by key. This maps a key (or a group name, or a
+// name declared outside the generator) to the '#id' xstate needs, and throws on
+// anything it does not recognise — a typo fails at require time, phrased in the
+// author's own vocabulary rather than as an xstate target.
+function buildTargets(steps, layout) {
+  const table = {};
+  for (const step of steps) table[step.key] = '#' + (step.id || step.key);
+  for (const dotted of Object.keys(layout.wrappers || {})) {
+    const name = dotted.split('.').pop();
+    table[name] = '#' + ((layout.wrappers[dotted] || {}).id || name);
+  }
+  for (const name of layout.external || []) table[name] = '#' + name;
+  return table;
+}
+
+let targetTable = {};
+
+function resolveTarget(name, owner) {
+  if (typeof name !== 'string') return name;
+  if (name.startsWith('#')) return name;
+  if (targetTable[name]) return targetTable[name];
+  throw new Error(
+    `flow: step '${owner}' points at '${name}', which is not a step, a group or a declared external state`
+  );
+}
+
 function writesOf(spec, stepWrite) {
   const writes = [];
   if (stepWrite) writes.push(stepWrite);
@@ -75,23 +104,47 @@ function writesOf(spec, stepWrite) {
   };
 }
 
-function transitions(next, stepWrite) {
+function transitions(next, stepWrite, owner) {
   const list = Array.isArray(next) ? next : [next];
   return list.map((entry) => {
     const spec = branch(entry);
     return {
-      target: spec.to,
+      target: resolveTarget(spec.to, owner),
       ...(spec.when ? { cond: spec.when } : {}),
       ...writesOf(spec, stepWrite)
     };
   });
 }
 
-function choiceGrammer(step) {
-  return step.options.map((option, index) => ({
-    intention: option,
-    recognize: [String(index + 1), String(option).toLowerCase()]
+function optionValue(option) {
+  return option && typeof option === 'object' ? option.value : option;
+}
+
+function optionLabel(option) {
+  return option && typeof option === 'object' ? option.label : option;
+}
+
+// `options` is either a static array or a function evaluated at entry. A static
+// list is closed over at generate time and stays resume-safe; a runtime list has
+// to be stored on the context, the same trade `walk` already makes.
+function optionsOf(step) {
+  return typeof step.options === 'function' ? step.options() : step.options;
+}
+
+function choiceGrammer(step, options) {
+  return options.map((option, index) => ({
+    intention: optionValue(option),
+    recognize: [
+      String(index + 1),
+      ...(step.recognize
+        ? step.recognize(option, index)
+        : [String(optionValue(option)).toLowerCase()])
+    ]
   }));
+}
+
+function renderOptions(options) {
+  return options.map((option, index) => `*${index + 1}.*  ${optionLabel(option)}`).join('\n');
 }
 
 function readChoice(step, grammerOf) {
@@ -114,8 +167,8 @@ function choiceWrite(step) {
   };
 }
 
-function assertOptionsRouted(step) {
-  const missing = step.options.filter((option) => !(option in step.next));
+function assertOptionsRouted(step, options) {
+  const missing = options.filter((option) => !(optionValue(option) in step.next));
   if (missing.length) {
     throw new Error(`flow: step '${step.key}' offers option(s) ${missing.join(', ')} with no next target`);
   }
@@ -123,15 +176,37 @@ function assertOptionsRouted(step) {
 
 function choiceTransitions(step) {
   const write = choiceWrite(step);
+
+  // A single destination means "any recognised option goes here" — the only
+  // form available when the option list is built at runtime, since the
+  // intentions are not known when the step is written.
+  if (typeof step.next === 'string' || step.next.to) {
+    const spec = branch(step.next);
+    const anyRecognised = {
+      target: resolveTarget(spec.to, step.key),
+      cond: (context) => context.intention !== dialog.INTENTION_UNKOWN,
+      ...writesOf(spec, write)
+    };
+    return [anyRecognised, ...fallbackOf(step)];
+  }
+
   const branches = Object.keys(step.next).map((intention) => {
     const spec = branch(step.next[intention]);
     return {
-      target: spec.to,
+      target: resolveTarget(spec.to, step.key),
       cond: (context) => context.intention === intention,
       ...writesOf(spec, write)
     };
   });
-  return branches.concat([{ target: 'error' }]);
+  return branches.concat(fallbackOf(step));
+}
+
+// What happens to input the grammar did not recognise: the retry loop by
+// default, or an explicit branch when the step declares one.
+function fallbackOf(step) {
+  if (!step.onUnknown) return [{ target: 'error' }];
+  const spec = branch(step.onUnknown);
+  return [{ target: resolveTarget(spec.to, step.key), ...writesOf(spec, null) }];
 }
 
 function readInput(step) {
@@ -184,7 +259,7 @@ function fetchState(step) {
           context[step.stepSlot] = event.data;
         })
       },
-      onError: { target: step.onError || '#system_error' }
+      onError: { target: (step.onError ? resolveTarget(step.onError, step.key) : '#system_error') }
     }
   };
 }
@@ -193,7 +268,7 @@ function evaluateState(step) {
   const empty = step.onEmpty;
   const escape = empty
     ? [{
-        target: empty.to,
+        target: resolveTarget(empty.to, step.key),
         cond: (context) => (context[step.stepSlot].options || []).length === 0,
         actions: assign((context) => {
           const path = context.slots.pgr[step.pathSlot] || [];
@@ -223,7 +298,7 @@ function walkTransitions(step) {
       })
     },
     {
-      target: step.onLeaf.to,
+      target: resolveTarget(step.onLeaf.to, step.key),
       cond: (context) => context.intention !== dialog.INTENTION_UNKOWN && context[step.stepSlot].isLeafLevel,
       actions: assign((context) => {
         pushPath(step, context, context.intention);
@@ -249,19 +324,35 @@ function callMessage(branch, context, event) {
 }
 
 const emitters = {
+  // Branch immediately, send nothing. `say` with `prompt: []` would also emit
+  // no message, but this states the intent and skips the no-op assign.
+  goto: (step) => ({
+    id: step.id || step.key,
+    always: transitions(step.next, null, step.key)
+  }),
+
+  // Wait for the citizen, send nothing, then branch. The only kind that blocks
+  // without asking a question. Stays atomic on purpose: the machine's entry
+  // state is compared as a bare string in reminders-service, so it must not
+  // become a compound `{start:'question'}`.
+  gate: (step) => ({
+    id: step.id || step.key,
+    on: { USER_MESSAGE: transitions(step.next, null, step.key) }
+  }),
+
   say: (step) => ({
-    ...(step.id ? { id: step.id } : {}),
+    id: step.id || step.key,
     onEntry: assign((context, event) => {
       sendPrompts(step, context, event);
     }),
-    always: transitions(step.next)
+    always: transitions(step.next, null, step.key)
   }),
 
   ask: (step) => node(step, {
     question: questionState(step),
     process: {
       onEntry: readInput(step),
-      always: transitions(step.next)
+      always: transitions(step.next, null, step.key)
         .map((transition) => ({
           ...transition,
           cond: transition.cond
@@ -274,17 +365,26 @@ const emitters = {
   }),
 
   choose: (step) => {
-    assertOptionsRouted(step);
-    const grammer = choiceGrammer(step);
-    return node(step, {
-      question: questionState(step),
-      process: { onEntry: readChoice(step, () => grammer), always: choiceTransitions(step) },
-      error: errorState(step, () => undefined)
-    });
+    const dynamic = typeof step.options === 'function';
+    if (!dynamic) assertOptionsRouted(step, step.options);
+
+    const fixed = dynamic ? null : choiceGrammer(step, step.options);
+    const states = {
+      question: questionState(step, dynamic
+        ? (context) => { context.grammer = choiceGrammer(step, optionsOf(step)); }
+        : undefined),
+      process: {
+        onEntry: readChoice(step, dynamic ? (context) => context.grammer : () => fixed),
+        always: choiceTransitions(step)
+      }
+    };
+    // onUnknown replaces the retry path, so the error state would be unreachable
+    if (!step.onUnknown) states.error = errorState(step, () => undefined);
+    return node(step, states);
   },
 
   walk: (step) => ({
-    ...(step.id ? { id: step.id } : {}),
+    id: step.id || step.key,
     initial: 'fetch',
     states: {
       fetch: fetchState(step),
@@ -296,14 +396,14 @@ const emitters = {
   }),
 
   call: (step) => ({
-    ...(step.id ? { id: step.id } : {}),
+    id: step.id || step.key,
     invoke: {
       id: step.invokeId || step.key,
       src: (context, event) => step.src(context, event),
       onDone: step.onDone.map((entry) => {
         const spec = branch(entry);
         return {
-          target: spec.to,
+          target: resolveTarget(spec.to, step.key),
           ...(spec.when ? { cond: spec.when } : {}),
           actions: assign((context, event) => {
             if (spec.message) emit(context, callMessage(spec, context, event));
@@ -311,30 +411,33 @@ const emitters = {
           })
         };
       }),
-      onError: { target: step.onError || '#system_error' }
+      onError: { target: (step.onError ? resolveTarget(step.onError, step.key) : '#system_error') }
     }
   })
 };
 
-function place(root, step, wrappers) {
+function place(root, step, layout) {
   let states = root;
-  let parent = null;
   const prefix = [];
-  for (const name of step.path || []) {
+  for (const name of layout.place[step.key] || []) {
     prefix.push(name);
-    if (!states[name]) states[name] = { ...(wrappers[prefix.join('.')] || {}), states: {} };
-    parent = states[name];
-    states = parent.states;
+    const dotted = prefix.join('.');
+    if (!states[name]) {
+      states[name] = { ...(layout.wrappers[dotted] || {}), states: {} };
+      if (layout.initial[dotted]) states[name].initial = layout.initial[dotted];
+    }
+    states = states[name].states;
   }
   states[step.key] = emitters[step.kind](step);
-  if (step.first && parent) parent.initial = step.key;
 }
 
-function generate(steps, wrappers = {}) {
+function generate(steps, layout = {}) {
+  const resolved = { wrappers: {}, place: {}, initial: {}, external: [], ...layout };
+  targetTable = buildTargets(steps, resolved);
   const root = {};
   for (const step of steps) {
     if (!emitters[step.kind]) throw new Error(`flow: step '${step.key}' has unknown kind '${step.kind}'`);
-    place(root, step, wrappers);
+    place(root, step, resolved);
   }
   return root;
 }
@@ -363,15 +466,18 @@ function scan(node, out, name = '(root)') {
   return out;
 }
 
-function assertTargets(states, allowed = []) {
-  const out = scan({ states }, { ids: [], targets: [], headless: [] });
+// Validate a whole machine config, not just its states map: the root's own
+// `on` handlers are transitions too, and USER_RESET -> #welcome is the
+// product's universal escape hatch. Scanning only `states` left it unchecked.
+function assertTargets(config, allowed = []) {
+  const out = scan(config, { ids: [], targets: [], headless: [] });
   const duplicate = out.ids.find((id, index) => out.ids.indexOf(id) !== index);
   if (duplicate) throw new Error(`flow: duplicate state id '#${duplicate}'`);
   const known = new Set(out.ids.concat(allowed));
   const missing = out.targets.find((target) => !known.has(target.slice(1)));
   if (missing) throw new Error(`flow: unknown transition target '${missing}'`);
   if (out.headless.length) throw new Error(`flow: compound state '${out.headless[0]}' has no initial state`);
-  return states;
+  return config;
 }
 
 function mergeStates(target, source) {

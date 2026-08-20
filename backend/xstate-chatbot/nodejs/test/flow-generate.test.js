@@ -148,30 +148,66 @@ test("call emits an invoke with one transition per onDone branch", () => {
   assert.equal(states.persist.invoke.onError.target, "#system_error");
 });
 
-test("path and first nest the step and set the parent initial", () => {
+test("layout places a step, names the group and sets its initial", () => {
   const states = generate(
-    [{ key: "leafStep", kind: "say", path: ["outer"], first: true, prompt: PROMPT, next: "#endstate" }],
-    { outer: { id: "outerId" } }
+    [{ key: "leafStep", kind: "say", prompt: PROMPT, next: "endstate" }],
+    {
+      wrappers: { outer: { id: "outerId" } },
+      place: { leafStep: ["outer"] },
+      initial: { outer: "leafStep" },
+      external: ["endstate"],
+    }
   );
   assert.equal(states.outer.id, "outerId");
   assert.equal(states.outer.initial, "leafStep");
   assert.ok(states.outer.states.leafStep);
+  // the step itself says nothing about where it sits
+  assert.equal(states.outer.states.leafStep.always[0].target, "#endstate");
+});
+
+test("a step naming another step resolves to that step's id", () => {
+  const states = generate([
+    { key: "first", kind: "say", prompt: PROMPT, next: "second" },
+    { key: "second", id: "customId", kind: "say", prompt: PROMPT, next: "first" },
+  ]);
+  assert.equal(states.first.always[0].target, "#customId");
+  assert.equal(states.second.always[0].target, "#first");
+});
+
+test("a step naming something that is not a step fails at generate time", () => {
+  assert.throws(
+    () => generate([{ key: "a", kind: "say", prompt: PROMPT, next: "confidentialty" }]),
+    /step 'a' points at 'confidentialty', which is not a step, a group or a declared external state/
+  );
+});
+
+test("a group name resolves to the group's id", () => {
+  const states = generate(
+    [{ key: "jump", kind: "say", prompt: PROMPT, next: "other" },
+     { key: "inner", kind: "say", prompt: PROMPT, next: "jump" }],
+    {
+      wrappers: { "outer.other": { id: "other" } },
+      place: { inner: ["outer", "other"] },
+      initial: { "outer.other": "inner" },
+    }
+  );
+  assert.equal(states.jump.always[0].target, "#other");
 });
 
 test("assertTargets rejects an unknown target and a duplicate id", () => {
   const orphan = generate([{ key: "a", kind: "say", prompt: PROMPT, next: "#nowhere" }]);
-  assert.throws(() => assertTargets(orphan), /unknown transition target '#nowhere'/);
+  assert.throws(() => assertTargets({ states: orphan }), /unknown transition target '#nowhere'/);
 
   const twins = generate([
     { key: "a", id: "same", kind: "say", prompt: PROMPT, next: "#same" },
     { key: "b", id: "same", kind: "say", prompt: PROMPT, next: "#same" },
   ]);
-  assert.throws(() => assertTargets(twins), /duplicate state id '#same'/);
+  assert.throws(() => assertTargets({ states: twins }), /duplicate state id '#same'/);
 });
 
 test("assertTargets accepts targets declared outside the generated tree", () => {
   const states = generate([{ key: "a", kind: "say", prompt: PROMPT, next: "#welcome" }]);
-  assert.doesNotThrow(() => assertTargets(states, ["welcome"]));
+  assert.doesNotThrow(() => assertTargets({ states }, ["welcome"]));
 });
 
 test("an unexpected input type retries instead of throwing", async () => {
@@ -410,7 +446,7 @@ test("mergeStates overlays the incoming node's own keys instead of dropping them
 
 test("assertTargets rejects a compound state with no initial", () => {
   assert.throws(
-    () => assertTargets({ outer: { states: { inner: {} } } }),
+    () => assertTargets({ states: { outer: { states: { inner: {} } } } }),
     /compound state 'outer' has no initial state/
   );
 });
@@ -532,4 +568,81 @@ test("a call branch may carry a write and no message", async () => {
   await settle();
   assert.deepEqual(outputs, [], "a branch with no message must send nothing");
   assert.equal(service.state.context.savedId, 7);
+});
+
+test("goto emits an atomic node with no entry action", () => {
+  const states = generate([
+    { key: "endstate", id: "endstate", kind: "goto", next: "start" },
+    { key: "start", id: "start", kind: "gate", next: "endstate" },
+  ]);
+  assert.equal(states.endstate.states, undefined, "must stay atomic");
+  assert.equal(states.endstate.onEntry, undefined, "must not emit a no-op entry action");
+  assert.equal(states.endstate.on, undefined, "must not wait for input");
+  assert.deepEqual(states.endstate.always.map((t) => t.target), ["#start"]);
+});
+
+test("goto carries guards and per-branch writes", () => {
+  const states = generate([
+    {
+      key: "fork",
+      kind: "goto",
+      next: [
+        { when: (c) => c.user.locale, to: "landing", set: (c) => { c.tookGuard = true; } },
+        { to: "onboard" },
+      ],
+    },
+    { key: "landing", kind: "goto", next: "fork" },
+    { key: "onboard", kind: "goto", next: "fork" },
+  ]);
+  const always = states.fork.always;
+  assert.equal(always.length, 2);
+  assert.ok(always[0].cond);
+  assert.ok(always[0].actions, "a guarded branch may carry a write");
+  assert.equal(always[1].cond, undefined, "the last branch is unconditional");
+  assert.deepEqual(always.map((t) => t.target), ["#landing", "#onboard"]);
+});
+
+test("gate blocks on USER_MESSAGE, sends nothing, and stays atomic", () => {
+  const states = generate([
+    { key: "start", id: "start", kind: "gate",
+      next: [{ when: (c) => c.user.locale, to: "landing" }, { to: "onboard" }] },
+    { key: "landing", kind: "goto", next: "start" },
+    { key: "onboard", kind: "goto", next: "start" },
+  ]);
+  assert.equal(states.start.states, undefined, "must stay atomic — state.value is compared as a string");
+  assert.equal(states.start.onEntry, undefined, "must send nothing");
+  assert.equal(states.start.always, undefined, "must not transition on its own");
+  assert.deepEqual(states.start.on.USER_MESSAGE.map((t) => t.target), ["#landing", "#onboard"]);
+  assert.equal(states.start.on.USER_MESSAGE[1].cond, undefined);
+});
+
+test("a gate accepts any message type and never routes to an error state", async () => {
+  const { outputs, service } = run(
+    [
+      { key: "start", id: "start", kind: "gate", next: "done" },
+      { key: "done", kind: "say", prompt: PROMPT, next: "#endstate" },
+    ],
+    "start"
+  );
+  service.start();
+  await settle();
+  assert.deepEqual(outputs, [], "a gate sends nothing on entry");
+  // a location pin carries an object input, which the ask/choose kinds reject
+  service.send({ type: "USER_MESSAGE", message: { type: "location", input: { lat: 1, lng: 2 } } });
+  await settle();
+  assert.deepEqual(outputs, ["PROMPT"], "any type passes the gate");
+  assert.equal(service.state.done, true);
+});
+
+test("assertTargets validates the machine root's own event handlers", () => {
+  const states = generate([{ key: "welcome", kind: "goto", next: "welcome" }]);
+
+  // the root's USER_RESET is a transition like any other
+  assert.throws(
+    () => assertTargets({ states, on: { USER_RESET: { target: "#welcomee" } } }),
+    /unknown transition target '#welcomee'/
+  );
+  assert.doesNotThrow(() =>
+    assertTargets({ states, on: { USER_RESET: { target: "#welcome" } } })
+  );
 });

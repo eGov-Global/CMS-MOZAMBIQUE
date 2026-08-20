@@ -1,23 +1,45 @@
-// onboardingLocale stays hand-written in seva.js: its options come from the
-// localisation service at runtime, it has no error state (unknown input falls
-// back to en_IN), and its prompt numbering format differs from
-// constructListPromptAndGrammer's.
+const dialog = require('../util/dialog');
+
+const stripDiacritics = (text) =>
+  String(text).toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+
 module.exports = {
-  buildSteps: ({ messages, userProfileService }) => [
+  buildSteps: ({ messages, userProfileService, offeredLocales }) => [
+    {
+      key: 'onboardingLocale',
+      kind: 'choose',
+      accept: 'text',
+      prompt: messages.onboarding.localeMenu,
+      options: () => offeredLocales(),
+      recognize: (option) => [option.label.toLowerCase(), stripDiacritics(option.label)],
+      set: (context, locale) => {
+        context.user.locale = locale;
+        context.onboarding.locale = locale;
+      },
+      // an unrecognised reply silently selects English and moves on; this step
+      // has never had a retry loop
+      onUnknown: {
+        to: 'onboardingWelcome',
+        set: (context) => {
+          context.user.locale = 'en_IN';
+          context.onboarding.locale = 'en_IN';
+        }
+      },
+      next: 'onboardingWelcome'
+    },
+
     {
       key: 'onboardingWelcome',
-      id: 'onboardingWelcome',
       kind: 'say',
       prompt: messages.onboarding.onboardingWelcome,
       next: [
-        { when: (context) => context.user.name, to: '#onBoardingUserProfileConfirmation' },
-        { to: '#onboardingName' }
+        { when: (context) => context.user.name, to: 'onBoardingUserProfileConfirmation' },
+        { to: 'onboardingName' }
       ]
     },
 
     {
       key: 'onboardingName',
-      id: 'onboardingName',
       kind: 'ask',
       accept: 'text',
       prompt: [
@@ -28,14 +50,13 @@ module.exports = {
         context.onboarding.name = name;
       },
       next: [
-        { when: (context) => context.onboarding.name, to: '#onboardingNameConfirmation' },
-        { to: '#onboardingUpdateUserProfile' }
+        { when: (context) => context.onboarding.name, to: 'onboardingNameConfirmation' },
+        { to: 'onboardingUpdateUserProfile' }
       ]
     },
 
     {
       key: 'onBoardingUserProfileConfirmation',
-      id: 'onBoardingUserProfileConfirmation',
       kind: 'choose',
       options: ['Yes', 'No'],
       prompt: [
@@ -43,42 +64,39 @@ module.exports = {
         { bundle: messages.onboarding.onBoardingUserProfileConfirmation.question, delay: 4000 }
       ],
       fill: { name: (context) => context.user.name },
-      next: { Yes: '#onboardingUpdateUserProfile', No: '#changeName' }
+      next: { Yes: 'onboardingUpdateUserProfile', No: 'changeName' }
     },
 
     {
       key: 'changeName',
-      id: 'changeName',
       kind: 'ask',
       accept: 'text',
       prompt: messages.onboarding.changeName.question,
       set: (context, name) => {
         context.onboarding.name = name;
       },
-      next: [{ when: (context) => context.onboarding.name, to: '#onboardingNameConfirmation' }]
+      next: [{ when: (context) => context.onboarding.name, to: 'onboardingNameConfirmation' }]
     },
 
     {
       key: 'onboardingNameConfirmation',
-      id: 'onboardingNameConfirmation',
       kind: 'choose',
       options: ['Yes', 'No'],
       prompt: [{ bundle: messages.onboarding.onboardingNameConfirmation, delay: 1000 }],
       fill: { name: (context) => context.onboarding.name },
       next: {
         Yes: {
-          to: '#onboardingUpdateUserProfile',
+          to: 'onboardingUpdateUserProfile',
           set: (context) => {
             context.user.name = context.onboarding.name;
           }
         },
-        No: '#changeName'
+        No: 'changeName'
       }
     },
 
     {
       key: 'onboardingUpdateUserProfile',
-      id: 'onboardingUpdateUserProfile',
       kind: 'call',
       invokeId: 'updateUserProfile',
       src: (context) =>
@@ -86,24 +104,70 @@ module.exports = {
       onDone: [
         {
           when: (context) => context.onboarding.name,
-          to: '#onboardingThankYou',
+          to: 'onboardingThankYou',
           set: (context) => {
             context.user.name = context.onboarding.name;
             context.user.locale = context.onboarding.locale;
             context.onboarding = undefined;
           }
         },
-        { to: '#onboardingThankYou' }
+        { to: 'onboardingThankYou' }
       ],
-      onError: '#welcome'
+      onError: 'welcome'
     },
 
     {
       key: 'onboardingThankYou',
-      id: 'onboardingThankYou',
       kind: 'say',
       prompt: messages.onboarding.onboardingThankYou,
-      next: '#pgr'
+      next: 'pgr'
+    },
+
+    // --- chassis ------------------------------------------------------------
+
+    {
+      key: 'start',
+      kind: 'gate',
+      next: [
+        { when: (context) => context.user.locale, to: 'welcome' },
+        { to: 'onboarding' }
+      ]
+    },
+
+    {
+      key: 'preCondition',
+      kind: 'goto',
+      next: [
+        { when: (context) => context.user.locale, to: 'invoke' },
+        { to: 'onboarding' }
+      ]
+    },
+
+    {
+      key: 'invoke',
+      kind: 'say',
+      prompt: messages.welcome,
+      fill: { name: (context) => context.user.name || 'Citizen' },
+      next: 'pgr'
+    },
+
+    {
+      key: 'endstate',
+      kind: 'goto',
+      next: 'start'
+    },
+
+    {
+      key: 'system_error',
+      kind: 'say',
+      prompt: dialog.global_messages.system_error,
+      next: {
+        to: 'welcome',
+        // event.data is undefined here: xstate resolves `always` transitions
+        // under the null event, so the error.platform payload never arrives.
+        // Faithful to the hand-written version; fixed separately.
+        set: (context, event) => context.chatInterface.system_error(event.data)
+      }
     }
   ]
 };

@@ -3,7 +3,8 @@ const { pgrService } = require('./service/service-loader');
 const localisationService = require('./util/localisation-service');
 const config = require('../env-variables');
 const { generate, mergeStates } = require('./flow/generate');
-const { buildSteps, wrappers } = require('./flow/steps-pgr');
+const { buildSteps } = require('./flow/steps-pgr');
+const layout = require('./flow/layout');
 const legacyLocationStates = require('./flow/legacy-location');
 let event;
 const pgr =  {
@@ -232,7 +233,7 @@ let grammer = {
 };
 mergeStates(
   pgr.states,
-  generate(buildSteps({ messages, pgrService, localisationService, config }), wrappers)
+  generate(buildSteps({ messages, pgrService, localisationService, config }), layout.pgr)
 );
 mergeStates(
   pgr.states.fileComplaint.states.location.states,
