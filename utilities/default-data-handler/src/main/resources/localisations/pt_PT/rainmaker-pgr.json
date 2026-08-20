@@ -1696,5 +1696,8 @@
         "message": "Dados do Reclamante",
         "module": "rainmaker-pgr",
         "locale": "pt_PT"
-    }
+    },
+    {"code": "ESCALATE", "message": "Escalonar", "module": "rainmaker-pgr", "locale": "pt_PT"},
+    {"code": "CS_ACTION_ESCALATE", "message": "Escalonar Reclamação", "module": "rainmaker-pgr", "locale": "pt_PT"},
+    {"code": "WF_PGR_ESCALATE", "message": "Escalado", "module": "rainmaker-pgr", "locale": "pt_PT"}
 ]
