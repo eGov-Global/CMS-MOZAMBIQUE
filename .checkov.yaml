@@ -1,0 +1,32 @@
+# Checkov configuration - full-repo security scanning for CMS-MOZAMBIQUE.
+#
+# Checkov auto-detects and scans every supported configuration surface here:
+#   Terraform          devops/infra-as-code/terraform/**
+#   Helm charts        devops/deploy-as-code/charts/**, digit-mcp/helm/**
+#   Kubernetes         static / rendered k8s manifests
+#   Dockerfiles        build/**, backend/**, service dirs
+#   docker-compose     ./docker-compose.*.y*ml, local-setup/**
+#   Ansible            local-setup/ansible/**, performance/ansible/**
+#   GitHub Actions     .github/workflows/**
+#   Secrets            across ALL files (tokens, keys, passwords)
+#
+# Docs: https://www.checkov.io/2.Basics/Configuring%20Checkov%20with%20a%20config%20file.html
+directory:
+  - .
+
+compact: true
+download-external-modules: false
+
+# Skip vendored deps / build artefacts to cut noise. Kept narrow on purpose so
+# the top-level build/ Dockerfiles are still scanned.
+skip-path:
+  - ".*/node_modules/.*"
+  - ".*/target/.*"
+  - ".*/dist/.*"
+  - "^\\.git/.*"
+
+# Report-only for the initial rollout: findings are surfaced but do NOT fail the
+# build, so pre-existing issues don't block every PR on day one. After triage,
+# add a baseline (see .github/SECURITY-SCANNING.md) or set soft-fail: false to
+# start failing PRs on new findings.
+soft-fail: true

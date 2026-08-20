@@ -1,0 +1,82 @@
+name: Security Scan (Checkov)
+
+# Full-repo IaC / DevOps / secrets scanning with a single tool (Checkov):
+# Terraform, Helm charts, Kubernetes, Dockerfiles, docker-compose, Ansible,
+# GitHub Actions workflows, and secrets. Scan settings live in .checkov.yaml.
+# See .github/SECURITY-SCANNING.md for how to read results and turn on enforcement.
+#
+# Reports are rendered natively by GitHub in two places:
+#   1. Security -> Code scanning tab (SARIF), plus inline annotations on PR diffs.
+#   2. A visual summary card on each workflow run (the "Build report summary" step).
+
+on:
+  pull_request:
+  push:
+    branches: [master, develop]
+  schedule:
+    - cron: "0 3 * * 1" # weekly full scan, Monday 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write # required to publish results to the Security tab
+  pull-requests: read
+
+jobs:
+  checkov:
+    name: Checkov full-repo scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          config_file: .checkov.yaml
+          output_format: cli,sarif,json
+          output_file_path: console,results.sarif,results.json
+
+      - name: Upload SARIF to the Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+
+      - name: Build report summary
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          try:
+              data = json.load(open("results.json"))
+          except Exception as e:
+              print(f"> Checkov summary unavailable ({e}).")
+              raise SystemExit(0)
+          reports = data if isinstance(data, list) else [data]
+          def s(r, k): return (r.get("summary") or {}).get(k, 0) or 0
+          tp = sum(s(r, "passed") for r in reports)
+          tf = sum(s(r, "failed") for r in reports)
+          tk = sum(s(r, "skipped") for r in reports)
+          head = "✅ No failed checks" if tf == 0 else f"❌ {tf} failed check(s)"
+          print("## 🛡️ Checkov Security Scan\n")
+          print(f"**{head}**  ·  {tp} passed  ·  {tk} skipped\n")
+          print("| Framework | ✅ Passed | ❌ Failed | ⏭️ Skipped |")
+          print("|---|--:|--:|--:|")
+          for r in sorted(reports, key=lambda r: -s(r, "failed")):
+              if s(r, "passed") + s(r, "failed") + s(r, "skipped") == 0:
+                  continue
+              print(f"| {r.get('check_type','-')} | {s(r,'passed')} | {s(r,'failed')} | {s(r,'skipped')} |")
+          failed = [c for r in reports for c in ((r.get("results") or {}).get("failed_checks") or [])]
+          order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+          failed.sort(key=lambda c: order.get(c.get("severity"), 4))
+          if failed:
+              print("\n<details><summary>Top findings (first 25)</summary>\n")
+              print("| Severity | Check | Resource | File |")
+              print("|---|---|---|---|")
+              for c in failed[:25]:
+                  name = (c.get("check_name") or "").replace("|", "/")
+                  line = (c.get("file_line_range") or [""])[0]
+                  print(f"| {c.get('severity') or '-'} | `{c.get('check_id','')}` {name} | {c.get('resource','')} | `{c.get('file_path','')}:{line}` |")
+              print("\n</details>")
+          PY
