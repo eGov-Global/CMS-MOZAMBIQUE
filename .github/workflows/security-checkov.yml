@@ -48,6 +48,7 @@ jobs:
         run: |
           python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json
+          from collections import Counter
           try:
               data = json.load(open("results.json"))
           except Exception as e:
@@ -58,25 +59,37 @@ jobs:
           tp = sum(s(r, "passed") for r in reports)
           tf = sum(s(r, "failed") for r in reports)
           tk = sum(s(r, "skipped") for r in reports)
-          head = "✅ No failed checks" if tf == 0 else f"❌ {tf} failed check(s)"
+          fw = [r for r in reports if s(r, "passed") + s(r, "failed") + s(r, "skipped") > 0]
+
           print("## 🛡️ Checkov Security Scan\n")
-          print(f"**{head}**  ·  {tp} passed  ·  {tk} skipped\n")
-          print("| Framework | ✅ Passed | ❌ Failed | ⏭️ Skipped |")
-          print("|---|--:|--:|--:|")
-          for r in sorted(reports, key=lambda r: -s(r, "failed")):
-              if s(r, "passed") + s(r, "failed") + s(r, "skipped") == 0:
-                  continue
-              print(f"| {r.get('check_type','-')} | {s(r,'passed')} | {s(r,'failed')} | {s(r,'skipped')} |")
-          failed = [c for r in reports for c in ((r.get("results") or {}).get("failed_checks") or [])]
-          order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
-          failed.sort(key=lambda c: order.get(c.get("severity"), 4))
-          if failed:
-              print("\n<details><summary>Top findings (first 25)</summary>\n")
-              print("| Severity | Check | Resource | File |")
-              print("|---|---|---|---|")
-              for c in failed[:25]:
-                  name = (c.get("check_name") or "").replace("|", "/")
-                  line = (c.get("file_line_range") or [""])[0]
-                  print(f"| {c.get('severity') or '-'} | `{c.get('check_id','')}` {name} | {c.get('resource','')} | `{c.get('file_path','')}:{line}` |")
-              print("\n</details>")
+          status = "✅ Clean" if tf == 0 else f"❌ {tf} failed"
+          print(f"**{status}**  ·  ✅ {tp} passed  ·  ⏭️ {tk} skipped  ·  {len(fw)} frameworks\n")
+
+          sec = next((r for r in reports if r.get("check_type") == "secrets"), None)
+          if sec and s(sec, "failed") > 0:
+              print(f"> 🔑 **{s(sec, 'failed')} potential secret(s) flagged** — review these first.\n")
+
+          print("### Findings by area\n")
+          print("| Area | ❌ Failed | ✅ Passed | |")
+          print("|---|--:|--:|:--|")
+          mx = max((s(r, "failed") for r in fw), default=0) or 1
+          for r in sorted(fw, key=lambda r: -s(r, "failed")):
+              bar = "█" * max(1, round(s(r, "failed") / mx * 12)) if s(r, "failed") else ""
+              print(f"| {r.get('check_type','-')} | {s(r,'failed')} | {s(r,'passed')} | {bar} |")
+
+          cnt, samp = Counter(), {}
+          for r in reports:
+              for c in ((r.get("results") or {}).get("failed_checks") or []):
+                  cid = c.get("check_id", "?")
+                  cnt[cid] += 1
+                  samp.setdefault(cid, (c.get("check_name", ""), c.get("file_path", "")))
+          if cnt:
+              print("\n### Most frequent failing checks\n")
+              print("| Count | Check | What it flags | Example file |")
+              print("|--:|---|---|---|")
+              for cid, n in cnt.most_common(12):
+                  name, fp = samp[cid]
+                  print(f"| {n} | `{cid}` | {(name or '').replace('|','/')} | `{fp}` |")
+
+          print("\n_Full findings with file/line and triage: **Security → Code scanning** tab._")
           PY
