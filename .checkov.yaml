@@ -1,32 +1,46 @@
-# Checkov configuration - full-repo security scanning for CMS-MOZAMBIQUE.
+# Checkov configuration - scoped to DEPLOYMENT OPTION C (Ansible remote-server setup).
 #
-# Checkov auto-detects and scans every supported configuration surface here:
-#   Terraform          devops/infra-as-code/terraform/**
-#   Helm charts        devops/deploy-as-code/charts/**, digit-mcp/helm/**
-#   Kubernetes         static / rendered k8s manifests
-#   Dockerfiles        build/**, backend/**, service dirs
-#   docker-compose     ./docker-compose.*.y*ml, local-setup/**
-#   Ansible            local-setup/ansible/**, performance/ansible/**
-#   GitHub Actions     .github/workflows/**
-#   Secrets            across ALL files (tokens, keys, passwords)
+# local-setup/#choose-your-setup-path defines three ways to run the stack. Option C is
+# `./deploy.sh <tenant>`: Ansible configures a remote Ubuntu box and runs the docker-compose
+# stack over SSH. So we scan ONLY what Option C actually uses:
+#
+#   ansible     local-setup/ansible/**   (playbooks, tasks, templates, inventory, host_vars)
+#   dockerfile  build/**, service dirs   (images built during the deploy)
+#   secrets     across those files       (tokens, keys, passwords in host_vars / .env)
+#
+# We deliberately EXCLUDE the other setup paths (they are later phases, not Option C):
+#   - local-setup/k8s/**  -> Kubernetes / Tilt path (this is the CKV_K8S_* firehose, e.g. the
+#                            82x CKV_K8S_38 - none of it is deployed by Option C)
+#   - devops/**           -> Helm charts + Terraform (Kubernetes + cloud infra)
+#
+# NOTE: Checkov does not scan docker-compose files for port/privileged misconfig. Option C's
+# compose port/protocol exposure is a known gap here - to be covered in a later phase with a
+# compose-aware scanner (KICS / Trivy). See .github/SECURITY-SCANNING.md.
 #
 # Docs: https://www.checkov.io/2.Basics/Configuring%20Checkov%20with%20a%20config%20file.html
 directory:
   - .
 
-compact: true
-download-external-modules: false
+# Only the frameworks relevant to Option C. This alone removes kubernetes, helm, terraform,
+# github_actions and openapi from the scan.
+framework:
+  - ansible
+  - dockerfile
+  - secrets
 
-# Skip vendored deps / build artefacts to cut noise. Kept narrow on purpose so
-# the top-level build/ Dockerfiles are still scanned.
+# Keep the remaining frameworks focused on Option C's files and out of the other paths.
 skip-path:
+  - "^devops/.*"            # Helm charts + Terraform (Kubernetes + cloud infra - later phases)
+  - "^local-setup/k8s/.*"   # Kubernetes / Tilt manifests (not used by Option C)
+  - ".*/tests/.*"           # test fixtures (incl. k8s test manifests)
+  - "^performance/.*"       # perf-test harness, not the deploy
   - ".*/node_modules/.*"
   - ".*/target/.*"
   - ".*/dist/.*"
-  - "^\\.git/.*"
 
-# Report-only for the initial rollout: findings are surfaced but do NOT fail the
-# build, so pre-existing issues don't block every PR on day one. After triage,
-# add a baseline (see .github/SECURITY-SCANNING.md) or set soft-fail: false to
-# start failing PRs on new findings.
+compact: true
+download-external-modules: false
+
+# Report-only for the initial rollout. After triaging the Option C findings, add a baseline
+# or set soft-fail: false to start failing PRs. See .github/SECURITY-SCANNING.md.
 soft-fail: true

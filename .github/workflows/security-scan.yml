@@ -1,0 +1,92 @@
+name: Security Scan (Option C)
+
+# Security scanning scoped to Deployment Option C (Ansible remote-server setup).
+#
+#   Checkov  -> Ansible playbooks, Dockerfiles, secrets   (config in .checkov.yaml)
+#   KICS     -> docker-compose ports / protocols / privileged / host-network (with severities)
+#
+# Both feed the GitHub Security -> Code scanning tab (SARIF), and are merged into ONE
+# professional, printable HTML report published as the "security-report" artifact
+# (for management / PM / tech-lead review). See .github/SECURITY-SCANNING.md.
+
+on:
+  pull_request:
+  push:
+    branches: [master, develop]
+  schedule:
+    - cron: "0 3 * * 1" # weekly, Monday 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write # publish SARIF to the Security tab
+  pull-requests: read
+
+jobs:
+  scan:
+    name: Option C security scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 1) Checkov - Ansible / Dockerfile / Secrets (scoped in .checkov.yaml)
+      - name: Checkov (Ansible / Dockerfile / Secrets)
+        if: always()
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          config_file: .checkov.yaml
+          output_format: cli,sarif,json
+          output_file_path: console,checkov.sarif,checkov.json
+
+      - name: Upload Checkov SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov.sarif
+          category: checkov
+
+      # 2) KICS - docker-compose misconfig (ports/protocols/privileged), with severities
+      - name: KICS (docker-compose)
+        if: always()
+        uses: checkmarx/kics-github-action@v2
+        with:
+          path: "."
+          platform_type: DockerCompose
+          exclude_paths: "local-setup/k8s,devops,tests,node_modules"
+          output_path: kics-results
+          output_formats: "json,sarif"
+          fail_on: ""
+          ignore_on_exit: results # report-only: succeed even with findings
+
+      - name: Upload KICS SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: kics-results/results.sarif
+          category: kics
+
+      # 3) Merge both into one professional HTML report + summary card
+      - name: Build executive report
+        if: always()
+        env:
+          CHECKOV_JSON: checkov.json
+          KICS_JSON: kics-results/results.json
+          OUT_HTML: security-report.html
+          REPO: ${{ github.repository }}
+          REF: ${{ github.head_ref || github.ref_name }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SCAN_SCOPE: "Deployment Option C (Ansible remote server)"
+        run: python3 .github/scripts/security_report.py >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: |
+            security-report.html
+            checkov.json
+            kics-results/results.json
+          if-no-files-found: warn

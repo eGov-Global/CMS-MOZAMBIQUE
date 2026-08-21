@@ -1,58 +1,62 @@
-# Security Scanning (Checkov)
+# Security Scanning - Deployment Option C
 
-Automated, full-repo security scanning run in CI with a single tool: **Checkov**.
+Automated security scanning scoped to **Option C** of the
+[three setup paths](../local-setup/#choose-your-setup-path): `./deploy.sh <tenant>` -
+Ansible configures a remote Ubuntu box and runs the docker-compose stack.
 
-## What it scans
+Runs in CI as **`.github/workflows/security-scan.yml`**.
 
-| Area | Paths |
-|------|-------|
-| Terraform | `devops/infra-as-code/terraform/**` |
-| Helm charts | `devops/deploy-as-code/charts/**`, `digit-mcp/helm/**` |
-| Kubernetes manifests | static / rendered k8s YAML |
-| Dockerfiles | `build/**`, `backend/**`, service dirs |
-| docker-compose | `./docker-compose.*.y*ml`, `local-setup/**` |
-| Ansible | `local-setup/ansible/**`, `performance/ansible/**` |
-| GitHub Actions | `.github/workflows/**` |
-| Secrets | all files (tokens, keys, passwords) |
+## What is scanned (and by which tool)
 
-Typical findings for this repo: security-group rules open to `0.0.0.0/0`,
-container ports published on `0.0.0.0`, `privileged` / host-network containers,
-images running as root, `latest` tags, `validate_certs: false` in Ansible,
-missing Helm/K8s resource limits and securityContext, and committed secrets.
+| Tool | Covers | Option C surface |
+|------|--------|------------------|
+| **Checkov** | Ansible, Dockerfiles, secrets | `local-setup/ansible/**`, built images, `host_vars` credentials |
+| **KICS** | **docker-compose** (with severities) | published ports, `privileged`, host-network, protocols in the compose files the deploy runs |
+
+**Explicitly excluded** (other setup paths / later phases): `local-setup/k8s/**`
+(Kubernetes/Tilt) and `devops/**` (Helm charts + Terraform). These produced the large
+`CKV_K8S_*` counts and are not part of Option C.
+
+### Later phases
+- Phase 2: Kubernetes path (`local-setup/k8s/**`) + Helm charts.
+- Phase 3: Terraform / cloud infra (`devops/infra-as-code/terraform/**`).
+
+## Where to view results (3 surfaces, by audience)
+
+1. **Executive HTML report - for management / PM / tech leads.**
+   Every run produces a self-contained, printable **`security-report`** artifact
+   (download it from the run's *Artifacts* section, or Actions run page). It opens in any
+   browser and prints cleanly to PDF: risk posture, severity breakdown, findings by area,
+   and remediation - no GitHub knowledge needed.
+2. **Run summary card** - a condensed severity table on each workflow run page (quick glance).
+3. **Security -> Code scanning tab** - for engineers: filterable, groupable, dismissable
+   findings with inline PR annotations. Both tools upload here (categories `checkov`, `kics`).
+
+## Reading the numbers
+- **Passed / Failed** = each policy is evaluated against each resource; failed = that resource
+  violates the policy. Counts are policy-vs-resource evaluations, not distinct bugs.
+- **Severity**: KICS assigns native Critical/High/Medium/Low. Checkov (OSS) does not emit
+  severities, so in the merged report its findings are bucketed conservatively
+  (secrets = High, other = Medium).
+- The run's **Annotations** panel caps at ~10 lines - a display limit, not the total.
 
 ## When it runs
-- Every pull request
-- Every push to `master` / `develop`
-- Weekly (Monday 03:00 UTC)
-- On demand: **Actions -> Security Scan (Checkov) -> Run workflow**
-
-## Where results go
-The **Security -> Code scanning** tab (results uploaded as SARIF). Each finding
-shows the file, line, policy ID, severity, and remediation guidance.
+Every pull request; pushes to `master` / `develop`; weekly (Mon 03:00 UTC); and on demand
+(**Actions -> Security Scan (Option C) -> Run workflow**).
 
 ## Enforcement (currently report-only)
-`soft-fail: true` in `.checkov.yaml` means findings are reported but do **not**
-fail the build, so pre-existing issues don't block every PR from day one.
-
-To start enforcing after triage:
-1. Review current findings in the Security tab.
-2. Either add a baseline so only **new** issues fail:
-   ```bash
-   checkov -d . --create-baseline .checkov.baseline
-   # then add:  baseline: .checkov.baseline   to .checkov.yaml
-   ```
-   or set `soft-fail: false` in `.checkov.yaml` to fail on any finding.
-3. Add **"Checkov full-repo scan"** as a required status check in branch protection.
+`soft-fail: true` in `.checkov.yaml` and `fail_on: ""` for KICS report without blocking.
+To enforce after triage: set `soft-fail: false` (Checkov) and `fail_on: high` (KICS), then add
+**"Option C security scan"** as a required status check in branch protection.
 
 ## Run locally
 ```bash
 pip install checkov
-checkov -d .          # automatically picks up .checkov.yaml
+checkov -d .                                   # Checkov, Option C scope (.checkov.yaml)
+docker run -t -v "$PWD:/path" checkmarx/kics:latest scan -p /path -t DockerCompose \
+  --exclude-paths /path/local-setup/k8s,/path/devops   # KICS, compose only
 ```
 
 ## Not covered: application-code logic
-Checkov scans configuration and secrets, not Java/Node application-logic bugs
-(SQLi, SSRF, deserialization, etc.). To cover those without adding another tool
-to maintain, enable GitHub's free **CodeQL default setup**
-(*Settings -> Code security -> Code scanning -> Set up*) - it is native to GitHub
-and complements Checkov.
+Checkov and KICS scan configuration, not Java/Node application-logic bugs. For that, enable
+GitHub's free **CodeQL default setup** (*Settings -> Code security -> Code scanning*).
