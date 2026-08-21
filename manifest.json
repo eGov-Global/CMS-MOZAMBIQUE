@@ -1,0 +1,26 @@
+{
+ "runs": [
+  {
+   "file": "data/32469280449.json",
+   "runId": "32469280449",
+   "date": "2026-08-21 09:45 UTC",
+   "ts": "2026-08-21T09:45:43.852116+00:00",
+   "branch": "security/code-scan",
+   "shaShort": "a9035f3",
+   "pr": {
+    "number": 13,
+    "title": "Security scanning for the Ansible remote-server deployment (Checkov + KICS)",
+    "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/pull/13"
+   },
+   "occurrences": 149,
+   "types": 11,
+   "occBySeverity": {
+    "CRITICAL": 0,
+    "HIGH": 33,
+    "MEDIUM": 116,
+    "LOW": 0,
+    "INFO": 0
+   }
+  }
+ ]
+}
