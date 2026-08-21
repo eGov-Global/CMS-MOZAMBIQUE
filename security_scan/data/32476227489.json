@@ -1,0 +1,365 @@
+{
+ "meta": {
+  "repo": "eGov-Global/CMS-MOZAMBIQUE",
+  "branch": "master",
+  "sha": "bc0ecdacf10711b95daa9be1b9728f3627d5b888",
+  "shaShort": "bc0ecda",
+  "runId": "32476227489",
+  "runUrl": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/actions/runs/32476227489",
+  "pr": null,
+  "scope": "Ansible Deployment - Remote Server",
+  "scanners": [
+   "Checkov",
+   "KICS"
+  ],
+  "date": "2026-08-21 11:14 UTC",
+  "ts": "2026-08-21T11:14:24.740174+00:00"
+ },
+ "summary": {
+  "types": 3,
+  "occurrences": 57,
+  "typesBySeverity": {
+   "CRITICAL": 0,
+   "HIGH": 0,
+   "MEDIUM": 3,
+   "LOW": 0,
+   "INFO": 0
+  },
+  "occBySeverity": {
+   "CRITICAL": 0,
+   "HIGH": 0,
+   "MEDIUM": 57,
+   "LOW": 0,
+   "INFO": 0
+  }
+ },
+ "findings": [
+  {
+   "severity": "MEDIUM",
+   "source": "Checkov",
+   "area": "ansible",
+   "id": "CKV2_ANSIBLE_1",
+   "title": "Ensure that HTTPS url is used with uri",
+   "guide": "https://docs.prismacloud.io/en/enterprise-edition/policy-reference/ansible-policies/ansible-networking-policies/ansible-2-1",
+   "locations": [
+    {
+     "path": "playbook-deploy.yml",
+     "line": 1693,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L1693"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 1702,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L1702"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 1715,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L1715"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 1922,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L1922"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 2243,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L2243"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 2282,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L2282"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 2288,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L2288"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 2299,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L2299"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 2315,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L2315"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 2339,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L2339"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 2475,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L2475"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 2485,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L2485"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3102,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3102"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3128,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3128"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3138,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3138"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3147,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3147"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3156,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3156"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3166,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3166"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3225,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3225"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3243,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3243"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3261,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3261"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3271,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3271"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3295,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3295"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3611,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3611"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3647,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3647"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3669,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3669"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3702,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3702"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3730,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3730"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3787,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3787"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 4044,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L4044"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 4057,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L4057"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 4077,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L4077"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 4146,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L4146"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 4178,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L4178"
+    }
+   ],
+   "why": "This configuration diverges from a security best practice.",
+   "fix": "See the linked guide for remediation steps.",
+   "curated": false,
+   "count": 34
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Checkov",
+   "area": "ansible",
+   "id": "CKV_ANSIBLE_1",
+   "title": "Ensure that certificate validation isn't disabled with uri",
+   "guide": "https://docs.prismacloud.io/en/enterprise-edition/policy-reference/ansible-policies/ansible-networking-policies/ansible-1",
+   "locations": [
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3128,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3128"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3138,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3138"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3147,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3147"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3156,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3156"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3166,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3166"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3611,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3611"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3702,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3702"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3730,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3730"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 4044,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L4044"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 4057,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L4057"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 4077,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L4077"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 4146,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L4146"
+    }
+   ],
+   "why": "The Ansible task weakens security (e.g. TLS validation disabled, permissive file mode).",
+   "fix": "Re-enable `validate_certs: true`, tighten file `mode`, and avoid `become` where not required.",
+   "curated": true,
+   "count": 12
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Checkov",
+   "area": "ansible",
+   "id": "CKV2_ANSIBLE_3",
+   "title": "Ensure block is handling task errors properly",
+   "guide": "",
+   "locations": [
+    {
+     "path": "playbook-deploy.yml",
+     "line": 315,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L315"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 377,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L377"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 434,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L434"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 541,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L541"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 825,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L825"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 860,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L860"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 889,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L889"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 2249,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L2249"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 2914,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L2914"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 2956,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L2956"
+    },
+    {
+     "path": "playbook-deploy.yml",
+     "line": 3018,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/bc0ecdacf10711b95daa9be1b9728f3627d5b888/playbook-deploy.yml#L3018"
+    }
+   ],
+   "why": "This configuration diverges from a security best practice.",
+   "fix": "See the linked guide for remediation steps.",
+   "curated": false,
+   "count": 11
+  }
+ ]
+}
