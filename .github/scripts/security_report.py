@@ -1,270 +1,213 @@
 #!/usr/bin/env python3
 """
-Merge Checkov + KICS results into ONE professional security report for
-Deployment Option C (Ansible remote-server setup).
+Merge Checkov + KICS into a structured run.json consumed by the public
+security dashboard (.github/security-dashboard/index.html), plus a GitHub
+step-summary card.
 
-Outputs:
-  - security-report.html      a self-contained, printable executive report
-  - GitHub step-summary        a condensed markdown card (stdout -> $GITHUB_STEP_SUMMARY)
+Findings are grouped by rule (distinct issue types with occurrence counts).
+Each occurrence carries a root-relative path and a deep link to that exact line
+on the scanned commit. Each rule carries a curated "why / how to fix".
 
-Inputs (env, all optional - missing/empty tolerated):
-  CHECKOV_JSON   path to checkov results.json   (list of per-framework reports)
-  KICS_JSON      path to kics results.json       (KICS native JSON)
-  OUT_HTML       output html path                (default: security-report.html)
-  REPO, REF, SHA, RUN_URL, SCAN_SCOPE            metadata for the header
+Inputs (env): CHECKOV_JSON, KICS_JSON, OUT_JSON, REPO, REF, SHA, RUN_ID,
+RUN_URL, PR_NUMBER, PR_TITLE, SCAN_SCOPE
 """
-import json, os, html, datetime, collections
+import json, os, datetime, collections
 
-# ---- severity model -------------------------------------------------------
 SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
-SEV_COLOR = {
-    "CRITICAL": "#7f1d1d", "HIGH": "#b91c1c", "MEDIUM": "#b45309",
-    "LOW": "#4b5563", "INFO": "#6b7280",
-}
-# Checkov OSS emits no severity -> conservative, documented bucketing.
 CHECKOV_SEV = {"secrets": "HIGH", "dockerfile": "MEDIUM", "ansible": "MEDIUM"}
 
+# Curated "why it matters / how to fix" keyed by a lowercase substring of the
+# rule title (KICS) or the Checkov id prefix. First match wins; fallback uses
+# the scanner's own description.
+REMEDIATION = [
+    ("docker socket mounted", (
+        "Mounting /var/run/docker.sock gives the container full control of the Docker daemon on the host - equivalent to root on the machine, so a compromised container can escape and take over the server.",
+        "Remove the docker.sock bind mount. If a container genuinely needs Docker access, use a scoped socket proxy (e.g. tecnativa/docker-socket-proxy) exposing only the required API endpoints, read-only.")),
+    ("sensitive host directory", (
+        "Bind-mounting a sensitive host path (like /, /etc, /var/run) lets the container read or modify host files, breaking isolation.",
+        "Mount only the specific sub-directory the service needs, read-only (`:ro`) where possible. Avoid mounting host system directories.")),
+    ("privileged", (
+        "A privileged container disables most isolation (all capabilities, device access) - a container escape becomes trivial.",
+        "Remove `privileged: true`. Grant only the specific Linux capabilities the workload needs via `cap_add`, and drop the rest with `cap_drop: [ALL]`.")),
+    ("host network", (
+        "Sharing the host network namespace removes network isolation and exposes all host interfaces/ports to the container.",
+        "Remove `network_mode: host`. Use a user-defined bridge network and publish only the ports you need.")),
+    ("not bound to host interface", (
+        "Publishing a port on 0.0.0.0 exposes the service on every network interface of the host, including public ones.",
+        "Bind the published port to the loopback or a specific private interface, e.g. `127.0.0.1:PORT:PORT`, and expose it externally only through the reverse proxy.")),
+    ("no new privileges", (
+        "Without no-new-privileges, a process inside the container can gain additional privileges via setuid binaries.",
+        "Add `security_opt: [\"no-new-privileges:true\"]` to the service.")),
+    ("read-only", (
+        "A writable root filesystem lets an attacker drop tools or tamper with binaries inside the container.",
+        "Set `read_only: true` and mount explicit writable volumes only where the app must write.")),
+    ("healthcheck", (
+        "Without a healthcheck the orchestrator cannot tell if the container is actually serving, so failed containers keep receiving traffic.",
+        "Add a `healthcheck:` block (or a HEALTHCHECK in the Dockerfile) that probes a real readiness endpoint.")),
+    ("memory", (
+        "Without a memory limit a single container can exhaust host RAM and take down every other service (DoS).",
+        "Set a `mem_limit` (compose) / resources limit for the service.")),
+    ("cpu", (
+        "Without a CPU limit one container can starve the rest of the host.",
+        "Set `cpus` / CPU limits for the service.")),
+    ("ckv_secret", (
+        "A credential (password, token, key) appears to be committed to the repository. Anyone with read access - and this repo is public - can use it.",
+        "Remove the secret from the file, rotate/revoke it immediately, and inject it at runtime via an environment variable or secret store. Enable GitHub secret scanning + push protection.")),
+    ("passwords and secrets", (
+        "A value matching a credential pattern was found in infrastructure code. If real, it is exposed to everyone with repo access.",
+        "Confirm whether it is a real secret; if so rotate it and move it to a runtime secret/env var. If it is a non-secret default, ignore or suppress the rule.")),
+    ("ckv_docker", (
+        "The Dockerfile diverges from a hardening best practice (e.g. missing HEALTHCHECK, running as root).",
+        "Apply the specific Dockerfile fix (add HEALTHCHECK, add a non-root USER, pin base image digests).")),
+    ("ckv_ansible", (
+        "The Ansible task weakens security (e.g. TLS validation disabled, permissive file mode).",
+        "Re-enable `validate_certs: true`, tighten file `mode`, and avoid `become` where not required.")),
+]
 
-def load(path):
-    if not path or not os.path.exists(path):
-        return None
-    try:
-        with open(path) as f:
-            return json.load(f)
-    except Exception:
-        return None
+
+def load(p):
+    if p and os.path.exists(p):
+        try:
+            return json.load(open(p))
+        except Exception:
+            return None
+    return None
 
 
 def norm_sev(s):
     s = (s or "").upper()
-    if s in ("TRACE",):
-        return "INFO"
-    return s if s in SEV_ORDER else "MEDIUM"
+    return "INFO" if s == "TRACE" else (s if s in SEV_ORDER else "MEDIUM")
 
 
-def findings_from_checkov(data):
+def remediate(rule_id, title, desc):
+    """Returns (why, fix, curated). curated=True means it came from the vetted map
+    and must NOT be overwritten by LLM enrichment."""
+    key = (title or "").lower() + " " + (rule_id or "").lower()
+    for needle, (why, fix) in REMEDIATION:
+        if needle in key:
+            return why, fix, True
+    return (desc or "This configuration diverges from a security best practice."), \
+           "See the linked guide for remediation steps.", False
+
+
+def category(title):
+    """Normalized category used only for cross-scanner de-duplication. Returns
+    None for rules we never collapse across scanners."""
+    t = (title or "").lower()
+    if any(w in t for w in ("password", "secret", "token", "encryption key",
+                            "private key", "access key", "basic auth",
+                            "high entropy", "credential")):
+        return "secret"
+    return None
+
+
+def from_checkov(data):
     out = []
-    if not data:
-        return out
-    reports = data if isinstance(data, list) else [data]
-    for r in reports:
+    for r in (data if isinstance(data, list) else [data]) if data else []:
         ct = r.get("check_type", "checkov")
         for c in ((r.get("results") or {}).get("failed_checks") or []):
-            fp = (c.get("file_path") or "").lstrip("/")
-            line = (c.get("file_line_range") or [None])[0]
-            out.append({
-                "source": "Checkov", "area": ct,
-                "severity": CHECKOV_SEV.get(ct, "MEDIUM"),
-                "id": c.get("check_id", ""), "title": c.get("check_name", ""),
-                "resource": c.get("resource", ""), "file": fp, "line": line,
-                "guideline": c.get("guideline") or "",
-            })
+            out.append({"source": "Checkov", "area": ct, "severity": CHECKOV_SEV.get(ct, "MEDIUM"),
+                        "id": c.get("check_id", ""), "title": c.get("check_name", ""),
+                        "file": (c.get("file_path") or "").lstrip("/"),
+                        "line": (c.get("file_line_range") or [None])[0],
+                        "desc": "", "guide": c.get("guideline") or ""})
     return out
 
 
-def findings_from_kics(data):
+def from_kics(data):
     out = []
-    if not data:
-        return out
-    for q in (data.get("queries") or []):
-        sev = norm_sev(q.get("severity"))
+    for q in ((data or {}).get("queries") or []):
         for f in (q.get("files") or []):
-            out.append({
-                "source": "KICS", "area": "docker-compose",
-                "severity": sev, "id": q.get("query_id", "") or q.get("query_name", ""),
-                "title": q.get("query_name", ""),
-                "resource": (f.get("resource_name") or f.get("issue_type") or ""),
-                "file": (f.get("file_name") or "").lstrip("/"),
-                "line": f.get("line"),
-                "guideline": q.get("query_url") or "",
-                "desc": f.get("actual_value") or q.get("description", ""),
-                "remediation": q.get("description", ""),
-            })
+            out.append({"source": "KICS", "area": "docker-compose", "severity": norm_sev(q.get("severity")),
+                        "id": q.get("query_id", "") or q.get("query_name", ""), "title": q.get("query_name", ""),
+                        "file": (f.get("file_name") or "").lstrip("/"), "line": f.get("line"),
+                        "desc": q.get("description", ""), "guide": q.get("query_url") or ""})
     return out
 
 
-def esc(x):
-    return html.escape(str(x if x is not None else ""))
-
-
-def sev_badge(sev):
-    return (f'<span class="sev" style="background:{SEV_COLOR.get(sev,"#6b7280")}">'
-            f'{esc(sev.title())}</span>')
-
-
-def build_html(findings, meta):
-    counts = collections.Counter(f["severity"] for f in findings)
-    total = len(findings)
-    areas = collections.Counter(f["area"] for f in findings)
-
-    # severity bar (stacked)
-    bar = ""
-    for s in SEV_ORDER:
-        n = counts.get(s, 0)
-        if not n:
-            continue
-        pct = round(n / total * 100, 1) if total else 0
-        bar += (f'<div class="seg" style="flex:{n};background:{SEV_COLOR[s]}" '
-                f'title="{esc(s)}: {n} ({pct}%)"></div>')
-    if not bar:
-        bar = '<div class="seg" style="flex:1;background:#16a34a" title="No findings"></div>'
-
-    # KPI tiles
-    tiles = [("Total findings", total, "#0f172a")]
-    for s in SEV_ORDER:
-        if counts.get(s):
-            tiles.append((s.title(), counts[s], SEV_COLOR[s]))
-    tile_html = "".join(
-        f'<div class="tile"><div class="n" style="color:{c}">{v}</div>'
-        f'<div class="l">{esc(l)}</div></div>' for l, v, c in tiles)
-
-    # area table
-    area_rows = "".join(
-        f"<tr><td>{esc(a)}</td><td class='r'>{n}</td></tr>"
-        for a, n in areas.most_common())
-
-    # findings grouped by severity then area
-    order = {s: i for i, s in enumerate(SEV_ORDER)}
-    findings.sort(key=lambda f: (order.get(f["severity"], 9), f["area"], f["id"]))
-    rows = ""
-    for f in findings:
-        loc = esc(f["file"]) + (f":{f['line']}" if f.get("line") else "")
-        detail = f.get("remediation") or f.get("desc") or ""
-        link = (f' &middot; <a href="{esc(f["guideline"])}" target="_blank" rel="noopener">guide</a>'
-                if f.get("guideline") else "")
-        rows += (
-            f'<tr class="row">'
-            f'<td>{sev_badge(f["severity"])}</td>'
-            f'<td><div class="t">{esc(f["title"])}</div>'
-            f'<div class="m"><code>{esc(f["id"])}</code> &middot; {esc(f["source"])} &middot; {esc(f["area"])}{link}</div>'
-            f'{("<div class=d>"+esc(detail)+"</div>") if detail else ""}</td>'
-            f'<td class="loc"><code>{loc}</code><div class="m">{esc(f["resource"])}</div></td>'
-            f'</tr>')
-    if not rows:
-        rows = '<tr><td colspan="3" class="ok">No findings in scope. Clean.</td></tr>'
-
-    posture = "No issues" if total == 0 else (
-        "Action required" if counts.get("CRITICAL") or counts.get("HIGH") else "Review recommended")
-    posture_color = "#16a34a" if total == 0 else (
-        "#b91c1c" if counts.get("CRITICAL") or counts.get("HIGH") else "#b45309")
-
-    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Security Assessment - {esc(meta['repo'])} (Option C)</title>
-<style>
-:root{{--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--bg:#f8fafc;--card:#fff}}
-*{{box-sizing:border-box}}
-body{{margin:0;background:var(--bg);color:var(--ink);
- font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}}
-.wrap{{max-width:1040px;margin:0 auto;padding:32px 24px 64px}}
-header.top{{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;
- border-bottom:3px solid var(--ink);padding-bottom:16px}}
-h1{{font-size:22px;margin:0 0 4px}} .sub{{color:var(--muted);font-size:13px}}
-.meta{{text-align:right;font-size:12px;color:var(--muted);line-height:1.7}}
-.meta b{{color:var(--ink)}}
-.posture{{display:inline-block;margin-top:10px;padding:4px 12px;border-radius:999px;
- color:#fff;font-weight:600;font-size:12px}}
-section{{background:var(--card);border:1px solid var(--line);border-radius:12px;
- padding:18px 20px;margin-top:20px}}
-h2{{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
- margin:0 0 14px}}
-.tiles{{display:flex;gap:14px;flex-wrap:wrap}}
-.tile{{flex:1;min-width:120px;background:var(--bg);border:1px solid var(--line);
- border-radius:10px;padding:14px 16px;text-align:center}}
-.tile .n{{font-size:28px;font-weight:700;line-height:1}} .tile .l{{font-size:12px;color:var(--muted);margin-top:6px}}
-.bar{{display:flex;height:14px;border-radius:7px;overflow:hidden;margin-top:16px;background:#e2e8f0}}
-.bar .seg{{min-width:3px}}
-table{{width:100%;border-collapse:collapse;font-size:13px}}
-td,th{{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}}
-td.r{{text-align:right;font-variant-numeric:tabular-nums}}
-.sev{{display:inline-block;color:#fff;font-size:11px;font-weight:700;padding:2px 9px;
- border-radius:999px;white-space:nowrap}}
-.row .t{{font-weight:600}} .row .m{{color:var(--muted);font-size:12px;margin-top:2px}}
-.row .d{{color:#475569;font-size:12px;margin-top:6px}}
-.loc{{white-space:nowrap}} code{{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:12px}}
-.ok{{text-align:center;color:#16a34a;font-weight:600;padding:24px}}
-a{{color:#1d4ed8}} .foot{{color:var(--muted);font-size:11px;margin-top:24px;line-height:1.7}}
-@media print{{body{{background:#fff}} section{{break-inside:avoid;border-color:#ccc}} .tile{{background:#fff}}}}
-</style></head><body><div class="wrap">
-<header class="top">
- <div>
-  <h1>Security Assessment</h1>
-  <div class="sub">{esc(meta['repo'])} &middot; {esc(meta['scope'])}</div>
-  <div class="posture" style="background:{posture_color}">{esc(posture)}</div>
- </div>
- <div class="meta">
-  <div>Branch: <b>{esc(meta['ref'])}</b></div>
-  <div>Commit: <b>{esc(meta['sha'][:7])}</b></div>
-  <div>Scanned: <b>{esc(meta['date'])}</b></div>
-  <div>Scanners: <b>Checkov + KICS</b></div>
- </div>
-</header>
-
-<section>
- <h2>Risk summary</h2>
- <div class="tiles">{tile_html}</div>
- <div class="bar">{bar}</div>
-</section>
-
-<section>
- <h2>Findings by area</h2>
- <table><tr><th>Area</th><th class="r">Findings</th></tr>{area_rows}</table>
-</section>
-
-<section>
- <h2>Findings ({total})</h2>
- <table>
-  <tr><th style="width:96px">Severity</th><th>Issue</th><th style="width:34%">Location</th></tr>
-  {rows}
- </table>
-</section>
-
-<div class="foot">
- Generated {esc(meta['date'])} from commit {esc(meta['sha'][:7])}
- (<a href="{esc(meta['run_url'])}">workflow run</a>). Scope: {esc(meta['scope'])}.
- Report-only mode - findings are informational and do not block merges.
- Severity: KICS assigns native severities; Checkov (OSS) does not emit severities, so its
- findings are bucketed conservatively (secrets = High, other = Medium).
- Full triage with de-duplication and dismissal is available in the repository
- Security &rarr; Code scanning tab.
-</div>
-</div></body></html>"""
-
-
-def build_summary(findings):
-    counts = collections.Counter(f["severity"] for f in findings)
-    total = len(findings)
-    out = ["## 🛡️ Security Assessment — Option C (Ansible deploy)\n"]
-    if total == 0:
-        out.append("**✅ No findings in scope.**\n")
-    else:
-        chips = "  ".join(f"**{s.title()}** {counts[s]}" for s in SEV_ORDER if counts.get(s))
-        out.append(f"**{total} findings**  ·  {chips}\n")
-        out.append("| Severity | Count |")
-        out.append("|---|--:|")
-        for s in SEV_ORDER:
-            if counts.get(s):
-                out.append(f"| {s.title()} | {counts[s]} |")
-        out.append("\n📄 **Full report:** download the **security-report** artifact from this run "
-                   "(printable executive HTML). Engineer triage: **Security → Code scanning**.")
-    return "\n".join(out)
+def blob(repo, sha, path, line):
+    u = f"https://github.com/{repo}/blob/{sha}/{path}"
+    return u + (f"#L{line}" if line else "")
 
 
 def main():
-    findings = (findings_from_checkov(load(os.environ.get("CHECKOV_JSON")))
-                + findings_from_kics(load(os.environ.get("KICS_JSON"))))
-    meta = {
-        "repo": os.environ.get("REPO", "repository"),
-        "ref": os.environ.get("REF", ""),
-        "sha": os.environ.get("SHA", ""),
-        "run_url": os.environ.get("RUN_URL", "#"),
-        "scope": os.environ.get("SCAN_SCOPE", "Deployment Option C (Ansible remote server)"),
-        "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+    meta_repo = os.environ.get("REPO", "org/repo")
+    sha = os.environ.get("SHA", "")
+    findings = from_checkov(load(os.environ.get("CHECKOV_JSON"))) + from_kics(load(os.environ.get("KICS_JSON")))
+
+    # Deterministic cross-scanner de-dupe: if two DIFFERENT scanners flag the same
+    # (file, line) for the same category (e.g. a secret), keep one - highest severity,
+    # Checkov preferred for secrets (its dedicated scanner). Within one scanner, keep all.
+    buckets = {}
+    for f in findings:
+        cat = category(f["title"])
+        if cat is None:
+            continue
+        buckets.setdefault((f["file"], f["line"], cat), []).append(f)
+    drop = set()
+    for items in buckets.values():
+        if len({i["source"] for i in items}) > 1:
+            keep_first = sorted(items, key=lambda i: (SEV_ORDER.index(i["severity"]),
+                                                      0 if i["source"] == "Checkov" else 1))
+            for i in keep_first[1:]:
+                drop.add(id(i))
+    findings = [f for f in findings if id(f) not in drop]
+
+    groups = {}
+    for f in findings:
+        k = (f["severity"], f["source"], f["id"], f["title"])
+        g = groups.setdefault(k, {"severity": f["severity"], "source": f["source"], "area": f["area"],
+                                  "id": f["id"], "title": f["title"], "guide": f["guide"],
+                                  "locations": [], "_desc": f.get("desc", "")})
+        if f["file"]:
+            g["locations"].append({"path": f["file"], "line": f["line"],
+                                   "url": blob(meta_repo, sha, f["file"], f["line"])})
+    grouped = []
+    for g in groups.values():
+        why, fix, curated = remediate(g["id"], g["title"], g.pop("_desc", ""))
+        g["why"], g["fix"], g["curated"], g["count"] = why, fix, curated, len(g["locations"])
+        grouped.append(g)
+    order = {s: i for i, s in enumerate(SEV_ORDER)}
+    grouped.sort(key=lambda g: (order.get(g["severity"], 9), -g["count"]))
+
+    types_by = collections.Counter(g["severity"] for g in grouped)
+    occ_by = collections.Counter(f["severity"] for f in findings)
+    pr = None
+    if os.environ.get("PR_NUMBER"):
+        n = os.environ["PR_NUMBER"]
+        pr = {"number": int(n), "title": os.environ.get("PR_TITLE", ""),
+              "url": f"https://github.com/{meta_repo}/pull/{n}"}
+
+    run = {
+        "meta": {
+            "repo": meta_repo, "branch": os.environ.get("REF", ""), "sha": sha, "shaShort": sha[:7],
+            "runId": os.environ.get("RUN_ID", ""), "runUrl": os.environ.get("RUN_URL", "#"),
+            "pr": pr, "scope": os.environ.get("SCAN_SCOPE", "Ansible Deployment - Remote Server"),
+            "scanners": ["Checkov", "KICS"],
+            "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        },
+        "summary": {"types": len(grouped), "occurrences": len(findings),
+                    "typesBySeverity": {s: types_by.get(s, 0) for s in SEV_ORDER},
+                    "occBySeverity": {s: occ_by.get(s, 0) for s in SEV_ORDER}},
+        "findings": grouped,
     }
-    out_html = os.environ.get("OUT_HTML", "security-report.html")
-    with open(out_html, "w") as f:
-        f.write(build_html(list(findings), meta))
-    print(build_summary(findings))
+    json.dump(run, open(os.environ.get("OUT_JSON", "run.json"), "w"), indent=1)
+
+    # step summary
+    prio = [g for g in grouped if g["severity"] in ("CRITICAL", "HIGH")]
+    print("## 🛡️ Security Scan — Ansible Remote Server Deployment\n")
+    if not findings:
+        print("**✅ No findings in scope.**")
+    else:
+        chips = "  ".join(f"**{s.title()}** {types_by[s]}" for s in SEV_ORDER if types_by.get(s))
+        print(f"**{len(grouped)} issue types** across {len(findings)} occurrences  ·  {chips}\n")
+        if prio:
+            print("### Priority (High & Critical)\n| Severity | Issue | Count |\n|---|---|--:|")
+            for g in prio[:15]:
+                print(f"| {g['severity'].title()} | `{g['id']}` {g['title'][:56]} | {g['count']} |")
+        print("\n📊 **Public dashboard:** see the workflow-run link in the PR, or the Pages URL. "
+              "Per-location triage: **Security → Code scanning**.")
 
 
 if __name__ == "__main__":

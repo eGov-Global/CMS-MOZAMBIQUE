@@ -30,11 +30,13 @@ framework:
 
 # Keep the remaining frameworks focused on Option C's files and out of the other paths.
 skip-path:
-  - "^devops/.*"            # Helm charts + Terraform (Kubernetes + cloud infra - later phases)
-  - "^local-setup/k8s/.*"   # Kubernetes / Tilt manifests (not used by Option C)
+  # NOTE: patterns are wrapped in .* so they match regardless of a leading "/"
+  # in Checkov's file paths (anchored ^ patterns silently fail to match).
+  - ".*devops.*"            # Helm charts + Terraform (Kubernetes + cloud infra - later phases)
+  - ".*local-setup/k8s.*"   # Kubernetes / Tilt manifests (not used by Option C)
   - ".*/tests/.*"           # test fixtures (incl. k8s test manifests)
-  - "^performance/.*"       # perf-test harness, not the deploy
-  - ".*/node_modules/.*"
+  - ".*performance/.*"      # perf-test harness, not the deploy
+  - ".*node_modules.*"
   - ".*/target/.*"
   - ".*/dist/.*"
 

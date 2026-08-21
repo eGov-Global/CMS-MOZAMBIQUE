@@ -1,13 +1,14 @@
-name: Security Scan (Option C)
+name: Security Scan - Ansible Remote Server Deployment
 
-# Security scanning scoped to Deployment Option C (Ansible remote-server setup).
+# Security scanning for the Ansible remote-server deployment path
+# (local-setup/#choose-your-setup-path: `./deploy.sh <tenant>`).
 #
 #   Checkov  -> Ansible playbooks, Dockerfiles, secrets   (config in .checkov.yaml)
 #   KICS     -> docker-compose ports / protocols / privileged / host-network (with severities)
 #
-# Both feed the GitHub Security -> Code scanning tab (SARIF), and are merged into ONE
-# professional, printable HTML report published as the "security-report" artifact
-# (for management / PM / tech-lead review). See .github/SECURITY-SCANNING.md.
+# Both upload SARIF to Security -> Code scanning, and are merged into a per-run
+# report published to the PUBLIC dashboard on the gh-pages branch, which keeps all
+# historical reports (switchable). See .github/SECURITY-SCANNING.md.
 
 on:
   pull_request:
@@ -18,13 +19,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # push reports to gh-pages
   security-events: write # publish SARIF to the Security tab
   pull-requests: read
 
 jobs:
   scan:
-    name: Option C security scan
+    name: Ansible remote-server security scan
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -54,10 +55,11 @@ jobs:
           path: "."
           platform_type: DockerCompose
           exclude_paths: "local-setup/k8s,devops,tests,node_modules"
+          exclude_categories: "Secret Management"
           output_path: kics-results
           output_formats: "json,sarif"
           fail_on: ""
-          ignore_on_exit: results # report-only: succeed even with findings
+          ignore_on_exit: results
 
       - name: Upload KICS SARIF
         if: always()
@@ -66,27 +68,50 @@ jobs:
           sarif_file: kics-results/results.sarif
           category: kics
 
-      # 3) Merge both into one professional HTML report + summary card
-      - name: Build executive report
+      # 3) Merge into a structured run.json + summary card
+      - name: Build report data
         if: always()
         env:
           CHECKOV_JSON: checkov.json
           KICS_JSON: kics-results/results.json
-          OUT_HTML: security-report.html
+          OUT_JSON: run.json
           REPO: ${{ github.repository }}
           REF: ${{ github.head_ref || github.ref_name }}
-          SHA: ${{ github.sha }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_ID: ${{ github.run_id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          SCAN_SCOPE: "Deployment Option C (Ansible remote server)"
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          SCAN_SCOPE: "Ansible Deployment - Remote Server"
         run: python3 .github/scripts/security_report.py >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload report artifact
+      # 3b) OPTIONAL: enrich why/fix + executive summary with Claude.
+      # Runs only on push/schedule/dispatch (not PRs) and only if the secret exists.
+      # No-ops silently when ANTHROPIC_API_KEY is unset.
+      - name: Enrich report with Claude (optional)
+        if: ${{ always() && github.event_name != 'pull_request' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          RUN_JSON: run.json
+          CACHE_FILE: enrich-cache.json
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "${ANTHROPIC_API_KEY}" ]; then echo "no ANTHROPIC_API_KEY secret; skipping enrichment"; exit 0; fi
+          pip install --quiet --disable-pip-version-check anthropic
+          python3 .github/scripts/enrich_report.py || echo "enrichment skipped (non-fatal)"
+
+      # 4) Publish to the public dashboard (gh-pages, keeps history)
+      - name: Publish to public dashboard
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/publish_pages.sh
+
+      - name: Upload run data artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: security-report
-          path: |
-            security-report.html
-            checkov.json
-            kics-results/results.json
+          name: security-report-data
+          path: run.json
           if-no-files-found: warn

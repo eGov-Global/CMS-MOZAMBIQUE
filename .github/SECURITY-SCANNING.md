@@ -1,62 +1,58 @@
-# Security Scanning - Deployment Option C
+# Security Scanning — Ansible Remote Server Deployment
 
-Automated security scanning scoped to **Option C** of the
-[three setup paths](../local-setup/#choose-your-setup-path): `./deploy.sh <tenant>` -
-Ansible configures a remote Ubuntu box and runs the docker-compose stack.
+Automated security scanning for the **Ansible remote-server deployment** path
+([setup path C](../local-setup/#choose-your-setup-path): `./deploy.sh <tenant>`).
+Runs in CI as **`.github/workflows/security-scan.yml`**
+("Security Scan - Ansible Remote Server Deployment").
 
-Runs in CI as **`.github/workflows/security-scan.yml`**.
+## What is scanned
 
-## What is scanned (and by which tool)
+| Tool | Covers |
+|------|--------|
+| **Checkov** | Ansible playbooks, Dockerfiles, secrets (`.checkov.yaml`) |
+| **KICS** | docker-compose: exposed ports, protocols, privileged, host-network, host mounts (native severities) |
 
-| Tool | Covers | Option C surface |
-|------|--------|------------------|
-| **Checkov** | Ansible, Dockerfiles, secrets | `local-setup/ansible/**`, built images, `host_vars` credentials |
-| **KICS** | **docker-compose** (with severities) | published ports, `privileged`, host-network, protocols in the compose files the deploy runs |
+Excluded (other setup paths / later phases): `local-setup/k8s/**`, `devops/**`.
+Later phases: Kubernetes + Helm, then Terraform / cloud infra.
 
-**Explicitly excluded** (other setup paths / later phases): `local-setup/k8s/**`
-(Kubernetes/Tilt) and `devops/**` (Helm charts + Terraform). These produced the large
-`CKV_K8S_*` counts and are not part of Option C.
+## The public dashboard (primary view)
 
-### Later phases
-- Phase 2: Kubernetes path (`local-setup/k8s/**`) + Helm charts.
-- Phase 3: Terraform / cloud infra (`devops/infra-as-code/terraform/**`).
+Every run merges both tools into a per-run `run.json` and publishes it to the
+**`gh-pages`** branch, which **keeps all historical reports**. The dashboard
+(`/.github/security-dashboard/index.html`, copied to gh-pages) is a single page with:
 
-## Where to view results (3 surfaces, by audience)
+- a **report switcher** (pick any past run),
+- **risk summary** tiles + a **severity donut**,
+- a **trend** chart across all reports,
+- **findings grouped by rule** with occurrence counts, **why it matters / how to fix**,
+  and every location **hyperlinked to the exact line** on the scanned commit.
 
-1. **Executive HTML report - for management / PM / tech leads.**
-   Every run produces a self-contained, printable **`security-report`** artifact
-   (download it from the run's *Artifacts* section, or Actions run page). It opens in any
-   browser and prints cleanly to PDF: risk posture, severity breakdown, findings by area,
-   and remediation - no GitHub knowledge needed.
-2. **Run summary card** - a condensed severity table on each workflow run page (quick glance).
-3. **Security -> Code scanning tab** - for engineers: filterable, groupable, dismissable
-   findings with inline PR annotations. Both tools upload here (categories `checkov`, `kics`).
+Public URL (after Pages is enabled): `https://egov-global.github.io/CMS-MOZAMBIQUE/`
+
+### One-time: enable GitHub Pages
+After the first run creates the `gh-pages` branch:
+**Settings → Pages → Build and deployment → Source: Deploy from a branch →
+Branch: `gh-pages` / `/ (root)`**. (The repo is public, so the dashboard is
+public — that is intentional here.)
+
+## Other surfaces
+- **Security → Code scanning** — engineer triage (SARIF from both tools; inline PR annotations).
+- **Actions run summary** — a condensed severity card.
+- **`security-report-data`** artifact — the raw `run.json`.
 
 ## Reading the numbers
-- **Passed / Failed** = each policy is evaluated against each resource; failed = that resource
-  violates the policy. Counts are policy-vs-resource evaluations, not distinct bugs.
-- **Severity**: KICS assigns native Critical/High/Medium/Low. Checkov (OSS) does not emit
-  severities, so in the merged report its findings are bucketed conservatively
-  (secrets = High, other = Medium).
-- The run's **Annotations** panel caps at ~10 lines - a display limit, not the total.
-
-## When it runs
-Every pull request; pushes to `master` / `develop`; weekly (Mon 03:00 UTC); and on demand
-(**Actions -> Security Scan (Option C) -> Run workflow**).
+- **Passed / Failed** = each policy evaluated against each resource; failed = violates it.
+- **Count** = how many times one rule matched (occurrences), grouped into one issue type.
+- **Severity**: KICS native; Checkov (OSS) bucketed (secrets = High, other = Medium).
 
 ## Enforcement (currently report-only)
-`soft-fail: true` in `.checkov.yaml` and `fail_on: ""` for KICS report without blocking.
-To enforce after triage: set `soft-fail: false` (Checkov) and `fail_on: high` (KICS), then add
-**"Option C security scan"** as a required status check in branch protection.
+`soft-fail: true` (Checkov) and `fail_on: ""` (KICS). To enforce after triage: set
+`soft-fail: false` + KICS `fail_on: high`, then add the check as required in branch protection.
 
-## Run locally
-```bash
-pip install checkov
-checkov -d .                                   # Checkov, Option C scope (.checkov.yaml)
-docker run -t -v "$PWD:/path" checkmarx/kics:latest scan -p /path -t DockerCompose \
-  --exclude-paths /path/local-setup/k8s,/path/devops   # KICS, compose only
-```
-
-## Not covered: application-code logic
-Checkov and KICS scan configuration, not Java/Node application-logic bugs. For that, enable
-GitHub's free **CodeQL default setup** (*Settings -> Code security -> Code scanning*).
+## Files
+- `.github/workflows/security-scan.yml` — the pipeline
+- `.checkov.yaml` — Checkov scope
+- `.github/scripts/security_report.py` — merge scanners → `run.json`
+- `.github/scripts/build_manifest.py` — index runs for the switcher/trend
+- `.github/scripts/publish_pages.sh` — publish to gh-pages (keeps history)
+- `.github/security-dashboard/index.html` — the dashboard SPA
