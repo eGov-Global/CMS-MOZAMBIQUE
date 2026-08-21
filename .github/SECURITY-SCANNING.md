@@ -27,7 +27,7 @@ Every run merges both tools into a per-run `run.json` and publishes it to the
 - **findings grouped by rule** with occurrence counts, **why it matters / how to fix**,
   and every location **hyperlinked to the exact line** on the scanned commit.
 
-Public URL (after Pages is enabled): `https://egov-global.github.io/CMS-MOZAMBIQUE/`
+Public URL (after Pages is enabled): `https://egov-global.github.io/CMS-MOZAMBIQUE/security_scan`
 
 ### One-time: enable GitHub Pages
 After the first run creates the `gh-pages` branch:

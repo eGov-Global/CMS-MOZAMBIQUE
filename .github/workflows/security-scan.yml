@@ -3,19 +3,17 @@ name: Security Scan - Ansible Remote Server Deployment
 # Security scanning for the Ansible remote-server deployment path
 # (local-setup/#choose-your-setup-path: `./deploy.sh <tenant>`).
 #
-#   Checkov  -> Ansible playbooks, Dockerfiles, secrets   (config in .checkov.yaml)
+#   Checkov  -> Ansible deployment code (local-setup/ansible) - config hardening
 #   KICS     -> docker-compose ports / protocols / privileged / host-network (with severities)
 #
-# Both upload SARIF to Security -> Code scanning, and are merged into a per-run
-# report published to the PUBLIC dashboard on the gh-pages branch, which keeps all
-# historical reports (switchable). See .github/SECURITY-SCANNING.md.
+# Secret detection is handled by GitHub native secret scanning (lower false positives
+# than entropy-based scanners), not Checkov.
+#
+# MANUAL trigger only: run it from Actions -> "Run workflow" and pick the branch in the
+# dropdown. Both tools upload SARIF to Security -> Code scanning, and are merged into a
+# per-run report published to the public dashboard (gh-pages). See .github/SECURITY-SCANNING.md.
 
 on:
-  pull_request:
-  push:
-    branches: [master, develop]
-  schedule:
-    - cron: "0 3 * * 1" # weekly, Monday 03:00 UTC
   workflow_dispatch:
 
 permissions:
@@ -31,11 +29,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 1) Checkov - Ansible / Dockerfile / Secrets (scoped in .checkov.yaml)
-      - name: Checkov (Ansible / Dockerfile / Secrets)
+      # 1) Checkov - Ansible deployment code only (scoped to local-setup/ansible to avoid
+      #    scanning Helm/k8s/devops, which produced entropy-based secret false positives)
+      - name: Checkov (Ansible)
         if: always()
         uses: bridgecrewio/checkov-action@v12
         with:
+          directory: local-setup/ansible
           config_file: .checkov.yaml
           output_format: cli,sarif,json
           output_file_path: console,checkov.sarif,checkov.json

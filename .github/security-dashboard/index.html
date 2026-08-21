@@ -29,9 +29,14 @@ button.print{font:inherit;padding:7px 12px;border:1px solid var(--line);border-r
 @media(max-width:820px){.grid{grid-template-columns:1fr}}
 section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
 h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 14px}
-.tiles{display:flex;gap:12px;flex-wrap:wrap}
-.tile{flex:1;min-width:92px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 10px;text-align:center}
-.tile .n{font-size:26px;font-weight:800;line-height:1}.tile .l{font-size:11px;color:var(--muted);margin-top:5px}
+.rbig{font-size:20px;font-weight:700}.rbig b{color:var(--high)}
+.rsub{font-size:12px;color:var(--muted);margin-top:4px}
+.hct{width:100%;border-collapse:collapse;font-size:13px;margin-top:14px}
+.hct th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:6px 6px;border-bottom:1px solid var(--line)}
+.hct td{padding:9px 6px;border-bottom:1px solid var(--line)}
+.hct td.r,.hct th.r{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.hdot{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:8px;vertical-align:middle}
+.atag{font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:0 6px;margin-left:6px}
 .chartbox{position:relative;height:230px}
 .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--muted)}
 .legend span{display:inline-flex;align-items:center;gap:6px}
@@ -88,7 +93,8 @@ details.hard>summary{cursor:pointer;font-weight:700;color:var(--ink);font-size:1
  <div class="grid">
   <section>
    <h2>Risk summary</h2>
-   <div class="tiles" id="tiles"></div>
+   <div id="riskHead"></div>
+   <div id="highWrap"><table class="hct" id="highTable"></table></div>
   </section>
   <section>
    <h2>Findings by severity</h2>
@@ -161,10 +167,24 @@ async function loadRun(file){
   const ew=$("execWrap");
   if(m.executive_summary){$("exec").textContent=m.executive_summary;ew.style.display="";}
   else{ew.style.display="none";}
-  // tiles
-  const t=[["Issue types",s.types,"#0f172a"]];
-  SEV.forEach(x=>{ if(s.typesBySeverity[x]) t.push([x[0]+x.slice(1).toLowerCase(),s.typesBySeverity[x],COL[x]]); });
-  $("tiles").innerHTML=t.map(([l,n,c])=>`<div class="tile"><div class="n" style="color:${c}">${n}</div><div class="l">${esc(l)}</div></div>`).join("");
+  // risk summary: list HIGH/CRITICAL categories with occurrence counts; medium summarized
+  const highGroups=(d.findings||[]).filter(f=>f.severity==="CRITICAL"||f.severity==="HIGH").sort((a,b)=>b.count-a.count);
+  const hiTypes=(s.typesBySeverity.CRITICAL||0)+(s.typesBySeverity.HIGH||0);
+  const hiOcc=(s.occBySeverity.CRITICAL||0)+(s.occBySeverity.HIGH||0);
+  const medT=s.typesBySeverity.MEDIUM||0, medO=s.occBySeverity.MEDIUM||0;
+  $("riskHead").innerHTML=
+    `<div class="rbig"><b>${hiTypes}</b> high-severity categor${hiTypes===1?'y':'ies'}`+
+    `<span class="muted"> · ${hiOcc} occurrence${hiOcc===1?'':'s'}</span></div>`+
+    `<div class="rsub">${medT} medium categor${medT===1?'y':'ies'} (${medO} occurrences) · ${s.types} issue types total</div>`;
+  if(highGroups.length){
+    $("highWrap").style.display="";
+    $("highTable").innerHTML=
+      `<tr><th>High category</th><th class="r">Count</th></tr>`+
+      highGroups.map(f=>`<tr><td><span class="hdot" style="background:${COL[f.severity]}"></span>${esc(f.title)} <span class="atag">${esc(f.area)}</span></td><td class="r">${f.count}</td></tr>`).join("");
+  } else {
+    $("highWrap").style.display="";
+    $("highTable").innerHTML='<tr><td class="ok" style="padding:14px">No high-severity issues.</td></tr>';
+  }
   // donut (occurrences by severity)
   drawDonut(s.occBySeverity);
   // area
