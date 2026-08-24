@@ -45,9 +45,11 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--mute
 .fp{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
 .fp input{margin:0}
 .tri{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.tri.act{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}
+.tri.acc{background:#e2e8f0;color:#475569;cursor:default}
 .tri.fp{background:#fef3c7;color:#92400e;border:1px solid #fcd34d;cursor:default}
-.tri.nr{background:#e2e8f0;color:#475569}
-.tri.ok{background:#dcfce7;color:#166534}
+.pri{font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;color:#fff;white-space:nowrap}
+.pri.P1{background:#dc2626}.pri.P2{background:#f59e0b}.pri.P3{background:#64748b}
 .vf{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:8px;text-transform:none;letter-spacing:0}
 .vf.ok{background:#dcfce7;color:#166534}
 .vf.nr{background:#fef3c7;color:#92400e}
@@ -94,7 +96,8 @@ details.hard>summary{cursor:pointer;font-weight:700;color:var(--ink);font-size:1
    <div style="margin-top:10px"><span class="posture" id="posture">—</span></div>
   </div>
   <div class="controls">
-   <label class="fp"><input type="checkbox" id="fpToggle" onchange="renderFindings()"> Hide likely false positives</label>
+   <label class="fp"><input type="checkbox" id="fpToggle" checked onchange="renderFindings()"> Hide non-actionable</label>
+   <a class="print" id="xlsxBtn" href="#" download style="display:none;text-decoration:none">⬇ Export audit (Excel)</a>
    <label class="muted" for="runSel">Report</label>
    <select id="runSel" aria-label="Select report run"></select>
    <button class="print" onclick="window.print()">Print / PDF</button>
@@ -215,21 +218,29 @@ async function loadRun(file){
   if(Array.isArray(m.priority_actions)&&m.priority_actions.length){
     $("priList").innerHTML=m.priority_actions.map(a=>`<li>${esc(a)}</li>`).join("");pw.style.display="";
   } else pw.style.display="none";
-  // findings (respects the hide-FP toggle)
+  // audit workbook download for this run (data/<runId>.xlsx, generated alongside the json)
+  const xb=$("xlsxBtn"), xlsx=(file||"").replace(/\.json$/,".xlsx");
+  if(xlsx&&xlsx!==file){xb.href=xlsx;xb.style.display="";}else{xb.style.display="none";}
+  // findings (grouped: action-required vs not-tracked; toggle hides the latter)
   CUR=d; renderFindings();
-  const eng=m.engine?`triage & remediation are ${esc(m.engine)}-generated and dual-pass verified`:`remediation is curated`;
-  $("foot").innerHTML=`Report-only mode · Count = times each rule matched · file links open the exact line on commit ${esc(m.shaShort)} · ${eng} · per-location detail in Security → Code scanning.`;
+  const eng=m.engine?`triage, remediation & priority are ${esc(m.engine)}-generated, fail-safe dual-pass verified`:`remediation is curated`;
+  $("foot").innerHTML=`Report-only mode · Count = times each rule matched · file links open the exact line on commit ${esc(m.shaShort)} · ${eng} · &ldquo;Action required&rdquo; = tracked in the Excel audit; acceptable &amp; false positives are documented but not tracked · per-location detail in Security → Code scanning.`;
 }
+const PRO={P1:0,P2:1,P3:2,"":3};
+const statusOf=f=>(f.triage||{}).status||"action_required";
+const prioOf=f=>(f.triage||{}).priority||(statusOf(f)==="action_required"?"P2":"");
 function renderFindings(){
   const d=CUR; if(!d) return;
-  const hideFP=(document.getElementById("fpToggle")||{}).checked;
-  const vis=(d.findings||[]).filter(f=>!(hideFP&&(f.triage||{}).verdict==="likely_false_positive"));
-  const prio=vis.filter(f=>f.severity==="CRITICAL"||f.severity==="HIGH");
-  const hard=vis.filter(f=>f.severity!=="CRITICAL"&&f.severity!=="HIGH");
-  $("prioTitle").innerHTML=`Priority findings — High &amp; Critical (${prio.length} types)`;
-  $("prio").innerHTML=prio.map(card).join("")||'<p class="muted">None.</p>';
-  $("hardWrap").innerHTML=hard.length?
-    `<details class="hard"><summary>Hardening recommendations — ${hard.length} issue types (Medium / Low / Info)</summary>${hard.map(card).join("")}</details>`:"";
+  const hideNon=(document.getElementById("fpToggle")||{}).checked;
+  const all=d.findings||[];
+  const action=all.filter(f=>statusOf(f)==="action_required")
+    .sort((a,b)=>(PRO[prioOf(a)]-PRO[prioOf(b)])||(SEV.indexOf(a.severity)-SEV.indexOf(b.severity))||(b.count-a.count));
+  const nontracked=all.filter(f=>statusOf(f)!=="action_required");
+  $("prioTitle").innerHTML=`Action required — ${action.length} issue type${action.length===1?"":"s"}`;
+  $("prio").innerHTML=action.map(card).join("")||'<p class="muted">No action-required findings.</p>';
+  if(nontracked.length && !hideNon){
+    $("hardWrap").innerHTML=`<details class="hard"><summary>Not tracked — acceptable &amp; false positives (${nontracked.length} issue types)</summary>${nontracked.map(card).join("")}</details>`;
+  } else $("hardWrap").innerHTML="";
 }
 
 function card(f){
@@ -240,18 +251,21 @@ function card(f){
   const more=locs.length>60?`<li class="muted">and ${locs.length-60} more…</li>`:"";
   const det=locs.length>1?`<details class="loc"><summary>${locs.length} locations</summary><ul class="locs">${list}${more}</ul></details>`:"";
   const guide=f.guide?` · <a href="${esc(f.guide)}" target="_blank" rel="noopener">reference ↗</a>`:"";
-  const tv=(f.triage||{}).verdict, treason=esc((f.triage||{}).reason||"");
-  const tri = tv==="likely_false_positive" ? `<span class="tri fp" title="${treason}">Likely false positive</span>`
-            : tv==="needs_review" ? `<span class="tri nr" title="${treason}">Needs review</span>`
-            : tv==="confirmed" ? `<span class="tri ok" title="${treason}">Confirmed</span>` : "";
+  const tr=f.triage||{}, st=tr.status, treason=esc(tr.reason||"");
+  const pri = st==="action_required" ? `<span class="pri ${prioOf(f)}" title="Remediation priority">${prioOf(f)}</span>` : "";
+  const tri = st==="action_required" ? `<span class="tri act" title="${treason}">Action required</span>`
+            : st==="acceptable" ? `<span class="tri acc" title="${treason}">Acceptable</span>`
+            : st==="false_positive" ? `<span class="tri fp" title="${treason}">False positive</span>` : "";
+  const cat=f.category?`<span class="atag" title="Category">${esc(f.category)}</span>`:"";
+  const expo=(tr.exposure&&tr.exposure!=="unknown")?`<span class="atag" title="Exposure">${esc(tr.exposure)}</span>`:"";
   const vf=f.verify;
   const vmark = vf ? (vf.verified ? `<span class="vf ok" title="Passed dual-pass review">✓ verified</span>`
                                   : `<span class="vf nr" title="${esc(vf.note||'flagged by a reviewer')}">⚠ needs review</span>`) : "";
   const aitag = f.enriched?' · <span class="aitag" title="AI-generated remediation">✨ AI</span>':'';
   return `<div class="finding">
-   <div class="h"><span class="sev ${f.severity}" style="background:${COL[f.severity]}">${f.severity[0]+f.severity.slice(1).toLowerCase()}</span>
+   <div class="h"><span class="sev ${f.severity}" style="background:${COL[f.severity]}">${f.severity[0]+f.severity.slice(1).toLowerCase()}</span>${pri}
     <span class="t">${esc(f.title)}</span>${tri}<span class="cnt">×${f.count}</span></div>
-   <div class="rule"><code>${esc(f.id)}</code> · ${esc(f.source)} · ${esc(f.area)}${guide}${aitag}</div>
+   <div class="rule"><code>${esc(f.id)}</code> · ${esc(f.source)} · ${esc(f.area)} ${cat}${expo}${guide}${aitag}</div>
    <div class="wf"><div class="b"><div class="k">Why it matters</div>${esc(f.why)}</div>
     <div class="b"><div class="k">How to fix ${vmark}</div>${esc(f.fix)}</div></div>
    <div style="margin-top:10px">First location: ${firstLink}${det}</div>
