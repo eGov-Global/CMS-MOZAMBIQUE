@@ -94,40 +94,59 @@ def _suggested_model(body):
     return m.group(1) if m else None
 
 
+# If the primary model is overloaded (503 "high demand") or unavailable, fall back to
+# these in order. Lite variants have far more free-tier headroom, so they ride out
+# capacity spikes on the flagship flash model while staying capable for annotation.
+FALLBACKS = ["gemini-flash-lite-latest", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.0-flash"]
+
+
+def _chat(model, messages, temperature, max_tokens, use_json):
+    body = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
+    if use_json:
+        body["response_format"] = {"type": "json_object"}
+    req = urllib.request.Request(BASE + "/chat/completions", data=json.dumps(body).encode(),
+                                 headers={"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return json.loads(r.read())["choices"][0]["message"]["content"]
+
+
 def call(messages, temperature=0.2, max_tokens=4096):
-    """One OpenAI-compatible chat call. Returns text or None. Self-heals: if the API
-    rejects the model with 'no longer available, use models/X', switch to X globally and
-    retry (once). Also retries transient errors and drops response_format on a 400."""
+    """One OpenAI-compatible chat call, resilient by design. Walks a candidate chain
+    (primary model first, then lighter fallbacks). Per model: retries transient errors
+    (503 "high demand", timeouts, 429) with exponential backoff, drops response_format
+    on a 400, and honours an API 'use models/X' recommendation. Returns text or None.
+    Whatever model first succeeds becomes the new default for the rest of the run."""
     global MODEL
-    use_json = True
-    switched = False
-    for attempt in range(4):
-        body = {"model": MODEL, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
-        if use_json:
-            body["response_format"] = {"type": "json_object"}
-        try:
-            req = urllib.request.Request(BASE + "/chat/completions", data=json.dumps(body).encode(),
-                                         headers={"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=90) as r:
-                return json.loads(r.read())["choices"][0]["message"]["content"]
-        except urllib.error.HTTPError as e:
-            eb = ""
-            try: eb = e.read().decode("utf-8", "ignore")
-            except Exception: pass
-            if e.code == 404 and not switched:
-                sug = _suggested_model(eb)
-                if sug and sug != MODEL:
-                    log(f"model '{MODEL}' unavailable; API recommends '{sug}' - switching")
-                    MODEL = sug; switched = True; continue
-            if e.code == 400 and use_json:
-                use_json = False; continue  # provider rejected response_format
-            if e.code in (408, 429, 500, 502, 503) and attempt < 3:
-                time.sleep(3 * (attempt + 1)); continue
-            log(f"LLM HTTP {e.code}: {eb[:200]}"); return None
-        except Exception as e:
-            if attempt < 3:
-                time.sleep(2); continue
-            log(f"LLM error: {e}"); return None
+    candidates = [MODEL] + [m for m in FALLBACKS if m != MODEL]
+    ci = 0
+    while ci < len(candidates):
+        model = candidates[ci]; use_json = True
+        for attempt in range(4):
+            try:
+                out = _chat(model, messages, temperature, max_tokens, use_json)
+                if model != MODEL:
+                    log(f"switched to model '{model}' (previous unavailable/overloaded)")
+                    MODEL = model
+                return out
+            except urllib.error.HTTPError as e:
+                eb = ""
+                try: eb = e.read().decode("utf-8", "ignore")
+                except Exception: pass
+                if e.code == 404:
+                    sug = _suggested_model(eb)
+                    if sug and sug not in candidates:
+                        candidates.insert(ci + 1, sug)  # try the API's recommendation next
+                    break  # a 404 won't clear on retry; move to next candidate
+                if e.code == 400 and use_json:
+                    use_json = False; continue  # provider rejected response_format
+                if e.code in (408, 429, 500, 502, 503) and attempt < 3:
+                    time.sleep(min(30, 4 * (2 ** attempt))); continue  # 4, 8, 16s
+                log(f"LLM HTTP {e.code} on {model}: {eb[:160]}"); break
+            except Exception as e:
+                # A timeout/connection error means this model is too slow or overloaded;
+                # pivoting to a lighter fallback beats burning another 120s on the same one.
+                log(f"LLM error on {model}: {e}"); break
+        ci += 1
     return None
 
 
