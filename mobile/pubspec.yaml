@@ -27,6 +27,11 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.1
+  # Imported directly by test/widget_test.dart to fake the plugin platforms;
+  # constraints match the versions already resolved in pubspec.lock.
+  webview_flutter_platform_interface: ^2.15.1
+  connectivity_plus_platform_interface: ^2.1.0
+  plugin_platform_interface: ^2.1.8
 
 flutter:
   uses-material-design: true
