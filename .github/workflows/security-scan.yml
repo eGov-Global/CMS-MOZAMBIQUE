@@ -125,6 +125,18 @@ jobs:
           REPO: ${{ github.repository }}
         run: python3 .github/scripts/enrich_report.py || echo "enrichment skipped (non-fatal)"
 
+      # 3c) Build the multi-sheet audit workbook (Excel) for team tracking.
+      # Tracks only action-required findings; acceptable/false-positive are documented
+      # on a separate sheet, not in the tracking list.
+      - name: Build audit workbook (Excel)
+        if: always()
+        env:
+          RUN_JSON: run.json
+          OUT_XLSX: security-audit.xlsx
+        run: |
+          python3 -m pip install --quiet openpyxl 2>/dev/null || pip3 install --quiet openpyxl
+          python3 .github/scripts/build_audit_xlsx.py || echo "audit workbook skipped (non-fatal)"
+
       # 4) Publish to the public dashboard (gh-pages, keeps history)
       - name: Publish to public dashboard
         if: always()
@@ -137,5 +149,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: security-report-data
-          path: run.json
+          path: |
+            run.json
+            security-audit.xlsx
           if-no-files-found: warn

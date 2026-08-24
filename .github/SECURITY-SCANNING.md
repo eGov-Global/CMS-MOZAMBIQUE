@@ -36,14 +36,34 @@ One-time to make the dashboard live: **Settings -> Pages -> Deploy from a branch
 
 ## AI enrichment (optional, free)
 
-A 5-stage agent pipeline enriches each report when a key is present. Engine is any
-OpenAI-compatible LLM; default is **Google Gemini**.
+An agent pipeline enriches each report when a key is present. Engine is any
+OpenAI-compatible LLM; default is **Google Gemini** (model auto-discovered, current-gen
+first, with self-heal fallback to a lighter model on deprecation/overload).
 
-1. **context** - reads the real code around each finding
-2. **triage** - confirmed / likely false positive / needs review (+ reason)
-3. **remediate** - context-aware why/fix grounded in the actual code
+1. **context** - reads the real code around each finding and the deployment topology
+   (compose services on a private bridge network behind an nginx reverse proxy)
+2. **triage** - **deployment-aware**, classifies each finding as **action_required** /
+   **acceptable** (real but okay in this context) / **false_positive**, with a
+   **priority** (P1/P2/P3) and **exposure** (public/internal/local). Run as a **fail-safe
+   dual pass**: a primary assessment plus an independent skeptical audit. A finding is
+   only downgraded out of action_required when *both* passes agree - any disagreement
+   keeps it action_required, so real hardening gaps are never silently hidden.
+3. **remediate** - context-aware why/fix grounded in the actual code, with copy-pasteable config
 4. **verify** - **dual-pass critic**: a fix is "verified" only if two independent reviewers agree
-5. **summary** - executive summary + prioritized action list
+5. **summary** - executive summary + prioritized action list over the action-required set
+
+## Audit workbook (Excel)
+
+Each run also produces a multi-sheet **`security-audit.xlsx`** (published as
+`security_scan/security-audit-latest.xlsx` and per-run `data/<runId>.xlsx`, and attached
+to the Actions run as an artifact). Download it from the dashboard's **Export audit (Excel)**
+button. Sheets:
+
+- **Summary** - counts by tracking status, priority, and category
+- **Action Required** - the tracking list (only findings that genuinely need fixing), with
+  blank Status / Owner / Target date / Notes columns for the team, plus why, fix, reference and location
+- **Not Tracked** - acceptable and false-positive findings with the reason they are excluded
+- **All Locations** - every occurrence of an action-required finding (file:line + deep link)
 
 **Enable:** add a repo secret **`GEMINI_API_KEY`** (free key from
 [aistudio.google.com](https://aistudio.google.com); a personal Google account works
@@ -62,7 +82,10 @@ Any failure falls back to curated text - it never breaks the pipeline.
 
 - **Count** = how many times a rule matched, grouped into one issue type.
 - **Severity** = KICS native; Checkov findings are bucketed (Medium).
-- **Triage** (AI) = confirmed / likely false positive / needs review.
+- **Status** (AI) = action required / acceptable / false positive. Only **action required**
+  is tracked in the Excel audit; the "Hide non-actionable" toggle focuses the dashboard on it.
+- **Priority** (AI) = P1 (escape/host takeover) / P2 (escalation given a foothold) / P3 (defense-in-depth).
+- **Category** = security domain (Container Isolation, Hardening, Network Exposure, TLS, Secrets, Resource Controls, Data Sharing).
 - **Verify** (AI) = the fix passed both critics (`verified`) or was flagged (`needs review`).
 
 ## Enforcement (currently report-only)
@@ -77,8 +100,9 @@ required in branch protection.
 |------|------|
 | `.github/workflows/security-scan.yml` | the pipeline |
 | `.checkov.yaml` | Checkov scope (Ansible) |
-| `.github/scripts/security_report.py` | merge scanners -> `run.json` |
-| `.github/scripts/enrich_report.py` | Gemini agent pipeline (optional) |
+| `.github/scripts/security_report.py` | merge scanners -> `run.json` (+ curated remediation, categories) |
+| `.github/scripts/enrich_report.py` | Gemini agent pipeline: deployment-aware triage, remediate, verify (optional) |
+| `.github/scripts/build_audit_xlsx.py` | build the multi-sheet Excel audit workbook |
 | `.github/scripts/build_manifest.py` | index runs for the switcher/trend |
 | `.github/scripts/publish_pages.sh` | publish to `gh-pages` (keeps history) |
 | `.github/security-dashboard/index.html` | the dashboard |

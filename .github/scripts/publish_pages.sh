@@ -27,6 +27,12 @@ cp run.json "$work/$SUBDIR/data/${RUN_ID}.json"
 cp .github/security-dashboard/index.html "$work/$SUBDIR/index.html"
 python3 .github/scripts/build_manifest.py "$work/$SUBDIR/data" > "$work/$SUBDIR/manifest.json"
 
+# audit workbook: this run's copy + a stable "latest" the dashboard links to
+if [ -f security-audit.xlsx ]; then
+  cp security-audit.xlsx "$work/$SUBDIR/data/${RUN_ID}.xlsx"
+  cp security-audit.xlsx "$work/$SUBDIR/security-audit-latest.xlsx"
+fi
+
 # carry the LLM enrichment cache forward (kept at root, not web-served)
 [ -f enrich-cache.json ] && cp enrich-cache.json "$work/enrich-cache.json" || true
 touch "$work/.nojekyll"

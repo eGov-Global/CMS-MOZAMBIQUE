@@ -202,7 +202,7 @@ for f in findings:
     if not r["locs"] and f.get("locations"):
         r["locs"] = f["locations"][:2]
 for r in rules.values():
-    r["snippet"] = "\n---\n".join(snippet(l["path"], l.get("line")) for l in r["locs"]) or "(no code context)"
+    r["snippet"] = "\n---\n".join(snippet(l["path"], l.get("line"), ctx=10) for l in r["locs"]) or "(no code context)"
 
 cache = {}
 if os.path.exists(CACHE):
@@ -220,14 +220,69 @@ elif REPO:
 todo = [r for r in rules.values() if not (cache.get(r["id"]) or {}).get("why")]
 CTX = "Ansible remote-server deployment (setup path C: ./deploy.sh) plus its docker-compose stack for DIGIT/CMS, a public-sector complaint-management platform. The repository is PUBLIC."
 
+# Deployment topology the triager must reason WITH, so it judges real-world exposure
+# instead of the raw rule. This mirrors how this stack actually runs.
+DEPLOY = (
+    "Deployment reality: the docker-compose services run on a single remote server on a private "
+    "Docker bridge network. A reverse proxy / API gateway (nginx) is the only intended public "
+    "entry point; most service ports are reachable only container-to-container, not published to "
+    "the host's public interface. Data is citizen grievance data (confidential). Judge each finding "
+    "by whether an attacker who has (a) network position or (b) a foothold in one container could "
+    "actually abuse it here - NOT by whether the rule merely matched."
+)
+
+RUBRIC = (
+    "Classify each finding into exactly one status:\n"
+    "- action_required: a genuine weakness a hardening standard (CIS Docker Benchmark / OWASP) "
+    "would require fixing AND that is realistically abusable in this deployment. Examples that are "
+    "almost always action_required: mounting the Docker socket, sharing a host namespace (pid/ipc/network), "
+    "bind-mounting sensitive host paths, disabling TLS certificate validation, http:// for calls carrying "
+    "credentials/tokens, not dropping Linux capabilities, missing no-new-privileges.\n"
+    "- acceptable: the condition is real but a defensible, low-risk choice in THIS context and not worth "
+    "tracking as security debt - e.g. a service binding 0.0.0.0 that is NOT published to the host, a missing "
+    "healthcheck, or absent CPU/memory limits on an internal service (reliability, not a security hole), a "
+    "read-only named volume shared between trusted services.\n"
+    "- false_positive: the scanner misfired - the flagged condition does not actually hold (templated value, "
+    "example/placeholder file, the control is present by another means).\n"
+    "Bias to caution: if unsure whether something is abusable, choose action_required. Never call a real "
+    "hardening gap a false_positive.\n"
+    "priority (only when action_required): P1 = direct container escape / host takeover / credential exposure; "
+    "P2 = enables privilege escalation or lateral movement given a foothold; P3 = defense-in-depth.\n"
+    "exposure: public (reachable from internet) | internal (container-to-container only) | local (host-only) | unknown."
+)
+
 
 # ---- stages ----------------------------------------------------------------
+def _tri_payload(rs):
+    return [{"id": r["id"], "title": r["title"], "severity": r["severity"], "area": r["area"],
+             "file": (r["locs"][0]["path"] if r["locs"] else ""), "snippet": r["snippet"]} for r in rs]
+
+
 def stage_triage(rs):
+    """Primary, deployment-aware assessment: status + priority + exposure + reason."""
     if not rs: return {}
-    payload = [{"id": r["id"], "title": r["title"], "severity": r["severity"], "area": r["area"], "snippet": r["snippet"]} for r in rs]
     return rows(call([
-        {"role": "system", "content": f"You are a security triage engineer for a {CTX} Decide, from the code snippet, whether each finding is a real security issue or a likely false positive (templating, example/placeholder files, intentional benign config)."},
-        {"role": "user", "content": 'Return ONLY JSON: {"results":[{"id":"...","verdict":"confirmed|likely_false_positive|needs_review","confidence":0.0,"reason":"<=20 words"}]}\n\nFindings:\n' + json.dumps(payload)}]))
+        {"role": "system", "content": f"You are a senior application-security engineer triaging findings for a {CTX} {DEPLOY}\n\n{RUBRIC}\n\nReason from the actual code snippet and file before deciding."},
+        {"role": "user", "content": 'Return ONLY JSON: {"results":[{"id":"...","status":"action_required|acceptable|false_positive","priority":"P1|P2|P3","exposure":"public|internal|local|unknown","confidence":0.0,"reason":"<=25 words, evidence-based"}]}\n\nFindings:\n' + json.dumps(_tri_payload(rs))}]))
+
+
+def stage_triage_audit(rs):
+    """Independent skeptical second pass (fail-safe). Only agrees to dismiss a finding
+    when confident it cannot be abused; otherwise keeps it action_required."""
+    if not rs: return {}
+    return rows(call([
+        {"role": "system", "content": f"You are a skeptical lead security auditor reviewing a {CTX} {DEPLOY}\n\nFor each finding decide independently whether it TRULY needs action here, or is safely acceptable / a false positive. Only dismiss (acceptable/false_positive) when you are confident it cannot be abused by an attacker with network position or a single-container foothold. When in doubt, keep it action_required. Do not rubber-stamp."},
+        {"role": "user", "content": 'Return ONLY JSON: {"results":[{"id":"...","status":"action_required|acceptable|false_positive","reason":"<=20 words"}]}\n\nFindings:\n' + json.dumps(_tri_payload(rs))}]))
+
+
+def _final_status(a, b):
+    """Combine the two triage passes. Downgrade out of action_required ONLY when both
+    passes agree it is non-actionable; any action_required vote (or disagreement) wins."""
+    sa = (a or {}).get("status"); sb = (b or {}).get("status")
+    non_act = {"acceptable", "false_positive"}
+    if sa in non_act and sb in non_act:
+        return "false_positive" if sa == sb == "false_positive" else "acceptable"
+    return "action_required"
 
 
 def stage_remediate(rs):
@@ -254,7 +309,8 @@ def stage_verify(rs, rem, n):
 
 if todo:
     log(f"enriching {len(todo)} new rule(s) via {MODEL} ...")
-    tri = stage_triage(todo)
+    tri = stage_triage(todo)            # primary deployment-aware assessment
+    aud = stage_triage_audit(todo)      # skeptical fail-safe second pass
     rem = stage_remediate(todo)
     v1 = stage_verify(todo, rem, 1)
     v2 = stage_verify(todo, rem, 2)
@@ -266,8 +322,13 @@ if todo:
         if not (rr.get("why") and rr.get("fix")):
             continue
         t = tri.get(rid) or {}
+        status = _final_status(t, aud.get(rid))
+        prio = (t.get("priority") or "P2") if status == "action_required" else ""
         cache[rid] = {
-            "triage": {"verdict": t.get("verdict", "needs_review"), "confidence": t.get("confidence"), "reason": t.get("reason", "")},
+            "triage": {"status": status, "priority": prio,
+                       "exposure": t.get("exposure", "unknown"),
+                       "confidence": t.get("confidence"),
+                       "reason": t.get("reason") or (aud.get(rid, {}) or {}).get("reason", "")},
             "why": rr["why"], "fix": rr["fix"],
             "verify": {"verified": bool(v1.get(rid, {}).get("verified")) and bool(v2.get(rid, {}).get("verified")),
                        "note": (v1.get(rid, {}).get("note") or v2.get(rid, {}).get("note") or "")},
@@ -286,12 +347,16 @@ for f in findings:
     if c.get("verify"): f["verify"] = c["verify"]
     f["enriched"] = True
 
-# executive summary + priorities over CONFIRMED findings (exclude likely-FPs)
-confirmed = [f for f in findings if (f.get("triage") or {}).get("verdict") != "likely_false_positive"]
+# executive summary + priorities over ACTION-REQUIRED findings only (exclude acceptable / FPs)
+def _status(f): return (f.get("triage") or {}).get("status")
+action = [f for f in findings if _status(f) == "action_required"]
+# If triage failed entirely (no statuses set), fall back to all findings so the summary
+# is never empty when remediation did succeed.
+basis = action or [f for f in findings if f.get("enriched")]
 exsum = parse(call([
-    {"role": "system", "content": f"You are a security lead briefing management on a {CTX}"},
-    {"role": "user", "content": 'Return ONLY JSON: {"executive_summary":"3-4 sentences: overall posture, systemic themes (correlate related risks), what to prioritise","priority_actions":["ordered concrete step", "..."]}\n\nConfirmed findings:\n'
-     + json.dumps([{"severity": f["severity"], "title": f["title"], "count": f["count"], "area": f["area"]} for f in confirmed])}])) or {}
+    {"role": "system", "content": f"You are a security lead briefing management on a {CTX} {DEPLOY}"},
+    {"role": "user", "content": 'Write for a public-sector delivery team. Return ONLY JSON: {"executive_summary":"3-4 sentences: overall posture, the systemic themes (correlate related risks into root causes), and what to prioritise first","priority_actions":["ordered, concrete remediation step tied to the findings","..."]}\n\nAction-required findings:\n'
+     + json.dumps([{"severity": f["severity"], "priority": (f.get("triage") or {}).get("priority"), "category": f.get("category"), "title": f["title"], "count": f["count"]} for f in basis])}])) or {}
 run["meta"]["executive_summary"] = exsum.get("executive_summary", "")
 pa = exsum.get("priority_actions")
 run["meta"]["priority_actions"] = pa if isinstance(pa, list) else []
@@ -303,4 +368,4 @@ if any(f.get("enriched") for f in findings) or run["meta"]["executive_summary"]:
 
 json.dump(run, open(RUN, "w"), indent=1)
 json.dump(cache, open(CACHE, "w"), indent=1)
-log(f"enriched: {len(todo)} new rules; cache {len(cache)}; confirmed {len(confirmed)}/{len(findings)}.")
+log(f"enriched: {len(todo)} new rules; cache {len(cache)}; action-required {len(action)}/{len(findings)}.")

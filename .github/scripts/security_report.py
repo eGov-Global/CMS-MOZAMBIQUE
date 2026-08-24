@@ -156,6 +156,28 @@ def category(title):
     return None
 
 
+# Security domain used to group findings in the audit workbook and dashboard.
+# First substring match wins; keep aligned with the REMEDIATION needles.
+SEC_CATEGORY = [
+    (("docker socket", "sensitive host directory", "privileged container", "capabilities",
+      "host namespace", "host network", "host pid", "host ipc"), "Container Isolation & Escape"),
+    (("security opt", "no new privileges", "read-only", "read only", "seccomp", "apparmor"), "Container Hardening"),
+    (("not bound to host interface", "privileged port", "0.0.0.0", "exposed port"), "Network Exposure"),
+    (("https url", "validate_certs", "certificate validation", "tls", "ssl"), "Transport Security (TLS)"),
+    (("secret", "password", "token", "credential", "private key", "access key"), "Secrets Management"),
+    (("memory", "cpu", "healthcheck", "ulimit", "pids limit", "restart"), "Resource & Availability Controls"),
+    (("shared volume", "shared volumes"), "Data Sharing"),
+]
+
+
+def sec_category(rule_id, title):
+    key = (title or "").lower() + " " + (rule_id or "").lower()
+    for needles, name in SEC_CATEGORY:
+        if any(n in key for n in needles):
+            return name
+    return "General Hardening"
+
+
 def from_checkov(data):
     # Checkov reports paths relative to the scanned directory. Prepend CHECKOV_BASE
     # so paths are repo-root-relative (correct display + working blob links).
@@ -227,6 +249,7 @@ def main():
     for g in groups.values():
         why, fix, curated, ref = remediate(g["id"], g["title"], g.pop("_desc", ""))
         g["why"], g["fix"], g["curated"], g["count"] = why, fix, curated, len(g["locations"])
+        g["category"] = sec_category(g["id"], g["title"])
         # Prefer a vetted authoritative reference over the scanner's own link,
         # which can point at dead/legacy documentation.
         if ref:
