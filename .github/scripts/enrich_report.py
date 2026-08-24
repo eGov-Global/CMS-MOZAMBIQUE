@@ -19,7 +19,7 @@ Guardrails (no negligence):
 
 Env: GEMINI_API_KEY (or LLM_API_KEY), GEMINI_MODEL, LLM_BASE, RUN_JSON, CACHE_FILE, REPO.
 """
-import os, sys, json, time, urllib.request, urllib.error
+import os, sys, json, time, re, urllib.request, urllib.error
 
 def log(*a): print(*a, file=sys.stderr)
 
@@ -62,23 +62,20 @@ def discover_model():
         m = find(want)
         if m or not ids:
             return m or want
-    # Ranked by REASONING capability + free-tier reliability. 2.5 models are
-    # "thinking" models (step-by-step reasoning, not guesswork); 2.5-flash leads
-    # because it pairs that reasoning with generous free limits, 2.5-pro is the
-    # strongest but has tighter free quota, older flash/pro are fallbacks.
-    for pref in ("gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest",
-                 "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"):
+    # Ranked current-generation first. The provider's /models list can include models
+    # that are deprecated for NEW keys (they 404 at chat time with "use models/X"), so
+    # the *-latest aliases lead because they always resolve to a callable current model;
+    # call() also auto-switches to whatever the API recommends. All are reasoning-capable.
+    for pref in ("gemini-flash-latest", "gemini-3.6-flash", "gemini-3-flash",
+                 "gemini-2.5-flash", "gemini-pro-latest", "gemini-2.5-pro",
+                 "gemini-2.0-flash", "gemini-1.5-flash"):
         m = find(pref)
         if m:
             return m
-    # any 2.5 model, then any flash, then anything
-    for i in ids:
-        if "2.5" in i:
-            return i
-    for i in ids:
+    for i in ids:  # any flash model as a last resort
         if "flash" in i.lower():
             return i
-    return ids[0] if ids else (want or "gemini-2.5-flash")
+    return ids[0] if ids else (want or "gemini-flash-latest")
 
 
 MODEL = discover_model()
@@ -90,31 +87,45 @@ if MODEL and MODEL.startswith("models/"):
 log(f"using model: {MODEL}")
 
 
+def _suggested_model(body):
+    """Extract a replacement model from a provider 404 like:
+    'This model models/gemini-2.5-flash is no longer available ... use models/gemini-3.6-flash'."""
+    m = re.search(r"use\s+(?:the\s+)?`?(?:models/)?([A-Za-z0-9][A-Za-z0-9.\-]*[A-Za-z0-9])", body)
+    return m.group(1) if m else None
+
+
 def call(messages, temperature=0.2, max_tokens=4096):
-    """One OpenAI-compatible chat call. Returns text or None. Retries transient errors;
-    drops response_format if the provider rejects it."""
-    def _post(use_json):
+    """One OpenAI-compatible chat call. Returns text or None. Self-heals: if the API
+    rejects the model with 'no longer available, use models/X', switch to X globally and
+    retry (once). Also retries transient errors and drops response_format on a 400."""
+    global MODEL
+    use_json = True
+    switched = False
+    for attempt in range(4):
         body = {"model": MODEL, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
         if use_json:
             body["response_format"] = {"type": "json_object"}
-        req = urllib.request.Request(BASE + "/chat/completions", data=json.dumps(body).encode(),
-                                     headers={"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=90) as r:
-            return json.loads(r.read())["choices"][0]["message"]["content"]
-    for attempt in range(3):
         try:
-            return _post(use_json=(attempt == 0))
+            req = urllib.request.Request(BASE + "/chat/completions", data=json.dumps(body).encode(),
+                                         headers={"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=90) as r:
+                return json.loads(r.read())["choices"][0]["message"]["content"]
         except urllib.error.HTTPError as e:
-            body = ""
-            try: body = e.read().decode("utf-8", "ignore")[:200]
+            eb = ""
+            try: eb = e.read().decode("utf-8", "ignore")
             except Exception: pass
-            if e.code == 400 and attempt == 0:
-                continue  # retry without response_format
-            if e.code in (408, 429, 500, 502, 503) and attempt < 2:
+            if e.code == 404 and not switched:
+                sug = _suggested_model(eb)
+                if sug and sug != MODEL:
+                    log(f"model '{MODEL}' unavailable; API recommends '{sug}' - switching")
+                    MODEL = sug; switched = True; continue
+            if e.code == 400 and use_json:
+                use_json = False; continue  # provider rejected response_format
+            if e.code in (408, 429, 500, 502, 503) and attempt < 3:
                 time.sleep(3 * (attempt + 1)); continue
-            log(f"LLM HTTP {e.code}: {body}"); return None
+            log(f"LLM HTTP {e.code}: {eb[:200]}"); return None
         except Exception as e:
-            if attempt < 2:
+            if attempt < 3:
                 time.sleep(2); continue
             log(f"LLM error: {e}"); return None
     return None
