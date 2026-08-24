@@ -35,6 +35,56 @@ if not KEY:
     sys.exit(0)
 
 
+def _http(url, method="GET", payload=None):
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(url, data=data, method=method,
+                                 headers={"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read())
+
+
+def discover_model():
+    """Pick a model this key can actually use, from the provider's /models list.
+    Hardcoded IDs (e.g. gemini-2.0-flash) 404 on keys that don't expose them."""
+    want = os.environ.get("GEMINI_MODEL")
+    ids = []
+    try:
+        d = _http(BASE + "/models")
+        ids = [m.get("id") for m in (d.get("data") or d.get("models") or []) if m.get("id")]
+    except Exception as e:
+        log("model discovery failed:", e)
+    def find(name):
+        for i in ids:
+            if i == name or i.endswith("/" + name):
+                return i
+        return None
+    if want:
+        m = find(want)
+        if m or not ids:
+            return m or want
+    # Ranked by REASONING capability + free-tier reliability. 2.5 models are
+    # "thinking" models (step-by-step reasoning, not guesswork); 2.5-flash leads
+    # because it pairs that reasoning with generous free limits, 2.5-pro is the
+    # strongest but has tighter free quota, older flash/pro are fallbacks.
+    for pref in ("gemini-2.5-flash", "gemini-2.5-pro", "gemini-flash-latest",
+                 "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"):
+        m = find(pref)
+        if m:
+            return m
+    # any 2.5 model, then any flash, then anything
+    for i in ids:
+        if "2.5" in i:
+            return i
+    for i in ids:
+        if "flash" in i.lower():
+            return i
+    return ids[0] if ids else (want or "gemini-2.5-flash")
+
+
+MODEL = discover_model()
+log(f"using model: {MODEL}")
+
+
 def call(messages, temperature=0.2, max_tokens=2600):
     """One OpenAI-compatible chat call. Returns text or None. Retries transient errors;
     drops response_format if the provider rejects it."""
@@ -50,11 +100,14 @@ def call(messages, temperature=0.2, max_tokens=2600):
         try:
             return _post(use_json=(attempt == 0))
         except urllib.error.HTTPError as e:
+            body = ""
+            try: body = e.read().decode("utf-8", "ignore")[:200]
+            except Exception: pass
             if e.code == 400 and attempt == 0:
                 continue  # retry without response_format
             if e.code in (408, 429, 500, 502, 503) and attempt < 2:
                 time.sleep(3 * (attempt + 1)); continue
-            log(f"LLM HTTP {e.code}"); return None
+            log(f"LLM HTTP {e.code}: {body}"); return None
         except Exception as e:
             if attempt < 2:
                 time.sleep(2); continue
@@ -127,7 +180,9 @@ elif REPO:
     except Exception as e:
         log("no remote cache:", e)
 
-todo = [r for r in rules.values() if r["id"] not in cache]
+# Re-enrich anything not cached OR cached without real remediation (self-heals a
+# cache poisoned by an earlier failed run).
+todo = [r for r in rules.values() if not (cache.get(r["id"]) or {}).get("why")]
 CTX = "Ansible remote-server deployment (setup path C: ./deploy.sh) plus its docker-compose stack for DIGIT/CMS, a public-sector complaint-management platform. The repository is PUBLIC."
 
 
@@ -164,15 +219,19 @@ if todo:
     v1 = stage_verify(todo, rem, 1)
     v2 = stage_verify(todo, rem, 2)
     for r in todo:
-        rid = r["id"]; e = {}
+        rid = r["id"]; rr = rem.get(rid) or {}
+        # Only cache rules that actually got remediation. If the LLM produced nothing
+        # (e.g. a transient error), leave the curated text and retry on the next run -
+        # never poison the cache with empty enrichment.
+        if not (rr.get("why") and rr.get("fix")):
+            continue
         t = tri.get(rid) or {}
-        e["triage"] = {"verdict": t.get("verdict", "needs_review"), "confidence": t.get("confidence"), "reason": t.get("reason", "")}
-        rr = rem.get(rid) or {}
-        if rr.get("why") and rr.get("fix"):
-            e["why"], e["fix"] = rr["why"], rr["fix"]
-        verified = bool(v1.get(rid, {}).get("verified")) and bool(v2.get(rid, {}).get("verified"))
-        e["verify"] = {"verified": verified, "note": (v1.get(rid, {}).get("note") or v2.get(rid, {}).get("note") or "")}
-        cache[rid] = e
+        cache[rid] = {
+            "triage": {"verdict": t.get("verdict", "needs_review"), "confidence": t.get("confidence"), "reason": t.get("reason", "")},
+            "why": rr["why"], "fix": rr["fix"],
+            "verify": {"verified": bool(v1.get(rid, {}).get("verified")) and bool(v2.get(rid, {}).get("verified")),
+                       "note": (v1.get(rid, {}).get("note") or v2.get(rid, {}).get("note") or "")},
+        }
 
 # apply cache (annotate findings; never drop or alter raw data)
 for f in findings:
@@ -194,8 +253,11 @@ exsum = parse(call([
 run["meta"]["executive_summary"] = exsum.get("executive_summary", "")
 pa = exsum.get("priority_actions")
 run["meta"]["priority_actions"] = pa if isinstance(pa, list) else []
-run["meta"]["enriched"] = True
-run["meta"]["engine"] = f"Gemini ({MODEL})"
+# Only claim the report was AI-enriched if something actually came back, so a total
+# LLM failure yields a clean curated report (no misleading AI tags / "needs review").
+if any(f.get("enriched") for f in findings) or run["meta"]["executive_summary"]:
+    run["meta"]["enriched"] = True
+    run["meta"]["engine"] = f"Gemini ({MODEL})"
 
 json.dump(run, open(RUN, "w"), indent=1)
 json.dump(cache, open(CACHE, "w"), indent=1)

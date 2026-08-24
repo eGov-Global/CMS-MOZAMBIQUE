@@ -47,8 +47,11 @@ OpenAI-compatible LLM; default is **Google Gemini**.
 
 **Enable:** add a repo secret **`GEMINI_API_KEY`** (free key from
 [aistudio.google.com](https://aistudio.google.com); a personal Google account works
-if your org blocks AI Studio). Optional repo variable `GEMINI_MODEL` (default
-`gemini-2.0-flash`). To use a different provider, set `LLM_BASE` + the key and model.
+if your org blocks AI Studio). The model is **auto-discovered** from the key and
+ranked by reasoning capability (prefers the thinking model `gemini-2.5-flash`, then
+`gemini-2.5-pro`, then older fallbacks) - so it never pins a model the key can't serve.
+Pin one explicitly with the optional repo variable `GEMINI_MODEL`. To use a different
+provider, set `LLM_BASE` + the key and model.
 
 **Guardrails:** no key = clean no-op (curated remediation kept); raw scanner findings
 are never altered (agents only annotate); likely false positives are **labelled, never

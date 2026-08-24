@@ -35,7 +35,10 @@ REMEDIATION = [
     ("sensitive host directory", (
         "Bind-mounting a sensitive host path (like /, /etc, /var/run) lets the container read or modify host files, breaking isolation.",
         "Mount only the specific sub-directory the service needs, read-only (`:ro`) where possible. Avoid mounting host system directories.")),
-    ("privileged", (
+    ("privileged port", (
+        "Mapping a privileged host port (below 1024) forces the daemon/container to bind with elevated privileges, widening the attack surface.",
+        "Map the service to a high host port (>=1024) and let the reverse proxy terminate 80/443, so containers never bind privileged ports.")),
+    ("privileged container", (
         "A privileged container disables most isolation (all capabilities, device access) - a container escape becomes trivial.",
         "Remove `privileged: true`. Grant only the specific Linux capabilities the workload needs via `cap_add`, and drop the rest with `cap_drop: [ALL]`.")),
     ("host network", (
