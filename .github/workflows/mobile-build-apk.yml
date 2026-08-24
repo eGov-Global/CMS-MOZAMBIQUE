@@ -1,0 +1,232 @@
+# Release builds for the Flutter mobile app under mobile/.
+#
+# Ported from Hari-egov/CMS-App's build-apk.yml with these deliberate changes
+# for the monorepo:
+#   - Tags are `app-vX.Y.Z`, NOT `vX.Y.Z` — plain v-tags belong to the CMS
+#     platform releases in this repository, and reusing them would make a
+#     mobile release build fire on a platform tag (and vice versa).
+#   - No branch-push trigger: PR validation is mobile-ci.yml's job; this
+#     workflow is for deliberate release/QA builds only (dispatch or tag).
+#   - Builds BOTH the APK (QA / manual install) and the AAB (the primary
+#     Google Play artifact). Play publishing itself is intentionally not
+#     wired up yet; when it is, it slots in after "Build signed AAB" using
+#     Play credentials stored in the same `production` environment.
+#   - Signing is gated on job-level env HAS_KEYSTORE (the secrets context is
+#     not available in a step-level `if`). With no secrets configured the
+#     build still succeeds unsigned — build.gradle.kts falls back to the
+#     debug signing config — so CI can be validated before secrets exist.
+#
+# Required secrets (repo- or `production`-environment-scoped):
+#   KEYSTORE_BASE64, KEY_ALIAS, KEY_PASSWORD, KEYSTORE_PASSWORD
+name: Mobile Build APK/AAB
+
+on:
+  push:
+    tags: ['app-v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Override version name (e.g. 1.2.3). Empty = pubspec.yaml.'
+        required: false
+        default: ''
+      environment:
+        description: 'Runtime config baked into the build (mobile/config/environments/)'
+        required: true
+        type: choice
+        default: prod
+        options: [prod, uat]
+      split_per_abi:
+        description: 'Build separate APKs for each ABI'
+        required: false
+        type: boolean
+        default: false
+
+# contents: write is needed only to upload release assets on app-v* tags;
+# everything else here is read-only.
+permissions:
+  contents: write
+
+concurrency:
+  group: mobile-build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  # Keep in sync with mobile-ci.yml and mobile/README.md.
+  FLUTTER_VERSION: '3.38.7'
+
+defaults:
+  run:
+    working-directory: mobile
+
+jobs:
+  build:
+    name: Build Android APK + AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Signing/release secrets live in this environment (Play credentials will
+    # too). Environment protection rules can gate release builds on approval.
+    environment: production
+    env:
+      # The secrets context is not available in step-level `if`, so the
+      # signed-vs-unsigned decision is materialized here (job env CAN read
+      # secrets) and steps gate on env.HAS_KEYSTORE.
+      HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        # subosito/flutter-action v2.23.0 — third-party, pinned to a commit SHA.
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Select runtime environment config
+        env:
+          BUILD_ENV: ${{ inputs.environment || 'prod' }}
+        run: |
+          set -euo pipefail
+          SRC="config/environments/${BUILD_ENV}.json"
+          [[ -f "$SRC" ]] || { echo "Unknown environment: $BUILD_ENV"; exit 1; }
+          cp "$SRC" assets/config/app_config.json
+          echo "Baked $BUILD_ENV config:"
+          cat assets/config/app_config.json
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        # ref_name and the version input reach the shell ONLY via env — never
+        # interpolated inline — so a crafted tag/input cannot inject commands.
+        env:
+          INPUT_VERSION_NAME: ${{ inputs.version_name || '' }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          PUB_VERSION_LINE=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          PUB_NAME=${PUB_VERSION_LINE%+*}
+
+          if [[ "$REF_TYPE" == "tag" ]]; then
+            NAME=${REF_NAME#app-v}
+          elif [[ -n "$INPUT_VERSION_NAME" ]]; then
+            NAME="$INPUT_VERSION_NAME"
+          else
+            NAME="$PUB_NAME"
+          fi
+
+          # Refuse anything that is not a plain SemVer — this value flows into
+          # file names and gradle flags downstream.
+          if ! [[ "$NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Refusing non-SemVer version name: $NAME" >&2
+            exit 1
+          fi
+
+          CODE=${{ github.run_number }}
+
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "Building v$NAME (build $CODE) from ${GITHUB_SHA::12}"
+
+      - name: Decode keystore
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p android/app
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/app/cms_mozambique-release.keystore
+
+      - name: Write key.properties
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          cat > android/key.properties <<EOF
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=cms_mozambique-release.keystore
+          EOF
+
+      - name: Build APK
+        run: |
+          if [[ "${{ inputs.split_per_abi || 'false' }}" == "true" ]]; then
+            flutter build apk --release --split-per-abi \
+              --build-name "${{ steps.ver.outputs.name }}" \
+              --build-number "${{ steps.ver.outputs.code }}"
+          else
+            flutter build apk --release --target-platform android-arm64 \
+              --build-name "${{ steps.ver.outputs.name }}" \
+              --build-number "${{ steps.ver.outputs.code }}"
+          fi
+
+      - name: Build AAB
+        run: |
+          flutter build appbundle --release \
+            --build-name "${{ steps.ver.outputs.name }}" \
+            --build-number "${{ steps.ver.outputs.code }}"
+
+      - name: Collect artifacts
+        id: collect
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          shopt -s nullglob
+          for f in build/app/outputs/apk/release/CMS_Mozambique-*.apk; do
+            cp "$f" artifacts/
+          done
+          for f in build/app/outputs/bundle/release/*.aab; do
+            cp "$f" "artifacts/CMS_Mozambique-v${{ steps.ver.outputs.name }}-b${{ steps.ver.outputs.code }}.aab"
+          done
+          ls -lh artifacts/
+          echo "signed=${HAS_KEYSTORE}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CMS_Mozambique-v${{ steps.ver.outputs.name }}-b${{ steps.ver.outputs.code }}-${{ inputs.environment || 'prod' }}
+          path: mobile/artifacts/*
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        # softprops/action-gh-release v3.0.2 — third-party, pinned to a commit SHA.
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228
+        with:
+          name: CMS Mobile ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: mobile/artifacts/*
+          body: |
+            ## CMS Mozambique mobile app ${{ github.ref_name }}
+
+            | | |
+            |---|---|
+            | Version | `${{ steps.ver.outputs.name }}` |
+            | Build number | `${{ steps.ver.outputs.code }}` |
+            | Commit | `${{ github.sha }}` |
+            | Environment | `${{ inputs.environment || 'prod' }}` |
+            | Signed with release keystore | `${{ steps.collect.outputs.signed }}` |
+
+            ### Install
+            Download the `arm64-v8a` APK for phones (any device from ~2017 onward).
+            The `.aab` is for Google Play Console upload, not direct install.

@@ -1,3 +1,8 @@
 # Code owners for CMS-MOZAMBIQUE
 # Approvals on protected branches must come from these owners.
 * @pradeepkumarcm-egov @shivam-eGov
+
+# Mobile app (mobile/) and its release automation. @Hari-egov authored the
+# app in the standalone CMS-App repo and owns its integration here.
+/mobile/ @pradeepkumarcm-egov @shivam-eGov @Hari-egov
+/.github/workflows/mobile-*.yml @pradeepkumarcm-egov @shivam-eGov @Hari-egov
