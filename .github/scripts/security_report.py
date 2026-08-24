@@ -16,64 +16,104 @@ import json, os, datetime, collections
 SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 CHECKOV_SEV = {"secrets": "HIGH", "dockerfile": "MEDIUM", "ansible": "MEDIUM"}
 
-# Curated "why it matters / how to fix" keyed by a lowercase substring of the
-# rule title (KICS) or the Checkov id prefix. First match wins; fallback uses
-# the scanner's own description.
+# Curated "why it matters / how to fix / authoritative reference" keyed by a lowercase
+# substring of the rule title (KICS) or the Checkov id prefix. First match wins; the
+# ref overrides the scanner's own link (KICS sometimes points at dead legacy docs).
+# Every rule KICS/Checkov actually emits for this stack is covered here, so the report
+# stays specific and actionable even when the AI layer is unavailable.
+_COMPOSE = "https://docs.docker.com/reference/compose-file/services/"
+_OWASP = "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html"
+_ANSIBLE_URI = "https://docs.ansible.com/ansible/latest/collections/ansible/builtin/uri_module.html#parameter-validate_certs"
+
 REMEDIATION = [
     ("https url is used", (
         "Ansible `uri`/`get_url` tasks that call an http:// endpoint send data (including credentials, tokens and config) over the network in cleartext, exposing it to interception or man-in-the-middle tampering.",
-        "Change the task's `url` to https://. If the target is an internal service without TLS, front it with a TLS-terminating proxy or document the exception - do not disable certificate validation to work around it.")),
+        "Change the task's `url:` from `http://` to `https://`. If the target is an internal service without TLS, front it with a TLS-terminating proxy or document the exception - do not disable certificate validation to work around it.",
+        _ANSIBLE_URI)),
     ("validate_certs", (
         "`validate_certs: false` turns off TLS certificate verification, so Ansible trusts any certificate presented. A man-in-the-middle can impersonate the endpoint and capture or alter what is sent.",
-        "Remove `validate_certs: false` (the default `true` verifies certificates). For a private CA, point Ansible at the CA bundle (e.g. `ca_path`) instead of disabling verification.")),
+        "Remove `validate_certs: false` (the default `true` verifies certificates). For a private CA, set `ca_path: /path/to/ca-bundle.crt` on the task instead of disabling verification.",
+        _ANSIBLE_URI)),
     ("certificate validation", (
         "Disabling TLS certificate validation lets Ansible trust any certificate, enabling man-in-the-middle interception of the request.",
-        "Re-enable certificate validation (`validate_certs: true`) and supply the CA bundle if a private CA is in use.")),
+        "Re-enable certificate validation (`validate_certs: true`) and supply the CA bundle via `ca_path:` if a private CA is in use.",
+        _ANSIBLE_URI)),
     ("docker socket mounted", (
         "Mounting /var/run/docker.sock gives the container full control of the Docker daemon on the host - equivalent to root on the machine, so a compromised container can escape and take over the server.",
-        "Remove the docker.sock bind mount. If a container genuinely needs Docker access, use a scoped socket proxy (e.g. tecnativa/docker-socket-proxy) exposing only the required API endpoints, read-only.")),
+        "Remove the `- /var/run/docker.sock:/var/run/docker.sock` bind mount. If a container genuinely needs Docker access, put a scoped proxy (e.g. `tecnativa/docker-socket-proxy`) in front, exposing only the required API endpoints read-only.",
+        _OWASP)),
     ("sensitive host directory", (
-        "Bind-mounting a sensitive host path (like /, /etc, /var/run) lets the container read or modify host files, breaking isolation.",
-        "Mount only the specific sub-directory the service needs, read-only (`:ro`) where possible. Avoid mounting host system directories.")),
+        "Bind-mounting a sensitive host path (`/`, `/etc`, `/var/run`, `/root`) lets the container read or modify host files, breaking isolation between the container and the server.",
+        "Mount only the specific sub-directory the service needs, and add `:ro` to make it read-only (e.g. `- ./config:/app/config:ro`). Never mount host system directories.",
+        _COMPOSE + "#volumes")),
+    ("capabilities unrestricted", (
+        "Containers run with a default set of Linux capabilities (e.g. NET_RAW, CHOWN, SETUID) that most services never use. Any extra capability widens what a compromised process can do on the host kernel.",
+        "Drop everything and re-add only what the service needs: add `cap_drop: [ALL]` to each service, then `cap_add: [...]` for the few capabilities it genuinely requires (often none). Apply this pattern across the compose services flagged.",
+        _COMPOSE + "#cap_drop")),
+    ("security opt", (
+        "Without `no-new-privileges`, a process in the container can escalate via setuid binaries; without an seccomp/AppArmor profile it can make syscalls it never needs, enlarging the kernel attack surface.",
+        "Add `security_opt: [\"no-new-privileges:true\"]` to each service (keep the default seccomp profile - do not set `seccomp:unconfined`).",
+        _COMPOSE + "#security_opt")),
     ("privileged port", (
         "Mapping a privileged host port (below 1024) forces the daemon/container to bind with elevated privileges, widening the attack surface.",
-        "Map the service to a high host port (>=1024) and let the reverse proxy terminate 80/443, so containers never bind privileged ports.")),
+        "Map the service to a high host port (>=1024), e.g. `- \"8080:8080\"`, and let the reverse proxy terminate 80/443, so containers never bind privileged ports.",
+        _COMPOSE + "#ports")),
     ("privileged container", (
         "A privileged container disables most isolation (all capabilities, device access) - a container escape becomes trivial.",
-        "Remove `privileged: true`. Grant only the specific Linux capabilities the workload needs via `cap_add`, and drop the rest with `cap_drop: [ALL]`.")),
+        "Remove `privileged: true`. Grant only the specific Linux capabilities the workload needs via `cap_add`, and drop the rest with `cap_drop: [ALL]`.",
+        _COMPOSE + "#privileged")),
+    ("host namespace", (
+        "Sharing a host namespace (`pid`, `ipc`, or `network`) removes the isolation boundary: the container can see and signal host processes, access host IPC, or bind every host interface.",
+        "Remove `pid: host` / `ipc: host` / `network_mode: host` from the service. Use a user-defined bridge network and publish only the ports you need.",
+        _COMPOSE + "#pid")),
     ("host network", (
         "Sharing the host network namespace removes network isolation and exposes all host interfaces/ports to the container.",
-        "Remove `network_mode: host`. Use a user-defined bridge network and publish only the ports you need.")),
+        "Remove `network_mode: host`. Use a user-defined bridge network and publish only the ports you need.",
+        _COMPOSE + "#network_mode")),
     ("not bound to host interface", (
         "Publishing a port on 0.0.0.0 exposes the service on every network interface of the host, including public ones.",
-        "Bind the published port to the loopback or a specific private interface, e.g. `127.0.0.1:PORT:PORT`, and expose it externally only through the reverse proxy.")),
+        "Bind the published port to loopback or a specific private interface, e.g. `- \"127.0.0.1:5432:5432\"`, and expose it externally only through the reverse proxy.",
+        _COMPOSE + "#ports")),
+    ("shared volumes", (
+        "A named/host volume mounted into more than one container lets a compromise in one service read or tamper with another service's data, and can leak secrets written to that volume across trust boundaries.",
+        "Give each service its own volume unless sharing is required. Where a volume must be shared, mount it read-only (`:ro`) in every consumer that does not need to write.",
+        _OWASP)),
     ("no new privileges", (
         "Without no-new-privileges, a process inside the container can gain additional privileges via setuid binaries.",
-        "Add `security_opt: [\"no-new-privileges:true\"]` to the service.")),
+        "Add `security_opt: [\"no-new-privileges:true\"]` to the service.",
+        _COMPOSE + "#security_opt")),
     ("read-only", (
         "A writable root filesystem lets an attacker drop tools or tamper with binaries inside the container.",
-        "Set `read_only: true` and mount explicit writable volumes only where the app must write.")),
+        "Set `read_only: true` and mount explicit writable volumes only where the app must write (e.g. `tmpfs: [/tmp]`).",
+        _COMPOSE + "#read_only")),
     ("healthcheck", (
         "Without a healthcheck the orchestrator cannot tell if the container is actually serving, so failed containers keep receiving traffic.",
-        "Add a `healthcheck:` block (or a HEALTHCHECK in the Dockerfile) that probes a real readiness endpoint.")),
+        "Add a `healthcheck:` block that probes a real readiness endpoint, e.g. `test: [\"CMD\", \"curl\", \"-f\", \"http://localhost:8080/health\"]` with sensible `interval`/`retries`.",
+        _COMPOSE + "#healthcheck")),
     ("memory", (
         "Without a memory limit a single container can exhaust host RAM and take down every other service (DoS).",
-        "Set a `mem_limit` (compose) / resources limit for the service.")),
+        "Set a memory limit for the service, e.g. `mem_limit: 512m` (or `deploy.resources.limits.memory` under Swarm).",
+        _COMPOSE + "#mem_limit")),
     ("cpu", (
-        "Without a CPU limit one container can starve the rest of the host.",
-        "Set `cpus` / CPU limits for the service.")),
+        "Without a CPU limit one container can starve every other service on the host.",
+        "Set a CPU limit for the service, e.g. `cpus: \"1.5\"` (or `deploy.resources.limits.cpus`).",
+        _COMPOSE + "#cpus")),
     ("ckv_secret", (
         "A credential (password, token, key) appears to be committed to the repository. Anyone with read access - and this repo is public - can use it.",
-        "Remove the secret from the file, rotate/revoke it immediately, and inject it at runtime via an environment variable or secret store. Enable GitHub secret scanning + push protection.")),
+        "Remove the secret from the file, rotate/revoke it immediately, and inject it at runtime via an environment variable or secret store. Enable GitHub secret scanning + push protection.",
+        _OWASP)),
     ("passwords and secrets", (
         "A value matching a credential pattern was found in infrastructure code. If real, it is exposed to everyone with repo access.",
-        "Confirm whether it is a real secret; if so rotate it and move it to a runtime secret/env var. If it is a non-secret default, ignore or suppress the rule.")),
+        "Confirm whether it is a real secret; if so rotate it and move it to a runtime secret/env var. If it is a non-secret default, ignore or suppress the rule.",
+        _OWASP)),
     ("ckv_docker", (
         "The Dockerfile diverges from a hardening best practice (e.g. missing HEALTHCHECK, running as root).",
-        "Apply the specific Dockerfile fix (add HEALTHCHECK, add a non-root USER, pin base image digests).")),
+        "Apply the specific Dockerfile fix (add HEALTHCHECK, add a non-root USER, pin base image digests).",
+        "https://docs.docker.com/develop/security-best-practices/")),
     ("ckv_ansible", (
         "The Ansible task weakens security (e.g. TLS validation disabled, permissive file mode).",
-        "Re-enable `validate_certs: true`, tighten file `mode`, and avoid `become` where not required.")),
+        "Re-enable `validate_certs: true`, tighten file `mode`, and avoid `become` where not required.",
+        _ANSIBLE_URI)),
 ]
 
 
@@ -92,14 +132,17 @@ def norm_sev(s):
 
 
 def remediate(rule_id, title, desc):
-    """Returns (why, fix, curated). curated=True means it came from the vetted map
-    and must NOT be overwritten by LLM enrichment."""
+    """Returns (why, fix, curated, ref). curated=True means it came from the vetted
+    map and must NOT be overwritten by LLM enrichment. ref is an authoritative doc
+    URL (or "" to keep the scanner's own link)."""
     key = (title or "").lower() + " " + (rule_id or "").lower()
-    for needle, (why, fix) in REMEDIATION:
+    for needle, item in REMEDIATION:
         if needle in key:
-            return why, fix, True
+            why, fix = item[0], item[1]
+            ref = item[2] if len(item) > 2 else ""
+            return why, fix, True, ref
     return (desc or "This configuration diverges from a security best practice."), \
-           "See the linked guide for remediation steps.", False
+           "Follow the reference for this rule to apply the fix; the AI layer adds a code-specific fix when enabled.", False, ""
 
 
 def category(title):
@@ -182,8 +225,12 @@ def main():
                                    "url": blob(meta_repo, sha, f["file"], f["line"])})
     grouped = []
     for g in groups.values():
-        why, fix, curated = remediate(g["id"], g["title"], g.pop("_desc", ""))
+        why, fix, curated, ref = remediate(g["id"], g["title"], g.pop("_desc", ""))
         g["why"], g["fix"], g["curated"], g["count"] = why, fix, curated, len(g["locations"])
+        # Prefer a vetted authoritative reference over the scanner's own link,
+        # which can point at dead/legacy documentation.
+        if ref:
+            g["guide"] = ref
         grouped.append(g)
     order = {s: i for i, s in enumerate(SEV_ORDER)}
     grouped.sort(key=lambda g: (order.get(g["severity"], 9), -g["count"]))

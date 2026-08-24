@@ -82,10 +82,15 @@ def discover_model():
 
 
 MODEL = discover_model()
+# The /models list returns ids like "models/gemini-2.5-flash", but the OpenAI-compat
+# chat endpoint wants the BARE id ("gemini-2.5-flash"). Keeping the prefix makes every
+# chat call 404 while /models still succeeds - which looks like "enabled but empty".
+if MODEL and MODEL.startswith("models/"):
+    MODEL = MODEL[len("models/"):]
 log(f"using model: {MODEL}")
 
 
-def call(messages, temperature=0.2, max_tokens=2600):
+def call(messages, temperature=0.2, max_tokens=4096):
     """One OpenAI-compatible chat call. Returns text or None. Retries transient errors;
     drops response_format if the provider rejects it."""
     def _post(use_json):
@@ -199,8 +204,13 @@ def stage_remediate(rs):
     if not rs: return {}
     payload = [{"id": r["id"], "title": r["title"], "severity": r["severity"], "area": r["area"], "snippet": r["snippet"]} for r in rs]
     return rows(call([
-        {"role": "system", "content": f"You are a senior security engineer. For each finding in a {CTX} write actionable remediation grounded in the shown code."},
-        {"role": "user", "content": 'Return ONLY JSON: {"results":[{"id":"...","why":"1-2 sentences: why this is a security risk in THIS deployment","fix":"1-2 sentences: concrete steps referencing the actual code/config"}]}\n\nFindings:\n' + json.dumps(payload)}]))
+        {"role": "system", "content": f"You are a senior security engineer hardening a {CTX} "
+         "Reason step by step from the actual code shown, then give remediation a developer can apply directly. "
+         "Be specific to THIS stack (docker-compose services / Ansible tasks). Never invent config that is not plausible. "
+         "If the finding is likely a false positive or benign, say so in `why` rather than inventing a fix."},
+        {"role": "user", "content": 'For each finding return JSON. `why`: 1-2 sentences on the concrete risk in THIS deployment (what an attacker gains). '
+         '`fix`: the exact change to make - name the file/service and include the precise YAML/directive to add or remove (e.g. `cap_drop: [ALL]` under the service). Prefer a copy-pasteable snippet over prose.\n'
+         'Return ONLY JSON: {"results":[{"id":"...","why":"...","fix":"..."}]}\n\nFindings:\n' + json.dumps(payload)}]))
 
 
 def stage_verify(rs, rem, n):
@@ -233,14 +243,16 @@ if todo:
                        "note": (v1.get(rid, {}).get("note") or v2.get(rid, {}).get("note") or "")},
         }
 
-# apply cache (annotate findings; never drop or alter raw data)
+# apply cache (annotate findings; never drop or alter raw data). Only apply entries
+# that carry REAL remediation - a cache entry without why/fix is a failed/poisoned
+# run and must not stamp misleading "needs review" triage/verify badges.
 for f in findings:
     c = cache.get(f["id"])
-    if not c:
+    if not c or not (c.get("why") and c.get("fix")):
         continue
     if c.get("triage"): f["triage"] = c["triage"]
-    if c.get("why"): f["why"] = c["why"]
-    if c.get("fix"): f["fix"] = c["fix"]
+    f["why"] = c["why"]
+    f["fix"] = c["fix"]
     if c.get("verify"): f["verify"] = c["verify"]
     f["enriched"] = True
 
