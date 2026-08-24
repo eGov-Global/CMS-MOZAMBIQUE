@@ -215,9 +215,19 @@ elif REPO:
     except Exception as e:
         log("no remote cache:", e)
 
-# Re-enrich anything not cached OR cached without real remediation (self-heals a
-# cache poisoned by an earlier failed run).
-todo = [r for r in rules.values() if not (cache.get(r["id"]) or {}).get("why")]
+# Cache schema version. BUMP THIS whenever the enrichment schema or prompts change
+# (e.g. the triage taxonomy) so stale entries from older runs are re-enriched instead
+# of silently reused. v2 = action_required/acceptable/false_positive triage taxonomy.
+CACHE_V = 2
+
+
+def _cache_ok(c):
+    """A cache entry is reusable only if it is the current schema version AND carries
+    real remediation. Missing/old-version/empty entries are re-enriched (self-healing)."""
+    return bool(c and c.get("v") == CACHE_V and c.get("why") and c.get("fix"))
+
+
+todo = [r for r in rules.values() if not _cache_ok(cache.get(r["id"]))]
 CTX = "Ansible remote-server deployment (setup path C: ./deploy.sh) plus its docker-compose stack for DIGIT/CMS, a public-sector complaint-management platform. The repository is PUBLIC."
 
 # Deployment topology the triager must reason WITH, so it judges real-world exposure
@@ -325,6 +335,7 @@ if todo:
         status = _final_status(t, aud.get(rid))
         prio = (t.get("priority") or "P2") if status == "action_required" else ""
         cache[rid] = {
+            "v": CACHE_V,
             "triage": {"status": status, "priority": prio,
                        "exposure": t.get("exposure", "unknown"),
                        "confidence": t.get("confidence"),
@@ -334,12 +345,12 @@ if todo:
                        "note": (v1.get(rid, {}).get("note") or v2.get(rid, {}).get("note") or "")},
         }
 
-# apply cache (annotate findings; never drop or alter raw data). Only apply entries
-# that carry REAL remediation - a cache entry without why/fix is a failed/poisoned
-# run and must not stamp misleading "needs review" triage/verify badges.
+# apply cache (annotate findings; never drop or alter raw data). Only apply current-schema
+# entries that carry REAL remediation - a stale/empty entry must not stamp misleading or
+# outdated triage/verify badges; those findings fall back to the curated floor instead.
 for f in findings:
     c = cache.get(f["id"])
-    if not c or not (c.get("why") and c.get("fix")):
+    if not _cache_ok(c):
         continue
     if c.get("triage"): f["triage"] = c["triage"]
     f["why"] = c["why"]
