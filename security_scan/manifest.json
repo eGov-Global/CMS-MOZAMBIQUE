@@ -1,6 +1,24 @@
 {
  "runs": [
   {
+   "file": "data/32725184881.json",
+   "runId": "32725184881",
+   "date": "2026-08-24 12:06 UTC",
+   "ts": "2026-08-24T12:06:10.248499+00:00",
+   "branch": "master",
+   "shaShort": "753f231",
+   "pr": null,
+   "occurrences": 965,
+   "types": 13,
+   "occBySeverity": {
+    "CRITICAL": 0,
+    "HIGH": 16,
+    "MEDIUM": 873,
+    "LOW": 2,
+    "INFO": 74
+   }
+  },
+  {
    "file": "data/32721835590.json",
    "runId": "32721835590",
    "date": "2026-08-24 11:27 UTC",

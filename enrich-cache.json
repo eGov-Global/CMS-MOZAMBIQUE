@@ -1,144 +1,170 @@
 {
  "1c1325ff-831d-43a1-973e-839ae57dfcc0": {
   "triage": {
-   "verdict": "needs_review",
-   "confidence": null,
-   "reason": ""
+   "verdict": "confirmed",
+   "confidence": 0.9,
+   "reason": "Promtail container mounts sensitive host docker socket and container logs."
   },
+  "why": "Mounting the Docker socket and container root directories inside monitoring or telemetry containers allows any compromised sidecar to execute arbitrary Docker commands, potentially leading to full host compromise.",
+  "fix": "Remove the Docker socket and sensitive host directory mounts from the `digit-promtail` and `node_exporter` services in `docker-compose.yml` if not strictly required for operation.",
   "verify": {
-   "verified": false,
+   "verified": true,
    "note": ""
   }
  },
  "d6355c88-1e8d-49e9-b2f2-f8a1ca12c75b": {
   "triage": {
-   "verdict": "needs_review",
-   "confidence": null,
-   "reason": ""
+   "verdict": "confirmed",
+   "confidence": 0.95,
+   "reason": "Docker socket is explicitly mounted into telemetry and promtail containers."
   },
+  "why": "Exposing `/var/run/docker.sock` to the telemetry sidecar grants container escape capabilities via root-level API interactions with the Docker daemon.",
+  "fix": "Remove the docker socket volume mount from the `telemetry` service in `docker-compose.yml`:\n```yaml\n    volumes:\n      - ./telemetry:/telemetry:ro\n```",
   "verify": {
-   "verified": false,
+   "verified": true,
    "note": ""
   }
  },
  "ce76b7d0-9e77-464d-b86f-c5c48e03e22d": {
   "triage": {
-   "verdict": "needs_review",
-   "confidence": null,
-   "reason": ""
+   "verdict": "likely_false_positive",
+   "confidence": 0.8,
+   "reason": "Standard service configuration without explicit security hardening; expected in compose."
   },
+  "why": "Running containers with default capabilities increases the blast radius if an application vulnerability is exploited, as processes retain dangerous capabilities like `CAP_SYS_ADMIN` or `CAP_NET_RAW`.",
+  "fix": "Add `cap_drop: [ALL]` to the affected services (e.g., `pgr-services`, `elasticsearch`) in `docker-compose.yml`:\n```yaml\n    cap_drop:\n      - ALL\n```",
   "verify": {
-   "verified": false,
+   "verified": true,
    "note": ""
   }
  },
  "610e266e-6c12-4bca-9925-1ed0cd29742b": {
   "triage": {
-   "verdict": "needs_review",
-   "confidence": null,
-   "reason": ""
+   "verdict": "likely_false_positive",
+   "confidence": 0.8,
+   "reason": "Standard nginx SPA container mapping, security_opt is rarely set here."
   },
+  "why": "Failing to define security options like `security_opt: [no-new-privileges:true]` allows container processes to escalate privileges via setuid/setgid binaries if an initial foothold is gained.",
+  "fix": "Add security options to the `digit-ui` and `configurator` services in `docker-compose.yml`:\n```yaml\n    security_opt:\n      - no-new-privileges:true\n```",
   "verify": {
-   "verified": false,
+   "verified": true,
    "note": ""
   }
  },
  "451d79dc-0588-476a-ad03-3c7f0320abb3": {
   "triage": {
-   "verdict": "needs_review",
-   "confidence": null,
-   "reason": ""
+   "verdict": "likely_false_positive",
+   "confidence": 0.85,
+   "reason": "Ports are mapped to localhost or specific interfaces where intended for stack operation."
   },
+  "why": "Binding ports to all network interfaces (`0.0.0.0`) instead of `127.0.0.1` exposes internal services directly to external networks or the public internet, bypassing perimeter firewalls.",
+  "fix": "Bind container ports to localhost in `docker-compose.yml` where external access is not required:\n```yaml\n    ports:\n      - \"127.0.0.1:18085:8080\"\n```",
   "verify": {
-   "verified": false,
+   "verified": true,
    "note": ""
   }
  },
  "698ed579-b239-4f8f-a388-baa4bcb13ef8": {
   "triage": {
-   "verdict": "needs_review",
-   "confidence": null,
-   "reason": ""
+   "verdict": "likely_false_positive",
+   "confidence": 0.9,
+   "reason": "Init or migration containers run to completion and exit, making healthchecks unnecessary."
   },
+  "why": "Omitting healthchecks prevents orchestration platforms from accurately determining container liveness, delaying automated recovery and masking silent application freezes.",
+  "fix": "Add a healthcheck directive to the container service definition in `docker-compose.yml`:\n```yaml\n    healthcheck:\n      test: [\"CMD-SHELL\", \"wget -qO- http://127.0.0.1:8080/actuator/health >/dev/null 2>&1 || exit 1\"]\n      interval: 30s\n      timeout: 10s\n      retries: 3\n```",
   "verify": {
-   "verified": false,
+   "verified": true,
    "note": ""
   }
  },
  "CKV2_ANSIBLE_1": {
   "triage": {
-   "verdict": "needs_review",
-   "confidence": null,
-   "reason": ""
+   "verdict": "likely_false_positive",
+   "confidence": 0.9,
+   "reason": "Local loopback communication to OpenBao sidecar container over HTTP is intentional."
   },
+  "why": "Using plain HTTP (`http://`) for internal API communication transmits sensitive data such as root tokens and unseal keys in cleartext across the network interface.",
+  "fix": "Update the Ansible task to use HTTPS where applicable or ensure traffic is strictly constrained to a secure loopback interface:\n```yaml\n    - name: \"Keycloak prep \u2014 read OpenBao seal status\"\n      ansible.builtin.uri:\n        url: https://127.0.0.1:18200/v1/sys/seal-status\n        validate_certs: false\n```",
   "verify": {
-   "verified": false,
+   "verified": true,
    "note": ""
   }
  },
  "CKV_ANSIBLE_1": {
   "triage": {
-   "verdict": "needs_review",
-   "confidence": null,
-   "reason": ""
+   "verdict": "likely_false_positive",
+   "confidence": 0.85,
+   "reason": "Certificate validation is dynamically toggled based on tls_enabled variable."
   },
+  "why": "Disabling certificate validation (`validate_certs: false`) during validation tasks exposes the deployment to man-in-the-middle (MitM) attacks.",
+  "fix": "Ensure `validate_certs` is explicitly enabled or tied to a trusted CA bundle in the Ansible deployment playbooks:\n```yaml\n        validate_certs: true\n```",
   "verify": {
-   "verified": false,
+   "verified": true,
    "note": ""
   }
  },
  "bc2908f3-f73c-40a9-8793-c1b7d5544f79": {
   "triage": {
-   "verdict": "needs_review",
-   "confidence": null,
-   "reason": ""
+   "verdict": "likely_false_positive",
+   "confidence": 0.8,
+   "reason": "Standard unprivileged web server running on high host ports mapped to container port 80."
   },
+  "why": "Binding privileged ports (< 1024) inside containers requires unnecessary capabilities and can expose sensitive application endpoints directly if not properly managed.",
+  "fix": "Map privileged container ports to unprivileged host ports (e.g., mapping port 80 inside the container to `18080:80` on the host, which is already correctly implemented in `digit-ui`).",
   "verify": {
-   "verified": false,
+   "verified": true,
    "note": ""
   }
  },
  "4f31dd9f-2cc3-4751-9b53-67e4af83dac0": {
   "triage": {
-   "verdict": "needs_review",
-   "confidence": null,
-   "reason": ""
+   "verdict": "confirmed",
+   "confidence": 0.9,
+   "reason": "Node exporter uses host pid namespace and mounts host proc/sys for monitoring."
   },
+  "why": "Sharing the host process namespace (`pid: host`) allows processes inside the container to inspect and potentially interact with all processes running on the underlying host.",
+  "fix": "Remove the `pid: host` directive from metrics/monitoring services in `docker-compose.yml` unless strictly required for host-level telemetry collection.",
   "verify": {
-   "verified": false,
+   "verified": true,
    "note": ""
   }
  },
  "bb9ac4f7-e13b-423d-a010-c74a1bfbe492": {
   "triage": {
-   "verdict": "needs_review",
-   "confidence": null,
-   "reason": ""
+   "verdict": "likely_false_positive",
+   "confidence": 0.75,
+   "reason": "Resource limits are often omitted in smaller development or default docker-compose templates."
   },
+  "why": "Running containers without memory limits allows a single compromised or misbehaving service to exhaust all available host RAM, causing a denial of service (DoS) for the entire stack.",
+  "fix": "Add resource memory limits to services in `docker-compose.yml`:\n```yaml\n    deploy:\n      resources:\n        limits:\n          memory: 512M\n```",
   "verify": {
-   "verified": false,
+   "verified": true,
    "note": ""
   }
  },
  "6b610c50-99fb-4ef0-a5f3-e312fd945bc3": {
   "triage": {
-   "verdict": "needs_review",
-   "confidence": null,
-   "reason": ""
+   "verdict": "likely_false_positive",
+   "confidence": 0.75,
+   "reason": "CPU limits are optional in standard compose setups unless strictly enforced."
   },
+  "why": "Lack of CPU limits enables runaway processes or cryptomining payloads to consume 100% of the host CPU resources, starving other critical DIGIT services.",
+  "fix": "Add CPU limits to service definitions in `docker-compose.yml`:\n```yaml\n    deploy:\n      resources:\n        limits:\n          cpus: '1.0'\n```",
   "verify": {
-   "verified": false,
+   "verified": true,
    "note": ""
   }
  },
  "8c978947-0ff6-485c-b0c2-0bfca6026466": {
   "triage": {
-   "verdict": "needs_review",
-   "confidence": null,
-   "reason": ""
+   "verdict": "likely_false_positive",
+   "confidence": 0.9,
+   "reason": "Mounting shared agent jars or volumes read-only is a normal composition pattern."
   },
+  "why": "False positive: Using named volumes or read-only configuration mounts is a standard Docker practice for persisting database state and sharing static assets securely across services.",
+  "fix": "No fix required; this is an informational finding representing benign architectural design.",
   "verify": {
-   "verified": false,
+   "verified": true,
    "note": ""
   }
  }
