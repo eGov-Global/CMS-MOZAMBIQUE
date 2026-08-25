@@ -45,14 +45,14 @@ SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
 PRI_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3, "": 4, None: 4}
 
 # ---- palette (calm, management-facing) -------------------------------------
-NAVY = "1F3A5F"; NAVY_DK = "16304F"; INK = "1F2A37"; SUB = "6B7280"
-ZEBRA = "F5F7FB"; LINE = "DDE3EC"; TITLE_BLUE = "1F3A5F"
-# soft chips: (fill, font). Priority uses a distinct indigo/violet/pink/slate family so it
-# never reads the same as the severity chips.
-PRI_CHIP = {"P0": ("E0DEFB", "3730A3"), "P1": ("EADDFB", "6B21A8"),
-            "P2": ("FBDDEC", "9D174D"), "P3": ("E9EDF4", "475569")}
-SEV_CHIP = {"CRITICAL": ("EFE0D3", "7C3F00"), "HIGH": ("FADDDD", "B01212"),
-            "MEDIUM": ("FBEFC9", "8A6D00"), "LOW": ("DCE8FF", "1D4ED8")}
+NAVY = "1F3A5F"; INK = "1F2A37"; SUB = "6B7280"; LINE = "DDE3EC"; TITLE_BLUE = "1F3A5F"
+# Priority: solid chip (strong label) + soft row background, distinct family from severity.
+PRI_SOLID = {"P0": "5B21B6", "P1": "C0267E", "P2": "047857", "P3": "5F6673"}
+PRI_SOFT = {"P0": "EEE8FB", "P1": "FAE7F2", "P2": "E2F3EC", "P3": "ECEEF1"}
+# Severity: soft chip (fill) + solid text, darkened just enough for legibility on the tint.
+SEV_CHIP = {"CRITICAL": ("F8E7EA", "7A1F2B"), "HIGH": ("FCEAEA", "B23A3A"),
+            "MEDIUM": ("FFF1CC", "8A5A06"), "LOW": ("EAF0FF", "2F6FED")}
+NEUTRAL_SOFT = "F6F7FA"  # row background for Not Tracked (no priority)
 
 
 def status_of(f): return (f.get("triage") or {}).get("status") or "action_required"
@@ -79,6 +79,14 @@ def chip(cell, text, fill, font):
     cell.value = text
     cell.fill = PatternFill("solid", fgColor=fill)
     cell.font = Font(color=font, bold=True, size=10)
+    cell.alignment = CTR
+    cell.border = BORDER
+
+
+def solid_chip(cell, text, fill):
+    cell.value = text
+    cell.fill = PatternFill("solid", fgColor=fill)
+    cell.font = Font(color="FFFFFF", bold=True, size=10)
     cell.alignment = CTR
     cell.border = BORDER
 
@@ -121,14 +129,6 @@ def autosize(ws, cols, data_rows):
             need = sum(max(1, math.ceil(len(seg) / chars)) for seg in str(v).split("\n"))
             lines = max(lines, need)
         ws.row_dimensions[r].height = min(300, 15 * lines + 6)
-
-
-def zebra(ws, cols, data_rows):
-    fill = PatternFill("solid", fgColor=ZEBRA)
-    for r in range(2, data_rows + 2):
-        if r % 2 == 1:
-            for ci in range(1, len(cols) + 1):
-                ws.cell(row=r, column=ci).fill = fill
 
 
 def link(cell, text, url):
@@ -215,25 +215,25 @@ row = 2
 for f in action:
     tri = f.get("triage") or {}
     loc = (f.get("locations") or [{}])[0]
-    chip(ws.cell(row=row, column=1), priority_of(f), *PRI_CHIP.get(priority_of(f), ("E9EDF4", "475569")))
-    chip(ws.cell(row=row, column=2), f["severity"].title(), *SEV_CHIP.get(f["severity"], ("EAEDF2", "475569")))
+    pr = priority_of(f)
+    rf = PatternFill("solid", fgColor=PRI_SOFT.get(pr, NEUTRAL_SOFT))  # whole-row tint = priority soft
     vals = {3: f.get("category", ""), 4: f.get("title", ""), 5: f.get("id", ""), 6: f.get("source", ""),
             7: tri.get("exposure", ""), 8: f.get("count", 0), 9: f.get("why", ""), 10: f.get("fix", ""),
             13: "Open", 16: tri.get("reason", "")}
     for c, v in vals.items():
         cell = ws.cell(row=row, column=c, value=v)
         cell.alignment = WRAP if COLS[c - 1].get("wrap") else TOP
-        cell.border = BORDER
-    link(ws.cell(row=row, column=11), "Reference ↗" if f.get("guide") else "", f.get("guide"))
-    ws.cell(row=row, column=11).border = BORDER
-    link(ws.cell(row=row, column=12), f"{loc.get('path','')}:{loc.get('line','')}" if loc.get("path") else "", loc.get("url"))
-    ws.cell(row=row, column=12).border = BORDER
+        cell.border = BORDER; cell.fill = rf
+    lk = ws.cell(row=row, column=11); link(lk, "Reference ↗" if f.get("guide") else "", f.get("guide")); lk.border = BORDER; lk.fill = rf
+    lc = ws.cell(row=row, column=12); link(lc, f"{loc.get('path','')}:{loc.get('line','')}" if loc.get("path") else "", loc.get("url")); lc.border = BORDER; lc.fill = rf
     for c in (14, 15):
-        ws.cell(row=row, column=c).border = BORDER
+        cc = ws.cell(row=row, column=c); cc.border = BORDER; cc.fill = rf
+    solid_chip(ws.cell(row=row, column=1), pr, PRI_SOLID.get(pr, "5F6673"))
+    chip(ws.cell(row=row, column=2), f["severity"].title(), *SEV_CHIP.get(f["severity"], ("EAEDF2", "475569")))
     row += 1
 if row == 2:
     ws.cell(row=2, column=1, value="No action-required findings.").font = Font(color=SUB, italic=True)
-zebra(ws, COLS, row - 2); autosize(ws, COLS, row - 2)
+autosize(ws, COLS, row - 2)
 ws.auto_filter.ref = f"A1:{get_column_letter(len(COLS))}{max(row - 1, 1)}"
 
 # ========================= Sheet 3: Not Tracked =============================
@@ -255,20 +255,21 @@ row = 2
 for f in acceptable + false_pos:
     tri = f.get("triage") or {}
     label = "Acceptable" if status_of(f) == "acceptable" else "False positive"
-    ac = ws.cell(row=row, column=1, value=label); ac.alignment = CTR
-    ac.font = Font(bold=True, size=10, color="475569" if label == "Acceptable" else "845C05")
-    ac.fill = PatternFill("solid", fgColor="E9EDF4" if label == "Acceptable" else "FCF1D0"); ac.border = BORDER
-    chip(ws.cell(row=row, column=2), f["severity"].title(), *SEV_CHIP.get(f["severity"], ("EAEDF2", "475569")))
+    rf = PatternFill("solid", fgColor=NEUTRAL_SOFT)
     vals = {3: f.get("category", ""), 4: f.get("title", ""), 5: f.get("id", ""), 6: f.get("source", ""),
             7: f.get("count", 0), 8: tri.get("reason", ""), 9: f.get("why", "")}
     for c, v in vals.items():
         cell = ws.cell(row=row, column=c, value=v)
         cell.alignment = WRAP if COLS[c - 1].get("wrap") else TOP
-        cell.border = BORDER
+        cell.border = BORDER; cell.fill = rf
+    ac = ws.cell(row=row, column=1, value=label); ac.alignment = CTR; ac.border = BORDER
+    ac.font = Font(bold=True, size=10, color="475569" if label == "Acceptable" else "845C05")
+    ac.fill = PatternFill("solid", fgColor="E9EDF4" if label == "Acceptable" else "FCF1D0")
+    chip(ws.cell(row=row, column=2), f["severity"].title(), *SEV_CHIP.get(f["severity"], ("EAEDF2", "475569")))
     row += 1
 if row == 2:
     ws.cell(row=2, column=1, value="Nothing excluded — every finding is action-required.").font = Font(color=SUB, italic=True)
-zebra(ws, COLS, row - 2); autosize(ws, COLS, row - 2)
+autosize(ws, COLS, row - 2)
 ws.auto_filter.ref = f"A1:{get_column_letter(len(COLS))}{max(row - 1, 1)}"
 
 # ======================= Sheet 4: All Locations =============================
@@ -287,21 +288,22 @@ COLS = [
 header(ws, COLS)
 row = 2
 for f in action:
+    pr = priority_of(f)
+    rf = PatternFill("solid", fgColor=PRI_SOFT.get(pr, NEUTRAL_SOFT))
     for loc in (f.get("locations") or []):
-        chip(ws.cell(row=row, column=1), priority_of(f), *PRI_CHIP.get(priority_of(f), ("E9EDF4", "475569")))
-        chip(ws.cell(row=row, column=2), f["severity"].title(), *SEV_CHIP.get(f["severity"], ("EAEDF2", "475569")))
         vals = {3: f.get("category", ""), 4: f.get("title", ""), 5: f.get("id", ""),
                 6: loc.get("path", ""), 7: loc.get("line", "")}
         for c, v in vals.items():
             cell = ws.cell(row=row, column=c, value=v)
             cell.alignment = WRAP if COLS[c - 1].get("wrap") else TOP
-            cell.border = BORDER
-        lk = ws.cell(row=row, column=8); lk.border = BORDER; lk.alignment = CTR
-        link(lk, "open ↗" if loc.get("url") else "", loc.get("url")); lk.alignment = CTR
+            cell.border = BORDER; cell.fill = rf
+        lk = ws.cell(row=row, column=8); link(lk, "open ↗" if loc.get("url") else "", loc.get("url")); lk.alignment = CTR; lk.border = BORDER; lk.fill = rf
+        solid_chip(ws.cell(row=row, column=1), pr, PRI_SOLID.get(pr, "5F6673"))
+        chip(ws.cell(row=row, column=2), f["severity"].title(), *SEV_CHIP.get(f["severity"], ("EAEDF2", "475569")))
         row += 1
 if row == 2:
     ws.cell(row=2, column=1, value="No action-required locations.").font = Font(color=SUB, italic=True)
-zebra(ws, COLS, row - 2); autosize(ws, COLS, row - 2)
+autosize(ws, COLS, row - 2)
 ws.auto_filter.ref = f"A1:{get_column_letter(len(COLS))}{max(row - 1, 1)}"
 
 wb.save(OUT)
