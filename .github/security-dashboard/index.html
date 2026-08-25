@@ -11,8 +11,8 @@
  --ink:#0f172a; --ink-2:#334155; --muted:#64748b; --faint:#94a3b8;
  --line:#e6eaf2; --line-2:#d9dfec;
  --brand:#123a5e; --link:#2563eb; --link-hover:#1d4ed8;
- --crit:#7f1d1d; --high:#e11d48; --med:#f59e0b; --low:#3b82f6; --info:#94a3b8;
- --p1:#dc2626; --p2:#d97706; --p3:#64748b;
+ --crit:#92400e; --high:#dc2626; --med:#ca8a04; --low:#2563eb;
+ --p0:#4f46e5; --p1:#7c3aed; --p2:#db2777; --p3:#64748b;
  --sh-sm:0 1px 2px rgba(15,23,42,.06);
  --sh:0 1px 2px rgba(15,23,42,.04),0 4px 14px rgba(15,23,42,.06);
  --sh-lg:0 12px 34px rgba(15,23,42,.16);
@@ -131,8 +131,14 @@ table.area td.r{text-align:right;font-variant-numeric:tabular-nums;font-weight:6
 .finding .t{font-weight:700;font-size:15px;letter-spacing:-.005em}
 .sev{display:inline-block;color:#fff;font-size:10.5px;font-weight:800;padding:2px 9px;border-radius:999px;white-space:nowrap;letter-spacing:.02em}
 .sev.LOW{color:#fff}.sev.INFO{color:#0f172a}
-.pri{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:7px;color:#fff;white-space:nowrap}
-.pri.P1{background:var(--p1)}.pri.P2{background:var(--p2)}.pri.P3{background:var(--p3)}
+.pri{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:7px;color:#fff;white-space:nowrap;letter-spacing:.02em}
+.pri.P0{background:var(--p0)}.pri.P1{background:var(--p1)}.pri.P2{background:var(--p2)}.pri.P3{background:var(--p3)}
+/* page toggle pills */
+.pills{display:inline-flex;background:#e7ebf3;border:1px solid var(--line);border-radius:999px;padding:4px;gap:2px;box-shadow:var(--sh-sm)}
+.pill{font:inherit;font-size:13px;font-weight:650;padding:7px 20px;border:0;border-radius:999px;background:transparent;color:var(--muted);cursor:pointer;transition:.15s}
+.pill:hover{color:var(--ink-2)}
+.pill.active{background:var(--surface);color:var(--brand);box-shadow:var(--sh-sm)}
+.pillbar{display:flex;justify-content:center;margin:6px 0 2px}
 .stat{font-size:10.5px;font-weight:750;padding:2px 9px;border-radius:999px;white-space:nowrap}
 .stat.act{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
 .stat.acc{background:#eef2f7;color:#475569;border:1px solid #e2e8f0}
@@ -204,59 +210,75 @@ details.grp>summary .cx{margin-left:auto;color:var(--faint);font-size:12px;font-
 
  <div class="metabar" id="metabar"></div>
 
- <section id="execWrap" style="display:none">
-  <div class="h2"><span class="bar"></span><span class="t">Executive summary</span><span class="ai">AI</span></div>
-  <div class="exec" id="exec"></div>
- </section>
+ <div class="pillbar">
+  <div class="pills" role="tablist">
+   <button class="pill active" id="pillOverview" type="button" onclick="showPage('overview')">Overview</button>
+   <button class="pill" id="pillVulns" type="button" onclick="showPage('vulns')">Vulnerabilities</button>
+  </div>
+ </div>
 
- <section id="priWrap" style="display:none">
-  <div class="h2"><span class="bar"></span><span class="t">Priority actions</span><span class="ai">AI</span></div>
-  <ol class="prilist" id="priList"></ol>
- </section>
+ <div id="pageOverview" class="stack">
+  <section id="execWrap" style="display:none">
+   <div class="h2"><span class="bar"></span><span class="t">Executive summary</span><span class="ai">AI</span></div>
+   <div class="exec" id="exec"></div>
+  </section>
+  <section id="priWrap" style="display:none">
+   <div class="h2"><span class="bar"></span><span class="t">Priority actions</span><span class="ai">AI</span></div>
+   <ol class="prilist" id="priList"></ol>
+  </section>
+  <div class="grid">
+   <section>
+    <div class="h2"><span class="bar"></span><span class="t">Findings by severity</span></div>
+    <div class="chartbox"><canvas id="donut"></canvas></div>
+    <div class="legend" id="donutLegend"></div>
+   </section>
+   <section>
+    <div class="h2"><span class="bar"></span><span class="t">Findings by area</span></div>
+    <table class="area" id="areaTable"></table>
+   </section>
+  </div>
+  <section>
+   <div class="h2"><span class="bar"></span><span class="t">Trend across reports</span><span class="count" id="trendNote"></span></div>
+   <div class="chartbox" style="height:288px"><canvas id="trend"></canvas></div>
+  </section>
+ </div>
 
- <div class="grid">
+ <div id="pageVulns" class="stack" style="display:none">
   <section>
    <div class="h2"><span class="bar"></span><span class="t">Risk summary</span></div>
    <div id="riskHead"></div>
    <div id="highWrap"></div>
   </section>
   <section>
-   <div class="h2"><span class="bar"></span><span class="t">Findings by severity</span></div>
-   <div class="chartbox"><canvas id="donut"></canvas></div>
-   <div class="legend" id="donutLegend"></div>
+   <div class="grouptitle" id="prioTitle">Action required</div>
+   <div id="prio"></div>
+   <div id="hardWrap"></div>
   </section>
  </div>
-
- <section>
-  <div class="h2"><span class="bar"></span><span class="t">Trend across reports</span><span class="count" id="trendNote"></span></div>
-  <div class="chartbox" style="height:288px"><canvas id="trend"></canvas></div>
- </section>
-
- <section>
-  <div class="h2"><span class="bar"></span><span class="t">Findings by area</span></div>
-  <table class="area" id="areaTable"></table>
- </section>
-
- <section>
-  <div class="grouptitle" id="prioTitle">Action required</div>
-  <div id="prio"></div>
-  <div id="hardWrap"></div>
- </section>
 
  <div class="foot" id="foot"></div>
 </div>
 
 <script>
-const SEV=["CRITICAL","HIGH","MEDIUM","LOW","INFO"];
-const COL={CRITICAL:"#7f1d1d",HIGH:"#e11d48",MEDIUM:"#f59e0b",LOW:"#3b82f6",INFO:"#94a3b8"};
+const SEV=["CRITICAL","HIGH","MEDIUM","LOW"];  // Info folded into Low
+const COL={CRITICAL:"#92400e",HIGH:"#dc2626",MEDIUM:"#ca8a04",LOW:"#2563eb"};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const cap=s=>s?s[0]+s.slice(1).toLowerCase():s;
 const fmtTime=ts=>{try{return ts?new Date(ts).toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'numeric',minute:'2-digit',hour12:true,timeZoneName:'short'}):"";}catch(e){return ts||"";}};
 const fmtShort=ts=>{try{return ts?new Date(ts).toLocaleString(undefined,{month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):"";}catch(e){return ts||"";}};
-const PRO={P1:0,P2:1,P3:2,"":3};
+const PRO={P0:0,P1:1,P2:2,P3:3,"":4};
+const PRICOL={P0:"#4f46e5",P1:"#7c3aed",P2:"#db2777",P3:"#64748b"};
 const statusOf=f=>(f.triage||{}).status||"action_required";
 const prioOf=f=>(f.triage||{}).priority||(statusOf(f)==="action_required"?"P2":"");
+function showPage(p){
+  const ov=p==="overview";
+  document.getElementById("pageOverview").style.display=ov?"":"none";
+  document.getElementById("pageVulns").style.display=ov?"none":"";
+  document.getElementById("pillOverview").classList.toggle("active",ov);
+  document.getElementById("pillVulns").classList.toggle("active",!ov);
+  if(ov){try{donutChart&&donutChart.resize();trendChart&&trendChart.resize();}catch(e){}}
+}
 let donutChart,trendChart,CUR=null,RUNS=[],RUNI=0;
 
 async function boot(){
@@ -301,6 +323,9 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")closeMenu();});
 async function loadRun(file){
   let d; try{ d=await (await fetch(file,{cache:"no-store"})).json(); }catch(e){ return; }
   const m=d.meta,s=d.summary;
+  // fold any legacy Info (older runs) into Low so historical reports render on the 4-level scale
+  (d.findings||[]).forEach(f=>{ if(f.severity==="INFO") f.severity="LOW"; });
+  ["occBySeverity","typesBySeverity"].forEach(k=>{ const o=s[k]||(s[k]={}); if(o.INFO){ o.LOW=(o.LOW||0)+o.INFO; delete o.INFO; } });
   const highOcc=(s.occBySeverity.CRITICAL||0)+(s.occBySeverity.HIGH||0);
   const p=$("posture"),pt=$("postureTxt"); p.style.display="";
   if(s.occurrences===0){pt.textContent="No issues";p.style.background="#16a34a";}
@@ -380,7 +405,8 @@ function card(f,isAction){
   const vmark = vf ? (vf.verified ? `<span class="vf ok" title="Passed dual-pass review">✓ verified</span>`
                                   : `<span class="vf nr" title="${esc(vf.note||'flagged by a reviewer')}">⚠ needs review</span>`) : "";
   const aitag = f.enriched?`<span class="sep">·</span><span class="aitag" title="AI-generated remediation">✨ AI</span>`:'';
-  return `<div class="finding${isAction?' fa':''}">
+  const edge = isAction ? `border-left:3px solid ${PRICOL[prioOf(f)]||'#cbd5e1'}` : "";
+  return `<div class="finding${isAction?' fa':''}" style="${edge}">
    <div class="h"><span class="sev ${f.severity}" style="background:${COL[f.severity]}">${cap(f.severity)}</span>${pri}
     <span class="t">${esc(f.title)}</span>${stat}<span class="cnt">×${f.count}</span></div>
    <div class="rule"><code>${esc(f.id)}</code><span class="sep">·</span>${esc(f.source)}<span class="sep">·</span>${esc(f.area)} ${catT}${expo}${guide}${aitag}</div>
@@ -391,13 +417,16 @@ function card(f,isAction){
 }
 
 function drawDonut(occ){
-  const labels=SEV.filter(s=>occ[s]);const data=labels.map(s=>occ[s]);
+  const labels=SEV.filter(s=>occ[s]);const real=labels.map(s=>occ[s]);
+  const total=real.reduce((a,b)=>a+b,0)||1;
+  const floor=Math.max(1,Math.round(total*0.02));
+  const arc=real.map(v=>Math.max(v,floor));  // tiny slices get a visible minimum arc; tooltip/legend keep the true count
   const cols=labels.map(s=>COL[s]);
-  $("donutLegend").innerHTML=labels.map(s=>`<span><i class="dot" style="background:${COL[s]}"></i>${cap(s)} · <b>${occ[s]}</b></span>`).join("");
+  $("donutLegend").innerHTML=labels.map((s,i)=>`<span><i class="dot" style="background:${COL[s]}"></i>${cap(s)} · <b>${real[i]}</b></span>`).join("");
   if(donutChart)donutChart.destroy();
   donutChart=new Chart($("donut"),{type:"doughnut",
-    data:{labels:labels.map(cap),datasets:[{data,backgroundColor:cols,borderColor:"#fff",borderWidth:3,hoverOffset:6}]},
-    options:{cutout:"64%",plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.label}: ${c.raw}`}}}}});
+    data:{labels:labels.map(cap),datasets:[{data:arc,backgroundColor:cols,borderColor:"#fff",borderWidth:3,hoverOffset:6}]},
+    options:{cutout:"64%",plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.label}: ${real[c.dataIndex]}`}}}}});
 }
 
 function drawTrend(runs){

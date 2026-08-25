@@ -1,25 +1,24 @@
 #!/usr/bin/env python3
 """
-Build a multi-sheet security AUDIT workbook (.xlsx) from run.json for team tracking.
+Build a management-ready, multi-sheet security AUDIT workbook (.xlsx) from run.json.
 
 Sheets:
-  1. Summary            - scan metadata + counts by status / priority / severity / category
-  2. Action Required    - the tracking sheet (only findings that genuinely need fixing),
-                          with blank Status / Owner / Target date / Notes columns for the team
-  3. Not Tracked        - acceptable ("okayish") + false positives, with the reason they are
-                          excluded from tracking (kept for audit completeness)
-  4. All Locations      - every occurrence of an action-required finding (file:line + link)
+  1. Summary          - posture headline + counts by status / priority / severity / category
+  2. Action Required  - the tracking list (only findings that need fixing), with blank
+                        Status / Owner / Target date / Notes columns for the team
+  3. Not Tracked      - acceptable ("okayish") + false positives, with the reason excluded
+  4. All Locations    - every occurrence of an action-required finding (path:line + link)
 
-Triage taxonomy (set by enrich_report.py):
-  triage.status  = action_required | acceptable | false_positive
-  triage.priority= P1 | P2 | P3   (action_required only)
+Design goals: calm, professional palette (no loud full-cell fills), soft priority/severity
+chips, columns auto-sized to content with padding so nothing is clipped, wrapped long text
+with matching row heights, and short hyperlinked labels for references/locations.
 
-If enrichment did not run, every finding is treated as action_required (nothing hidden).
+Triage taxonomy (enrich_report.py): triage.status = action_required | acceptable |
+false_positive; triage.priority = P0 | P1 | P2 | P3 (action_required only).
 
-Env: RUN_JSON (default run.json), OUT_XLSX (default security-audit.xlsx)
-Requires: openpyxl
+Env: RUN_JSON (default run.json), OUT_XLSX (default security-audit.xlsx). Requires openpyxl.
 """
-import os, sys, json
+import os, sys, json, math
 
 try:
     from openpyxl import Workbook
@@ -39,191 +38,271 @@ except Exception as e:
 
 meta = run.get("meta", {})
 findings = run.get("findings", [])
+for _f in findings:  # fold any legacy Info into Low (no Info tier)
+    if _f.get("severity") == "INFO":
+        _f["severity"] = "LOW"
+SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+PRI_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3, "": 4, None: 4}
 
-SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
-PRI_ORDER = {"P1": 0, "P2": 1, "P3": 2, "": 3, None: 3}
+# ---- palette (calm, management-facing) -------------------------------------
+NAVY = "1F3A5F"; NAVY_DK = "16304F"; INK = "1F2A37"; SUB = "6B7280"
+ZEBRA = "F5F7FB"; LINE = "DDE3EC"; TITLE_BLUE = "1F3A5F"
+# soft chips: (fill, font). Priority uses a distinct indigo/violet/pink/slate family so it
+# never reads the same as the severity chips.
+PRI_CHIP = {"P0": ("E0DEFB", "3730A3"), "P1": ("EADDFB", "6B21A8"),
+            "P2": ("FBDDEC", "9D174D"), "P3": ("E9EDF4", "475569")}
+SEV_CHIP = {"CRITICAL": ("EFE0D3", "7C3F00"), "HIGH": ("FADDDD", "B01212"),
+            "MEDIUM": ("FBEFC9", "8A6D00"), "LOW": ("DCE8FF", "1D4ED8")}
 
 
-def status_of(f):
-    return (f.get("triage") or {}).get("status") or "action_required"
-
-
-def priority_of(f):
-    return (f.get("triage") or {}).get("priority") or ("P2" if status_of(f) == "action_required" else "")
+def status_of(f): return (f.get("triage") or {}).get("status") or "action_required"
+def priority_of(f): return (f.get("triage") or {}).get("priority") or ("P2" if status_of(f) == "action_required" else "")
 
 
 action = [f for f in findings if status_of(f) == "action_required"]
 acceptable = [f for f in findings if status_of(f) == "acceptable"]
 false_pos = [f for f in findings if status_of(f) == "false_positive"]
+action.sort(key=lambda f: (PRI_ORDER.get(priority_of(f), 4),
+                           SEV_ORDER.index(f["severity"]) if f["severity"] in SEV_ORDER else 9, -f.get("count", 0)))
 
-action.sort(key=lambda f: (PRI_ORDER.get(priority_of(f), 3), SEV_ORDER.index(f["severity"]) if f["severity"] in SEV_ORDER else 9, -f.get("count", 0)))
-
-# ---- styling helpers -------------------------------------------------------
-INK = "0F172A"
-ACCENT = "0F3A5F"
-HEAD_FILL = PatternFill("solid", fgColor=ACCENT)
-HEAD_FONT = Font(color="FFFFFF", bold=True, size=11)
-TITLE_FONT = Font(color=ACCENT, bold=True, size=15)
-SUB_FONT = Font(color="64748B", size=10)
+# ---- style helpers ---------------------------------------------------------
+THIN = Side(style="thin", color=LINE)
+BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+HEAD_FILL = PatternFill("solid", fgColor=NAVY)
+HEAD_FONT = Font(color="FFFFFF", bold=True, size=10.5, name="Calibri")
 WRAP = Alignment(vertical="top", wrap_text=True)
 TOP = Alignment(vertical="top")
-THIN = Side(style="thin", color="E5E9F0")
-BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
-SEV_FILL = {"CRITICAL": "7F1D1D", "HIGH": "DC2626", "MEDIUM": "F59E0B", "LOW": "64748B", "INFO": "CBD5E1"}
-PRI_FILL = {"P1": "DC2626", "P2": "F59E0B", "P3": "64748B"}
+CTR = Alignment(horizontal="center", vertical="center")
 
 
-def header_row(ws, headers, row=1):
-    for c, h in enumerate(headers, 1):
-        cell = ws.cell(row=row, column=c, value=h)
+def chip(cell, text, fill, font):
+    cell.value = text
+    cell.fill = PatternFill("solid", fgColor=fill)
+    cell.font = Font(color=font, bold=True, size=10)
+    cell.alignment = CTR
+    cell.border = BORDER
+
+
+def header(ws, cols, row=1):
+    for c, spec in enumerate(cols, 1):
+        cell = ws.cell(row=row, column=c, value=spec["h"])
         cell.fill = HEAD_FILL; cell.font = HEAD_FONT
-        cell.alignment = Alignment(vertical="center", wrap_text=True)
+        cell.alignment = Alignment(horizontal=spec.get("align", "left"), vertical="center", wrap_text=True)
         cell.border = BORDER
-    ws.row_dimensions[row].height = 26
+    ws.row_dimensions[row].height = 30
     ws.freeze_panes = ws.cell(row=row + 1, column=1)
 
 
-def widths(ws, w):
-    for i, width in enumerate(w, 1):
-        ws.column_dimensions[get_column_letter(i)].width = width
+def autosize(ws, cols, data_rows):
+    """Set column widths from content length (+padding), capped per spec, and compute
+    row heights so wrapped cells show fully."""
+    for ci, spec in enumerate(cols, 1):
+        w = spec.get("w")
+        if w is None:  # auto from content
+            maxlen = len(str(spec["h"]))
+            for r in range(2, data_rows + 2):
+                v = ws.cell(row=r, column=ci).value
+                if v is not None:
+                    maxlen = max(maxlen, max((len(x) for x in str(v).split("\n")), default=0))
+            w = min(spec.get("max", 40), max(spec.get("min", 9), maxlen + 3))
+        ws.column_dimensions[get_column_letter(ci)].width = w
+    # row heights for wrapped columns
+    wrapcols = [(ci, spec) for ci, spec in enumerate(cols, 1) if spec.get("wrap")]
+    for r in range(2, data_rows + 2):
+        lines = 1
+        for ci, spec in enumerate(cols, 1):
+            if not spec.get("wrap"):
+                continue
+            v = ws.cell(row=r, column=ci).value
+            if v is None:
+                continue
+            width = ws.column_dimensions[get_column_letter(ci)].width or 20
+            chars = max(8, width / 1.05)
+            need = sum(max(1, math.ceil(len(seg) / chars)) for seg in str(v).split("\n"))
+            lines = max(lines, need)
+        ws.row_dimensions[r].height = min(300, 15 * lines + 6)
 
 
-def sev_tag(cell, sev):
-    cell.fill = PatternFill("solid", fgColor=SEV_FILL.get(sev, "CBD5E1"))
-    cell.font = Font(color="0F172A" if sev in ("LOW", "INFO") else "FFFFFF", bold=True)
-    cell.alignment = Alignment(horizontal="center", vertical="top")
+def zebra(ws, cols, data_rows):
+    fill = PatternFill("solid", fgColor=ZEBRA)
+    for r in range(2, data_rows + 2):
+        if r % 2 == 1:
+            for ci in range(1, len(cols) + 1):
+                ws.cell(row=r, column=ci).fill = fill
 
 
-def pri_tag(cell, pri):
-    if pri in PRI_FILL:
-        cell.fill = PatternFill("solid", fgColor=PRI_FILL[pri])
-        cell.font = Font(color="FFFFFF", bold=True)
-    cell.alignment = Alignment(horizontal="center", vertical="top")
+def link(cell, text, url):
+    cell.value = text
+    if url:
+        cell.hyperlink = url
+        cell.font = Font(color="1D4ED8", underline="single", size=10)
+    cell.alignment = TOP
 
 
 wb = Workbook()
 
-# ---- Sheet 1: Summary ------------------------------------------------------
+# ============================ Sheet 1: Summary ==============================
 ws = wb.active; ws.title = "Summary"
-ws["A1"] = "Security Audit - Ansible Remote Server Deployment"; ws["A1"].font = TITLE_FONT
-ws["A2"] = f"{meta.get('repo','')}  ·  branch {meta.get('branch','')}  ·  commit {meta.get('shaShort','')}  ·  scanned {meta.get('date','')}"
-ws["A2"].font = SUB_FONT
+ws.sheet_view.showGridLines = False
+ws["A1"] = "Security Audit — Ansible Remote Server Deployment"
+ws["A1"].font = Font(color=TITLE_BLUE, bold=True, size=16)
+ws.merge_cells("A1:C1")
+ws["A2"] = f"{meta.get('repo','')}   ·   branch {meta.get('branch','')}   ·   commit {meta.get('shaShort','')}   ·   scanned {meta.get('date','')}"
+ws["A2"].font = Font(color=SUB, size=10); ws.merge_cells("A2:C2")
 eng = meta.get("engine")
-ws["A3"] = ("Triage & remediation: %s, fail-safe dual-pass verified." % eng) if eng else "Remediation: curated ruleset (AI enrichment not run)."
-ws["A3"].font = SUB_FONT
+ws["A3"] = (f"Triage & remediation: {eng}, fail-safe dual-pass verified." if eng else "Remediation: curated ruleset (AI enrichment not run).")
+ws["A3"].font = Font(color=SUB, size=10, italic=True); ws.merge_cells("A3:C3")
 
-r = 5
-ws.cell(row=r, column=1, value="Tracking status").font = Font(bold=True, color=ACCENT)
-r += 1
-rows = [
+# posture headline
+p0 = sum(1 for f in action if priority_of(f) == "P0")
+high = sum(1 for f in action if f["severity"] in ("CRITICAL", "HIGH"))
+posture = "ACTION REQUIRED" if action else "NO ISSUES"
+pfill = "C0392B" if p0 or high else ("B7791F" if action else "1E8449")
+ws["A5"] = posture
+ws["A5"].font = Font(color="FFFFFF", bold=True, size=12); ws["A5"].alignment = CTR
+ws["A5"].fill = PatternFill("solid", fgColor=pfill)
+ws.merge_cells("A5:C5"); ws.row_dimensions[5].height = 24
+
+
+def block(ws, title, rows, r):
+    ws.cell(row=r, column=1, value=title).font = Font(bold=True, color=NAVY, size=11)
+    r += 1
+    for label, val in rows:
+        a = ws.cell(row=r, column=1, value=label); a.font = Font(size=10.5); a.alignment = TOP; a.border = BORDER
+        b = ws.cell(row=r, column=2, value=val); b.font = Font(bold=True, size=10.5); b.alignment = Alignment(horizontal="right"); b.border = BORDER
+        r += 1
+    return r + 1
+
+
+r = 7
+r = block(ws, "Tracking status", [
     ("Action required (tracked)", len(action)),
     ("Acceptable / not tracked", len(acceptable)),
     ("False positives", len(false_pos)),
     ("Total issue types", len(findings)),
     ("Total occurrences", run.get("summary", {}).get("occurrences", sum(f.get("count", 0) for f in findings))),
-]
-for label, val in rows:
-    ws.cell(row=r, column=1, value=label).alignment = TOP
-    ws.cell(row=r, column=2, value=val).alignment = TOP
-    r += 1
-
-r += 1
-ws.cell(row=r, column=1, value="Action required by priority").font = Font(bold=True, color=ACCENT); r += 1
-for p in ("P1", "P2", "P3"):
-    ws.cell(row=r, column=1, value=p)
-    ws.cell(row=r, column=2, value=sum(1 for f in action if priority_of(f) == p)); r += 1
-
-r += 1
-ws.cell(row=r, column=1, value="Action required by category").font = Font(bold=True, color=ACCENT); r += 1
+], r)
+r = block(ws, "Action required by priority", [(p, sum(1 for f in action if priority_of(f) == p)) for p in ("P0", "P1", "P2", "P3")], r)
 cats = {}
 for f in action:
     cats[f.get("category", "General Hardening")] = cats.get(f.get("category", "General Hardening"), 0) + 1
-for cat, n in sorted(cats.items(), key=lambda x: -x[1]):
-    ws.cell(row=r, column=1, value=cat)
-    ws.cell(row=r, column=2, value=n); r += 1
+r = block(ws, "Action required by category", sorted(cats.items(), key=lambda x: -x[1]), r)
+ws.column_dimensions["A"].width = 34; ws.column_dimensions["B"].width = 12; ws.column_dimensions["C"].width = 4
 
-widths(ws, [34, 12])
-
-# ---- Sheet 2: Action Required (tracking) -----------------------------------
+# ======================= Sheet 2: Action Required ===========================
 ws = wb.create_sheet("Action Required")
-H = ["Priority", "Severity", "Category", "Finding", "Rule ID", "Scanner", "Exposure",
-     "Occurrences", "Why it matters", "How to fix", "Reference", "First location",
-     "Status", "Owner", "Target date", "Notes"]
-header_row(ws, H)
+ws.sheet_view.showGridLines = False
+COLS = [
+    {"h": "Priority", "align": "center", "w": 9},
+    {"h": "Severity", "align": "center", "w": 11},
+    {"h": "Category", "wrap": True, "min": 16, "max": 22, "w": 20},
+    {"h": "Finding", "wrap": True, "w": 34},
+    {"h": "Rule ID", "min": 12, "max": 40},
+    {"h": "Scanner", "w": 12},
+    {"h": "Exposure", "align": "center", "w": 11},
+    {"h": "Count", "align": "center", "w": 8},
+    {"h": "Why it matters", "wrap": True, "w": 52},
+    {"h": "How to fix", "wrap": True, "w": 54},
+    {"h": "Reference", "w": 13},
+    {"h": "Location", "min": 20, "max": 46},
+    {"h": "Status", "w": 13},
+    {"h": "Owner", "w": 14},
+    {"h": "Target date", "w": 13},
+    {"h": "Notes", "wrap": True, "w": 30},
+]
+header(ws, COLS)
 row = 2
 for f in action:
     tri = f.get("triage") or {}
     loc = (f.get("locations") or [{}])[0]
-    vals = [priority_of(f), f["severity"], f.get("category", ""), f.get("title", ""),
-            f.get("id", ""), f.get("source", ""), tri.get("exposure", ""),
-            f.get("count", 0), f.get("why", ""), f.get("fix", ""), f.get("guide", ""),
-            f"{loc.get('path','')}:{loc.get('line','')}" if loc.get("path") else "",
-            "Open", "", "", tri.get("reason", "")]
-    for c, v in enumerate(vals, 1):
+    chip(ws.cell(row=row, column=1), priority_of(f), *PRI_CHIP.get(priority_of(f), ("E9EDF4", "475569")))
+    chip(ws.cell(row=row, column=2), f["severity"].title(), *SEV_CHIP.get(f["severity"], ("EAEDF2", "475569")))
+    vals = {3: f.get("category", ""), 4: f.get("title", ""), 5: f.get("id", ""), 6: f.get("source", ""),
+            7: tri.get("exposure", ""), 8: f.get("count", 0), 9: f.get("why", ""), 10: f.get("fix", ""),
+            13: "Open", 16: tri.get("reason", "")}
+    for c, v in vals.items():
         cell = ws.cell(row=row, column=c, value=v)
-        cell.alignment = WRAP if c in (3, 4, 9, 10, 16) else TOP
+        cell.alignment = WRAP if COLS[c - 1].get("wrap") else TOP
         cell.border = BORDER
-    pri_tag(ws.cell(row=row, column=1), priority_of(f))
-    sev_tag(ws.cell(row=row, column=2), f["severity"])
-    # hyperlink the reference + first location
-    if f.get("guide"):
-        ws.cell(row=row, column=11).hyperlink = f["guide"]; ws.cell(row=row, column=11).font = Font(color="1D4ED8", underline="single")
-    if loc.get("url"):
-        ws.cell(row=row, column=12).hyperlink = loc["url"]; ws.cell(row=row, column=12).font = Font(color="1D4ED8", underline="single")
-    ws.row_dimensions[row].height = 58
+    link(ws.cell(row=row, column=11), "Reference ↗" if f.get("guide") else "", f.get("guide"))
+    ws.cell(row=row, column=11).border = BORDER
+    link(ws.cell(row=row, column=12), f"{loc.get('path','')}:{loc.get('line','')}" if loc.get("path") else "", loc.get("url"))
+    ws.cell(row=row, column=12).border = BORDER
+    for c in (14, 15):
+        ws.cell(row=row, column=c).border = BORDER
     row += 1
 if row == 2:
-    ws.cell(row=2, column=1, value="No action-required findings.").font = SUB_FONT
-widths(ws, [9, 10, 22, 30, 16, 9, 11, 12, 46, 50, 26, 30, 12, 14, 12, 30])
-ws.auto_filter.ref = f"A1:{get_column_letter(len(H))}{max(row-1,1)}"
+    ws.cell(row=2, column=1, value="No action-required findings.").font = Font(color=SUB, italic=True)
+zebra(ws, COLS, row - 2); autosize(ws, COLS, row - 2)
+ws.auto_filter.ref = f"A1:{get_column_letter(len(COLS))}{max(row - 1, 1)}"
 
-# ---- Sheet 3: Not Tracked (acceptable + false positive) --------------------
+# ========================= Sheet 3: Not Tracked =============================
 ws = wb.create_sheet("Not Tracked")
-H = ["Tracking status", "Severity", "Category", "Finding", "Rule ID", "Scanner",
-     "Occurrences", "Reason excluded", "Why (context)"]
-header_row(ws, H)
+ws.sheet_view.showGridLines = False
+COLS = [
+    {"h": "Tracking status", "align": "center", "w": 15},
+    {"h": "Severity", "align": "center", "w": 11},
+    {"h": "Category", "wrap": True, "min": 16, "max": 22, "w": 20},
+    {"h": "Finding", "wrap": True, "w": 34},
+    {"h": "Rule ID", "min": 12, "max": 40},
+    {"h": "Scanner", "w": 12},
+    {"h": "Count", "align": "center", "w": 8},
+    {"h": "Reason excluded", "wrap": True, "w": 52},
+    {"h": "Why (context)", "wrap": True, "w": 52},
+]
+header(ws, COLS)
 row = 2
 for f in acceptable + false_pos:
     tri = f.get("triage") or {}
     label = "Acceptable" if status_of(f) == "acceptable" else "False positive"
-    vals = [label, f["severity"], f.get("category", ""), f.get("title", ""), f.get("id", ""),
-            f.get("source", ""), f.get("count", 0), tri.get("reason", ""), f.get("why", "")]
-    for c, v in enumerate(vals, 1):
+    ac = ws.cell(row=row, column=1, value=label); ac.alignment = CTR
+    ac.font = Font(bold=True, size=10, color="475569" if label == "Acceptable" else "845C05")
+    ac.fill = PatternFill("solid", fgColor="E9EDF4" if label == "Acceptable" else "FCF1D0"); ac.border = BORDER
+    chip(ws.cell(row=row, column=2), f["severity"].title(), *SEV_CHIP.get(f["severity"], ("EAEDF2", "475569")))
+    vals = {3: f.get("category", ""), 4: f.get("title", ""), 5: f.get("id", ""), 6: f.get("source", ""),
+            7: f.get("count", 0), 8: tri.get("reason", ""), 9: f.get("why", "")}
+    for c, v in vals.items():
         cell = ws.cell(row=row, column=c, value=v)
-        cell.alignment = WRAP if c in (3, 4, 8, 9) else TOP
+        cell.alignment = WRAP if COLS[c - 1].get("wrap") else TOP
         cell.border = BORDER
-    sev_tag(ws.cell(row=row, column=2), f["severity"])
-    ws.row_dimensions[row].height = 44
     row += 1
 if row == 2:
-    ws.cell(row=2, column=1, value="Nothing excluded - every finding is action-required.").font = SUB_FONT
-widths(ws, [15, 10, 22, 30, 16, 9, 12, 46, 46])
-ws.auto_filter.ref = f"A1:{get_column_letter(len(H))}{max(row-1,1)}"
+    ws.cell(row=2, column=1, value="Nothing excluded — every finding is action-required.").font = Font(color=SUB, italic=True)
+zebra(ws, COLS, row - 2); autosize(ws, COLS, row - 2)
+ws.auto_filter.ref = f"A1:{get_column_letter(len(COLS))}{max(row - 1, 1)}"
 
-# ---- Sheet 4: All Locations (action-required occurrences) ------------------
+# ======================= Sheet 4: All Locations =============================
 ws = wb.create_sheet("All Locations")
-H = ["Priority", "Severity", "Category", "Finding", "Rule ID", "File", "Line", "Link"]
-header_row(ws, H)
+ws.sheet_view.showGridLines = False
+COLS = [
+    {"h": "Priority", "align": "center", "w": 9},
+    {"h": "Severity", "align": "center", "w": 11},
+    {"h": "Category", "wrap": True, "min": 16, "max": 22, "w": 20},
+    {"h": "Finding", "wrap": True, "w": 40},
+    {"h": "Rule ID", "min": 12, "max": 40},
+    {"h": "File", "min": 20, "max": 50},
+    {"h": "Line", "align": "center", "w": 8},
+    {"h": "Link", "align": "center", "w": 10},
+]
+header(ws, COLS)
 row = 2
 for f in action:
     for loc in (f.get("locations") or []):
-        vals = [priority_of(f), f["severity"], f.get("category", ""), f.get("title", ""),
-                f.get("id", ""), loc.get("path", ""), loc.get("line", ""), loc.get("url", "")]
-        for c, v in enumerate(vals, 1):
+        chip(ws.cell(row=row, column=1), priority_of(f), *PRI_CHIP.get(priority_of(f), ("E9EDF4", "475569")))
+        chip(ws.cell(row=row, column=2), f["severity"].title(), *SEV_CHIP.get(f["severity"], ("EAEDF2", "475569")))
+        vals = {3: f.get("category", ""), 4: f.get("title", ""), 5: f.get("id", ""),
+                6: loc.get("path", ""), 7: loc.get("line", "")}
+        for c, v in vals.items():
             cell = ws.cell(row=row, column=c, value=v)
-            cell.alignment = WRAP if c in (3, 4) else TOP
+            cell.alignment = WRAP if COLS[c - 1].get("wrap") else TOP
             cell.border = BORDER
-        pri_tag(ws.cell(row=row, column=1), priority_of(f))
-        sev_tag(ws.cell(row=row, column=2), f["severity"])
-        if loc.get("url"):
-            ws.cell(row=row, column=8).value = "open"
-            ws.cell(row=row, column=8).hyperlink = loc["url"]
-            ws.cell(row=row, column=8).font = Font(color="1D4ED8", underline="single")
+        lk = ws.cell(row=row, column=8); lk.border = BORDER; lk.alignment = CTR
+        link(lk, "open ↗" if loc.get("url") else "", loc.get("url")); lk.alignment = CTR
         row += 1
 if row == 2:
-    ws.cell(row=2, column=1, value="No action-required locations.").font = SUB_FONT
-widths(ws, [9, 10, 22, 30, 16, 46, 8, 10])
-ws.auto_filter.ref = f"A1:{get_column_letter(len(H))}{max(row-1,1)}"
+    ws.cell(row=2, column=1, value="No action-required locations.").font = Font(color=SUB, italic=True)
+zebra(ws, COLS, row - 2); autosize(ws, COLS, row - 2)
+ws.auto_filter.ref = f"A1:{get_column_letter(len(COLS))}{max(row - 1, 1)}"
 
 wb.save(OUT)
 print(f"wrote {OUT}: {len(action)} action-required, {len(acceptable)} acceptable, {len(false_pos)} false-positive.", file=sys.stderr)

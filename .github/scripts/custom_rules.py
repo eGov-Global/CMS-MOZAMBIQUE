@@ -155,7 +155,9 @@ for p in compose_files():
             continue
         host_ip, cport = m.group(1), int(m.group(3))
         if cport in DATA_PORTS and (host_ip is None or host_ip == "0.0.0.0"):
-            add("CMS-SEC-07", f"{DATA_PORTS[cport]} port published on all interfaces (0.0.0.0)", "HIGH", "docker-compose", p, i)
+            # One clubbed finding for every datastore/admin port so they group into a
+            # single tracked item (the specific service is in the linked location/line).
+            add("CMS-SEC-07", "Datastore or admin port published on all interfaces (0.0.0.0)", "HIGH", "docker-compose", p, i)
 
 
 # ---------------------------------------------------------------------------

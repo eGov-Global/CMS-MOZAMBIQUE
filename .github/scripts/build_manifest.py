@@ -7,7 +7,14 @@ Usage: build_manifest.py <data_dir>
 """
 import json, os, sys
 
-SEV = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+SEV = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]  # Info folded into Low
+
+
+def _fold(occ):
+    """Fold any legacy Info counts (from older runs) into Low so the trend stays consistent."""
+    out = {k: occ.get(k, 0) for k in SEV}
+    out["LOW"] += occ.get("INFO", 0)
+    return out
 
 
 def main():
@@ -31,7 +38,7 @@ def main():
             "pr": m.get("pr"),
             "occurrences": s.get("occurrences", 0),
             "types": s.get("types", 0),
-            "occBySeverity": {k: s.get("occBySeverity", {}).get(k, 0) for k in SEV},
+            "occBySeverity": _fold(s.get("occBySeverity", {})),
         })
     runs.sort(key=lambda r: r.get("ts", ""), reverse=True)
     json.dump({"runs": runs}, sys.stdout, indent=1)

@@ -13,7 +13,7 @@ RUN_URL, PR_NUMBER, PR_TITLE, SCAN_SCOPE
 """
 import json, os, datetime, collections
 
-SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]  # Info folded into Low (see norm_sev)
 CHECKOV_SEV = {"secrets": "HIGH", "dockerfile": "MEDIUM", "ansible": "MEDIUM"}
 
 # Curated "why it matters / how to fix / authoritative reference" keyed by a lowercase
@@ -204,7 +204,9 @@ def load(p):
 
 def norm_sev(s):
     s = (s or "").upper()
-    return "INFO" if s == "TRACE" else (s if s in SEV_ORDER else "MEDIUM")
+    if s in ("INFO", "INFORMATIONAL", "TRACE", "NONE"):
+        return "LOW"          # we don't surface an Info tier; fold it into Low
+    return s if s in SEV_ORDER else "MEDIUM"
 
 
 def remediate(rule_id, title, desc):

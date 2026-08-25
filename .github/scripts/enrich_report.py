@@ -223,7 +223,8 @@ elif REPO:
 #        standard hardening controls (cap_drop, no-new-privileges, TLS validation)
 #   v4 = deployment context corrected to verified live reality (no host firewall;
 #        datastores published on 0.0.0.0 -> security group is the sole control)
-CACHE_V = 4
+#   v5 = 4-level priority scale P0..P3 (P0 = critical/act-now)
+CACHE_V = 5
 
 
 def _cache_ok(c):
@@ -245,7 +246,7 @@ DEPLOY = (
     "0.0.0.0 (all host interfaces). Externally only 22/80/443 are reachable, so the cloud security group "
     "is the SOLE control in front of those datastore/admin ports - a single point of failure with no "
     "defense-in-depth. Data is citizen grievance data (confidential). Judge each finding by real "
-    "abusability here: a datastore/admin port bound to 0.0.0.0 with no host firewall is action_required "
+    "abusability here: a datastore/admin port bound to 0.0.0.0 with no host firewall is action_required at P0 "
     "(one security-group misconfig from full exposure), NOT 'internal/acceptable'. A control genuinely "
     "required and already constrained (e.g. node_exporter host mounts, read-only) may be acceptable."
 )
@@ -270,9 +271,14 @@ RUBRIC = (
     "production (only if the code clearly proves this).\n"
     "Bias to caution: if unsure, choose action_required (P3). Never downgrade a real hardening gap to acceptable or "
     "false_positive merely because exploitation would need a prior foothold or the service is internal.\n"
-    "priority (action_required only): P1 = direct container escape / host takeover / credential exposure; "
-    "P2 = enables privilege escalation or lateral movement given a foothold, or weakened transport security; "
-    "P3 = defense-in-depth hardening on an internal service (e.g. drop capabilities, no-new-privileges).\n"
+    "priority (action_required only) - use a 4-level scale P0..P3:\n"
+    "  P0 = critical, act now: direct container escape / host takeover / credential or secret exposure, "
+    "or a critical asset reachable with the sole control one misconfig away (Docker socket mount; a datastore/"
+    "admin port on 0.0.0.0 with NO host firewall; a committed default credential; an unauthenticated admin API).\n"
+    "  P1 = high, needs a precondition: enables privilege escalation or lateral movement given a foothold, or "
+    "weakened transport security (disabled TLS validation, insecure registry, cleartext carrying secrets).\n"
+    "  P2 = medium: a real hardening gap with limited blast radius.\n"
+    "  P3 = low / defense-in-depth on an internal service (drop capabilities, no-new-privileges, resource limits).\n"
     "exposure: public (reachable from internet) | internal (container-to-container only) | local (host-only) | unknown."
 )
 
