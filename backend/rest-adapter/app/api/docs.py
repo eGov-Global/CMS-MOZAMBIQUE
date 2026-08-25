@@ -12,12 +12,15 @@ deployment.
 import os
 from pathlib import Path
 
-from flask import Blueprint, Response, render_template_string, url_for
+from flask import Blueprint, Response, render_template_string, request, url_for
 
 docs = Blueprint("docs", __name__)
 
 SPEC_PATH = Path(__file__).with_name("openapi.yaml")
 DEFAULT_UI = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5"
+
+# The one line in the spec that has to change per deployment.
+SERVERS_ROOT_LINE = "  - url: /\n"
 
 PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -56,4 +59,18 @@ def swagger_ui():
 
 @docs.get("/docs/openapi.yaml")
 def openapi_yaml():
-    return Response(SPEC_PATH.read_text(encoding="utf-8"), mimetype="application/yaml")
+    return Response(_spec_served_under(request.script_root), mimetype="application/yaml")
+
+
+def _spec_served_under(root):
+    """Point `servers` at the path this deployment is actually reached on.
+
+    Swagger UI resolves every operation against servers[0].url, which is static in
+    the file. Behind a path prefix that has to become '/adapter', or Try-it-out
+    calls '/master-data/departments' on the bare host and hits whatever else lives
+    there. `request.script_root` is the prefix, and is empty when there is none.
+    """
+    spec = SPEC_PATH.read_text(encoding="utf-8")
+    if not root:
+        return spec
+    return spec.replace(SERVERS_ROOT_LINE, "  - url: {}\n".format(root), 1)
