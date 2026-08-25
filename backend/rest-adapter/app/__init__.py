@@ -1,6 +1,7 @@
 """Application factory: builds the object graph once, wires it into Flask."""
 
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.api.errors import register_error_handlers
 from app.api.docs import docs
@@ -26,10 +27,27 @@ def create_app(config=None) -> Flask:
     app.config["FILE_STORE"] = _build_file_store(config)
 
 
+    _trust_proxy(app, config.proxy_hops)
     app.register_blueprint(api)
     app.register_blueprint(docs)
     register_error_handlers(app)
     return app
+
+
+def _trust_proxy(app, hops):
+    """Honour X-Forwarded-* when a reverse proxy sits in front.
+
+    Only X-Forwarded-Prefix actually matters here: served under a path prefix, it is
+    what makes url_for emit '/adapter/docs/openapi.yaml' rather than
+    '/docs/openapi.yaml', which is the difference between Swagger UI loading and not.
+
+    Off by default. These headers are client-supplied and must only be trusted when
+    something upstream sets them, so the number of proxy hops is explicit.
+    """
+    if hops:
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app, x_for=hops, x_proto=hops, x_host=hops, x_prefix=hops
+        )
 
 
 def _build_pgr_client(config) -> PgrClient:

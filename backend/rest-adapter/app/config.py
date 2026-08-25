@@ -45,6 +45,7 @@ class Config:
     city_tenant_id: str
     search_tenant_id: str
     extra_filers: tuple
+    proxy_hops: int
     country_code: str
     mobile_number_length: int
     token_ttl_seconds: int
@@ -66,6 +67,7 @@ def load_config() -> Config:
         # complaints filed under any city come back
         search_tenant_id=os.getenv("SEARCH_TENANT_ID") or _required("ROOT_TENANT_ID"),
         extra_filers=_csv("EXTRA_COMPLAINT_FILERS", ""),
+        proxy_hops=int(os.getenv("PROXY_HOPS", "0")),
         country_code=os.getenv("COUNTRY_CODE", "258"),
         mobile_number_length=int(os.getenv("MOBILE_NUMBER_LENGTH", "9")),
         token_ttl_seconds=int(os.getenv("TOKEN_TTL_SECONDS", "900")),
