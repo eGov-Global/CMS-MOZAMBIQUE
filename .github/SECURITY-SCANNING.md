@@ -10,6 +10,8 @@ Runs in CI as `.github/workflows/security-scan.yml` and publishes a public dashb
 |------|-------|
 | **Checkov** | Ansible deployment code (`local-setup/ansible`) - config hardening (`.checkov.yaml`) |
 | **KICS** | `docker-compose` files - exposed ports, protocols, privileged, host-network, host mounts (native severities) |
+| **Ansible dry-run** | `ansible-playbook --syntax-check` + `ansible-lint` run with the repo config **bypassed** (`-c /dev/null`) so the security rules the repo's own `.ansible-lint` suppresses (`risky-file-permissions`, `risky-shell-pipe`, `no-log-password`) are re-enabled and fed into the report |
+| **Custom rules** (`custom_rules.py`) | Setup-specific, high-signal checks derived from a review of the ansible code **and a read-only audit of the live cms-pilot VM**: datastore/admin ports on `0.0.0.0` (no host firewall), weak default credentials, `curl \| bash`, insecure registry, disabled SSH host-key checking, missing nginx security headers, unauthenticated `/mcp`, no host firewall, unhardened systemd units, suppressed security-lint config |
 | **GitHub secret scanning** (native) | Secrets - lower false positives than entropy-based scanners; Checkov secret scanning is intentionally off |
 
 Out of scope here (later phases): `local-setup/k8s/**` (Kubernetes/Tilt) and
@@ -100,6 +102,8 @@ required in branch protection.
 |------|------|
 | `.github/workflows/security-scan.yml` | the pipeline |
 | `.checkov.yaml` | Checkov scope (Ansible) |
+| `.github/scripts/custom_rules.py` | setup-specific security rules (CMS-SEC-*), grounded in the live-VM audit |
+| `.github/scripts/ansible_lint_to_findings.py` | convert the ansible-lint dry-run SARIF into security findings |
 | `.github/scripts/security_report.py` | merge scanners -> `run.json` (+ curated remediation, categories) |
 | `.github/scripts/enrich_report.py` | Gemini agent pipeline: deployment-aware triage, remediate, verify (optional) |
 | `.github/scripts/build_audit_xlsx.py` | build the multi-sheet Excel audit workbook |

@@ -216,9 +216,14 @@ elif REPO:
         log("no remote cache:", e)
 
 # Cache schema version. BUMP THIS whenever the enrichment schema or prompts change
-# (e.g. the triage taxonomy) so stale entries from older runs are re-enriched instead
-# of silently reused. v2 = action_required/acceptable/false_positive triage taxonomy.
-CACHE_V = 2
+# (e.g. the triage taxonomy or rubric) so stale entries from older runs are re-enriched
+# instead of silently reused.
+#   v2 = action_required/acceptable/false_positive triage taxonomy
+#   v3 = stricter rubric: internal/behind-gateway lowers priority, does not dismiss
+#        standard hardening controls (cap_drop, no-new-privileges, TLS validation)
+#   v4 = deployment context corrected to verified live reality (no host firewall;
+#        datastores published on 0.0.0.0 -> security group is the sole control)
+CACHE_V = 4
 
 
 def _cache_ok(c):
@@ -233,31 +238,41 @@ CTX = "Ansible remote-server deployment (setup path C: ./deploy.sh) plus its doc
 # Deployment topology the triager must reason WITH, so it judges real-world exposure
 # instead of the raw rule. This mirrors how this stack actually runs.
 DEPLOY = (
-    "Deployment reality: the docker-compose services run on a single remote server on a private "
-    "Docker bridge network. A reverse proxy / API gateway (nginx) is the only intended public "
-    "entry point; most service ports are reachable only container-to-container, not published to "
-    "the host's public interface. Data is citizen grievance data (confidential). Judge each finding "
-    "by whether an attacker who has (a) network position or (b) a foothold in one container could "
-    "actually abuse it here - NOT by whether the rule merely matched."
+    "Deployment reality (verified on the live server via a read-only audit): services run on a single "
+    "internet-facing remote host. nginx terminates TLS on 443 and is the intended public entry point. "
+    "IMPORTANT: there is NO host firewall (ufw is inactive), and ~33 service ports - INCLUDING datastores "
+    "(PostgreSQL, Redis, Kafka, MinIO) and admin UIs (Grafana, Prometheus, Jupyter) - are published on "
+    "0.0.0.0 (all host interfaces). Externally only 22/80/443 are reachable, so the cloud security group "
+    "is the SOLE control in front of those datastore/admin ports - a single point of failure with no "
+    "defense-in-depth. Data is citizen grievance data (confidential). Judge each finding by real "
+    "abusability here: a datastore/admin port bound to 0.0.0.0 with no host firewall is action_required "
+    "(one security-group misconfig from full exposure), NOT 'internal/acceptable'. A control genuinely "
+    "required and already constrained (e.g. node_exporter host mounts, read-only) may be acceptable."
 )
 
 RUBRIC = (
-    "Classify each finding into exactly one status:\n"
-    "- action_required: a genuine weakness a hardening standard (CIS Docker Benchmark / OWASP) "
-    "would require fixing AND that is realistically abusable in this deployment. Examples that are "
-    "almost always action_required: mounting the Docker socket, sharing a host namespace (pid/ipc/network), "
-    "bind-mounting sensitive host paths, disabling TLS certificate validation, http:// for calls carrying "
-    "credentials/tokens, not dropping Linux capabilities, missing no-new-privileges.\n"
-    "- acceptable: the condition is real but a defensible, low-risk choice in THIS context and not worth "
-    "tracking as security debt - e.g. a service binding 0.0.0.0 that is NOT published to the host, a missing "
-    "healthcheck, or absent CPU/memory limits on an internal service (reliability, not a security hole), a "
-    "read-only named volume shared between trusted services.\n"
-    "- false_positive: the scanner misfired - the flagged condition does not actually hold (templated value, "
-    "example/placeholder file, the control is present by another means).\n"
-    "Bias to caution: if unsure whether something is abusable, choose action_required. Never call a real "
-    "hardening gap a false_positive.\n"
-    "priority (only when action_required): P1 = direct container escape / host takeover / credential exposure; "
-    "P2 = enables privilege escalation or lateral movement given a foothold; P3 = defense-in-depth.\n"
+    "Classify each finding into exactly one status, reasoning from the code and the topology:\n"
+    "- action_required: a genuine weakness a hardening standard (CIS Docker Benchmark / OWASP) would require "
+    "fixing. This INCLUDES missing standard security controls even on internal services - not dropping Linux "
+    "capabilities (cap_drop:[ALL]), missing no-new-privileges, a writable root filesystem, disabling TLS "
+    "certificate validation, http:// for calls carrying credentials/secrets, mounting the Docker socket, "
+    "sharing a host namespace writable, or bind-mounting sensitive host paths writable. Being on an internal "
+    "network or behind a gateway is a reason to LOWER the priority (usually to P3), NOT to dismiss the finding: "
+    "defense in depth still matters if any single container is compromised.\n"
+    "- acceptable: reserve for findings that are NOT a security control, or where the flagged access is genuinely "
+    "REQUIRED by the workload AND already constrained. Specifically only: (a) reliability-only controls (missing "
+    "healthcheck, CPU or memory limits); (b) host access a monitoring/telemetry agent legitimately needs AND that "
+    "is read-only (e.g. node_exporter mounting host /proc,/sys or sharing host PID read-only); (c) a benign, "
+    "equivalent-security rewrite (mapping privileged port 80 to a high host port). Do NOT mark a missing cheap "
+    "standard hardening control (cap_drop, no-new-privileges, read_only) as acceptable just because the service is internal.\n"
+    "- false_positive: the scanner misfired - the flagged condition does not actually hold: a templated/example "
+    "value, the control IS present by another means, or it applies only under a dev-only flag that is off in "
+    "production (only if the code clearly proves this).\n"
+    "Bias to caution: if unsure, choose action_required (P3). Never downgrade a real hardening gap to acceptable or "
+    "false_positive merely because exploitation would need a prior foothold or the service is internal.\n"
+    "priority (action_required only): P1 = direct container escape / host takeover / credential exposure; "
+    "P2 = enables privilege escalation or lateral movement given a foothold, or weakened transport security; "
+    "P3 = defense-in-depth hardening on an internal service (e.g. drop capabilities, no-new-privileges).\n"
     "exposure: public (reachable from internet) | internal (container-to-container only) | local (host-only) | unknown."
 )
 
@@ -281,7 +296,7 @@ def stage_triage_audit(rs):
     when confident it cannot be abused; otherwise keeps it action_required."""
     if not rs: return {}
     return rows(call([
-        {"role": "system", "content": f"You are a skeptical lead security auditor reviewing a {CTX} {DEPLOY}\n\nFor each finding decide independently whether it TRULY needs action here, or is safely acceptable / a false positive. Only dismiss (acceptable/false_positive) when you are confident it cannot be abused by an attacker with network position or a single-container foothold. When in doubt, keep it action_required. Do not rubber-stamp."},
+        {"role": "system", "content": f"You are a skeptical lead security auditor reviewing a {CTX} {DEPLOY}\n\nFor each finding decide independently whether it TRULY needs action here, or is safely acceptable / a false positive. Only dismiss when the finding is a reliability-only control (healthcheck, cpu/memory), OR the flagged host access is genuinely required by the workload and already read-only/constrained (e.g. a monitoring agent), OR the scanner clearly misfired. Do NOT dismiss a missing standard hardening control - dropping capabilities, no-new-privileges, TLS certificate validation, avoiding cleartext for secrets - just because the service is internal or behind a gateway; keep those action_required at low priority. When in doubt, keep it action_required. Do not rubber-stamp."},
         {"role": "user", "content": 'Return ONLY JSON: {"results":[{"id":"...","status":"action_required|acceptable|false_positive","reason":"<=20 words"}]}\n\nFindings:\n' + json.dumps(_tri_payload(rs))}]))
 
 

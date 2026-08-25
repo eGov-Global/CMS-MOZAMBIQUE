@@ -94,6 +94,31 @@ jobs:
           sarif_file: kics-results/results.sarif
           category: kics
 
+      # 2b) Ansible DRY-RUN + setup-specific custom rules.
+      #  - syntax-check: proves the playbook + every referenced task/template parses.
+      #  - ansible-lint with the repo config BYPASSED (-c /dev/null) so the security rules
+      #    the repo's own .ansible-lint suppresses (risky-file-permissions, risky-shell-pipe,
+      #    no-log-password) are re-enabled; only those security rules are fed into the report.
+      #  - custom_rules.py: deterministic setup-specific checks (datastore 0.0.0.0 exposure,
+      #    weak default creds, curl|bash, missing nginx headers, /mcp unauth, no host firewall).
+      - name: Ansible dry-run and custom security rules
+        if: always()
+        env:
+          ANSIBLE_DIR: local-setup/ansible
+        run: |
+          python3 -m pip install --quiet ansible-core ansible-lint 2>/dev/null || pip3 install --quiet ansible-core ansible-lint
+          ansible-galaxy collection install -r "$ANSIBLE_DIR/requirements.yml" 2>&1 | tail -2 || true
+          echo "::group::ansible syntax-check"
+          ansible-playbook --syntax-check -i "$ANSIBLE_DIR/inventory.ini.example" "$ANSIBLE_DIR/playbook-deploy.yml" || echo "syntax-check reported issues (non-fatal)"
+          echo "::endgroup::"
+          echo "::group::ansible-lint (security rules re-enabled)"
+          ansible-lint -c /dev/null --profile production -f sarif \
+            "$ANSIBLE_DIR/playbook-deploy.yml" "$ANSIBLE_DIR/tasks" "$ANSIBLE_DIR/templates" "$ANSIBLE_DIR/deploy.sh" \
+            > lint.sarif 2> lint.err || echo "ansible-lint completed with findings (expected)"
+          echo "::endgroup::"
+          BASE=. OUT=custom.json python3 .github/scripts/custom_rules.py || echo "custom rules skipped (non-fatal)"
+          SARIF=lint.sarif OUT=custom.json ANSIBLE_PREFIX="$ANSIBLE_DIR" python3 .github/scripts/ansible_lint_to_findings.py || echo "lint conversion skipped (non-fatal)"
+
       # 3) Merge into a structured run.json + summary card
       - name: Build report data
         if: always()
@@ -101,6 +126,7 @@ jobs:
           CHECKOV_JSON: checkov.json
           CHECKOV_BASE: local-setup/ansible
           KICS_JSON: kics-results/results.json
+          CUSTOM_JSON: custom.json
           OUT_JSON: run.json
           REPO: ${{ github.repository }}
           REF: ${{ github.head_ref || github.ref_name }}
