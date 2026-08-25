@@ -1,207 +1,383 @@
 {
  "1c1325ff-831d-43a1-973e-839ae57dfcc0": {
-  "v": 2,
+  "v": 4,
   "triage": {
-   "status": "acceptable",
-   "priority": "",
-   "exposure": "internal",
-   "confidence": 0.95,
-   "reason": "Read-only host /proc, /sys, and rootfs mounts used for standard node_exporter telemetry collection."
+   "status": "action_required",
+   "priority": "P1",
+   "exposure": "local",
+   "confidence": 0.9,
+   "reason": "Mounting the Docker socket or sensitive host directories gives container processes potential root-level host escape vectors."
   },
-  "why": "Mounting the host's root filesystem read-only into node_exporter is required by design for cluster metrics collection. This is a benign finding and expected operational practice for monitoring stacks.",
-  "fix": "No change required. This is a documented design requirement for node_exporter filesystem metrics.",
+  "why": "Mounting the host's `/var/lib/docker/containers` directory into the Promtail container exposes raw container stdout/stderr log files, potentially leaking sensitive data such as environment variables or API keys logged by other services.",
+  "fix": "Ensure proper access restrictions or remove unnecessary host log directories from the volumes list in the promtail service:\n```yaml\n    volumes:\n      - ./otel/promtail-config.yaml:/etc/promtail/config.yaml:ro\n```",
   "verify": {
    "verified": true,
    "note": ""
   }
  },
  "d6355c88-1e8d-49e9-b2f2-f8a1ca12c75b": {
-  "v": 2,
+  "v": 4,
   "triage": {
    "status": "action_required",
    "priority": "P1",
-   "exposure": "internal",
-   "confidence": 0.99,
-   "reason": "Docker socket mounted into containers allows full root container escape and host takeover."
+   "exposure": "local",
+   "confidence": 0.95,
+   "reason": "The Docker socket (/var/run/docker.sock) is mounted inside a container, enabling full host container escape and takeover."
   },
-  "why": "Mounting the Docker socket into telemetry and promtail containers grants full access to the Docker daemon API. If compromised, an attacker can spin up privileged containers or escape to the host root.",
-  "fix": "Remove the Docker socket mount if not strictly required, or ensure containers run with minimal access. For promtail/telemetry, this is a known requirement for log/metric collection; no direct fix unless migrating to alternative collection methods.",
+  "why": "Mounting the Docker socket (`/var/run/docker.sock`) inside a container gives that container full control over the Docker daemon on the host. An attacker who compromises the telemetry sidecar can easily gain root access to the entire host system.",
+  "fix": "Remove the Docker socket volume mount from the telemetry service in the docker-compose file:\n```yaml\n    volumes:\n      - ./telemetry:/telemetry:ro\n```",
   "verify": {
    "verified": true,
    "note": ""
   }
  },
  "ce76b7d0-9e77-464d-b86f-c5c48e03e22d": {
-  "v": 2,
+  "v": 4,
   "triage": {
-   "status": "acceptable",
-   "priority": "",
+   "status": "action_required",
+   "priority": "P3",
    "exposure": "internal",
-   "confidence": 0.9,
-   "reason": "Default container capabilities are acceptable in an internal-only docker-compose network behind a gateway."
+   "confidence": 0.85,
+   "reason": "Containers run with unrestricted capabilities rather than dropping ALL capabilities and enforcing no-new-privileges."
   },
-  "why": "Running containers without dropped capabilities leaves them with default Docker capabilities, increasing the impact of a container breakout or privilege escalation vulnerability.",
-  "fix": "Add `cap_drop: [ALL]` to the affected services in `docker-compose.yml`:\n```yaml\n    cap_drop:\n      - ALL\n```",
+  "why": "Running containers without capability dropping or security profiles leaves them with default Linux capabilities, which can be leveraged for container breakout if a vulnerability in an application is exploited.",
+  "fix": "Add `cap_drop` to the service definition in the docker-compose file:\n```yaml\n    cap_drop:\n      - ALL\n    cap_add:\n      - NET_BIND_SERVICE\n```",
   "verify": {
    "verified": true,
    "note": ""
   }
  },
  "610e266e-6c12-4bca-9925-1ed0cd29742b": {
-  "v": 2,
+  "v": 4,
   "triage": {
-   "status": "acceptable",
-   "priority": "",
+   "status": "action_required",
+   "priority": "P3",
    "exposure": "internal",
-   "confidence": 0.9,
-   "reason": "Missing security-opt / no-new-privileges on internal services is low risk behind a secure gateway."
+   "confidence": 0.8,
+   "reason": "Missing security hardening options (like read-only root filesystems and capability drops) increase blast radius upon compromise."
   },
-  "why": "Omitting security options like `no-new-privileges` allows processes inside the container to gain new privileges (e.g., via setuid binaries), easing container breakout exploits.",
-  "fix": "Add `security_opt` directives to the affected services in `docker-compose.yml`:\n```yaml\n    security_opt:\n      - no-new-privileges:true\n```",
+  "why": "Omitting security hardening options like `security_opt` (e.g., `no-new-privileges`) allows processes inside the container to potentially escalate privileges through SUID binaries.",
+  "fix": "Add security options to the service definition in the docker-compose file:\n```yaml\n    security_opt:\n      - no-new-privileges:true\n```",
   "verify": {
    "verified": true,
    "note": ""
   }
  },
  "451d79dc-0588-476a-ad03-3c7f0320abb3": {
-  "v": 2,
+  "v": 4,
   "triage": {
    "status": "action_required",
-   "priority": "P3",
-   "exposure": "local",
+   "priority": "P1",
+   "exposure": "public",
    "confidence": 0.9,
-   "reason": "Services bound to host ports are intended for management or local access on the private remote node."
+   "reason": "Datastores and admin services are bound to all interfaces without host firewalls, exposing internal management ports externally."
   },
-  "why": "Exposing ports directly on all network interfaces (0.0.0.0) bypasses local firewall rules and exposes internal container ports to external networks if the host firewall is misconfigured.",
-  "fix": "Bind container ports explicitly to the loopback interface in `docker-compose.yml`:\n```yaml\n    ports:\n      - \"127.0.0.1:13101:3000\"\n```",
+  "why": "Exposing sensitive management and API ports on all interfaces (`0.0.0.0`) allows external unauthenticated users to access internal tools or admin interfaces directly.",
+  "fix": "Bind the ports explicitly to the loopback interface in the docker-compose file:\n```yaml\n    ports:\n      - \"127.0.0.1:18001:8001\"\n```",
   "verify": {
    "verified": true,
    "note": ""
   }
  },
  "698ed579-b239-4f8f-a388-baa4bcb13ef8": {
-  "v": 2,
+  "v": 4,
   "triage": {
    "status": "acceptable",
    "priority": "",
    "exposure": "internal",
-   "confidence": 0.95,
-   "reason": "Missing healthchecks on internal services affect reliability rather than posing a direct security vulnerability."
+   "confidence": 0.9,
+   "reason": "Missing healthchecks are reliability-only controls and do not constitute an active security vulnerability."
   },
-  "why": "Missing healthchecks prevent Docker and orchestration tools from detecting when a service has locked up or crashed internally, delaying automated recovery.",
-  "fix": "Add a healthcheck definition to the service in `docker-compose.yml`:\n```yaml\n    healthcheck:\n      test: [\"CMD\", \"wget\", \"--spider\", \"-q\", \"http://localhost:8080/healthz\"]\n      interval: 30s\n      timeout: 5s\n      retries: 3\n```",
+  "why": "Failing to define healthchecks for critical services prevents Docker and orchestrators from detecting dead or unresponsive containers, leading to prolonged service outages.",
+  "fix": "Add a healthcheck block to the service in the docker-compose file:\n```yaml\n    healthcheck:\n      test: [\"CMD\", \"curl\", \"-f\", \"http://localhost:8080/healthz\"]\n      interval: 15s\n      timeout: 5s\n      retries: 3\n```",
   "verify": {
    "verified": true,
    "note": ""
   }
  },
  "CKV2_ANSIBLE_1": {
-  "v": 2,
+  "v": 4,
   "triage": {
-   "status": "acceptable",
-   "priority": "",
-   "exposure": "local",
-   "confidence": 0.95,
-   "reason": "Internal localhost HTTP calls for OpenBao unsealing during deployment are safe on the private server loopback."
+   "status": "action_required",
+   "priority": "P2",
+   "exposure": "internal",
+   "confidence": 0.9,
+   "reason": "Internal API requests use unencrypted HTTP transport for sensitive secret management operations, risking interception."
   },
-  "why": "Using plain HTTP for internal API calls exposes sensitive authentication tokens and secrets in transit if the network layer between services is untrusted.",
-  "fix": "Update the Ansible task to use HTTPS where applicable, or keep as-is if communicating exclusively over an internal secure Docker bridge network.",
+  "why": "Using cleartext HTTP instead of HTTPS for internal URI calls can lead to sensitive tokens or seal statuses being intercepted over the network if traffic is sniffed.",
+  "fix": "Update the URI module task to use HTTPS where applicable:\n```yaml\n    - name: \"Keycloak prep \u2014 read OpenBao seal status\"\n      ansible.builtin.uri:\n        url: https://127.0.0.1:18200/v1/sys/seal-status\n        status_code: [200]\n```",
   "verify": {
    "verified": true,
    "note": ""
   }
  },
  "CKV_ANSIBLE_1": {
-  "v": 2,
+  "v": 4,
   "triage": {
-   "status": "acceptable",
-   "priority": "",
-   "exposure": "public",
-   "confidence": 0.9,
-   "reason": "Certificate validation is conditionally disabled only when tls_enabled=false for local sandbox development testing."
+   "status": "action_required",
+   "priority": "P3",
+   "exposure": "internal",
+   "confidence": 0.85,
+   "reason": "TLS validation is conditionally disabled specifically for local self-signed sandbox development environments where tls_enabled is false."
   },
-  "why": "Disabling certificate validation (`validate_certs: false`) during TLS connections exposes validation tasks to Man-in-the-Middle (MitM) attacks.",
-  "fix": "Ensure certificate validation is enabled in the Ansible task when TLS is active (already handled conditionally via `validate_certs: \"{{ tls_enabled | default(true) }}\"`).",
+  "why": "Disabling certificate validation (`validate_certs: false`) in Ansible `uri` tasks makes the automation vulnerable to Man-in-the-Middle attacks, potentially exposing sensitive endpoints to interception.",
+  "fix": "Ensure certificate validation is explicitly enabled:\n```yaml\n        validate_certs: true\n```",
   "verify": {
    "verified": true,
    "note": ""
   }
  },
  "bc2908f3-f73c-40a9-8793-c1b7d5544f79": {
-  "v": 2,
+  "v": 4,
   "triage": {
-   "status": "acceptable",
-   "priority": "",
-   "exposure": "local",
-   "confidence": 0.95,
-   "reason": "Mapping privileged port 80 to an unprivileged host port (18080) for the UI container is standard practice."
+   "status": "action_required",
+   "priority": "P3",
+   "exposure": "public",
+   "confidence": 0.9,
+   "reason": "Mapping privileged container ports to high host ports is a benign, equivalent-security rewrite."
   },
-  "why": "Mapping privileged ports (< 1024) inside containers may require root capabilities within the container namespace to bind successfully.",
-  "fix": "Map container ports to unprivileged ports or ensure the service drops privileges post-bind.",
+  "why": "Mapping privileged ports (< 1024) directly within containers can introduce security risks if the container runs as root, potentially allowing unintended service bindings.",
+  "fix": "Map to higher unprivileged ports on the host side:\n```yaml\n    ports:\n      - \"18080:8080\"\n```",
   "verify": {
    "verified": true,
    "note": ""
   }
  },
  "4f31dd9f-2cc3-4751-9b53-67e4af83dac0": {
-  "v": 2,
+  "v": 4,
   "triage": {
    "status": "acceptable",
    "priority": "",
-   "exposure": "internal",
+   "exposure": "local",
    "confidence": 0.95,
-   "reason": "Host PID namespace sharing is required and properly configured read-only for node_exporter system monitoring."
+   "reason": "Monitoring telemetry agents legitimately require read-only host namespace and proc/sys mounts to function correctly."
   },
-  "why": "Sharing the host process namespace (`pid: host`) allows processes inside the container to inspect all host processes, potentially exposing sensitive environment variables or PIDs.",
-  "fix": "Remove `pid: host` from the service configuration if host process monitoring is not strictly required.",
+  "why": "Sharing the host's PID or network namespace weakens container isolation, allowing processes inside the container to inspect or manipulate host processes.",
+  "fix": "Remove `pid: host` from the service definition in the docker-compose file:\n```yaml\n    # Remove pid: host\n```",
   "verify": {
    "verified": true,
    "note": ""
   }
  },
  "bb9ac4f7-e13b-423d-a010-c74a1bfbe492": {
-  "v": 2,
+  "v": 4,
   "triage": {
-   "status": "acceptable",
-   "priority": "",
+   "status": "action_required",
+   "priority": "P3",
    "exposure": "internal",
    "confidence": 0.9,
-   "reason": "Unconstrained container memory on an internal auxiliary service is a reliability choice, not an exploit."
+   "reason": "Missing resource limits are reliability controls rather than direct security vulnerabilities."
   },
-  "why": "Unbounded memory usage allows a compromised or malfunctioning container to consume all host memory, causing an Out-Of-Memory (OOM) crash across the entire server.",
-  "fix": "Add memory limits under the service deployment configuration in `docker-compose.yml`:\n```yaml\n    deploy:\n      resources:\n        limits:\n          memory: 512M\n```",
+  "why": "Running containers without memory limits allows a single compromised or misbehaving service to consume all host memory, causing a Denial of Service (DoS) for other services.",
+  "fix": "Add memory limits to the service in the docker-compose file:\n```yaml\n    deploy:\n      resources:\n        limits:\n          memory: 512M\n```",
   "verify": {
    "verified": true,
    "note": ""
   }
  },
  "6b610c50-99fb-4ef0-a5f3-e312fd945bc3": {
-  "v": 2,
+  "v": 4,
   "triage": {
-   "status": "acceptable",
-   "priority": "",
+   "status": "action_required",
+   "priority": "P3",
    "exposure": "internal",
    "confidence": 0.9,
-   "reason": "Unconstrained container CPU limits on internal services affect resource scheduling, not security."
+   "reason": "Missing CPU limits are resource management and reliability controls, not direct security vulnerabilities."
   },
-  "why": "Unbounded CPU allocation permits a single containerized service to monopolize CPU resources, starving other critical DIGIT services of compute cycles.",
-  "fix": "Add CPU limits under the service deployment configuration in `docker-compose.yml`:\n```yaml\n    deploy:\n      resources:\n        limits:\n          cpus: '0.5'\n```",
+  "why": "Not limiting CPU resources for containers allows a single runaway process to consume 100% of the host CPU cores, starving other applications of compute power.",
+  "fix": "Add CPU limits to the service deploy block in the docker-compose file:\n```yaml\n    deploy:\n      resources:\n        limits:\n          cpus: '0.5'\n```",
   "verify": {
    "verified": true,
    "note": ""
   }
  },
  "8c978947-0ff6-485c-b0c2-0bfca6026466": {
-  "v": 2,
+  "v": 4,
   "triage": {
-   "status": "acceptable",
-   "priority": "",
+   "status": "action_required",
+   "priority": "P3",
+   "exposure": "internal",
+   "confidence": 0.9,
+   "reason": "Anonymous Grafana access with Admin role on an internal or provisioned telemetry dashboard is acceptable if strictly firewalled, though noted for defense-in-depth."
+  },
+  "why": "Sharing volumes between containers can create implicit dependencies and security risks if sensitive data written by one container is improperly accessed by another.",
+  "fix": "Ensure shared volumes are marked read-only where possible:\n```yaml\n    volumes:\n      - ./otel/opentelemetry-javaagent.jar:/otel/opentelemetry-javaagent.jar:ro\n```",
+  "verify": {
+   "verified": true,
+   "note": ""
+  }
+ },
+ "CMS-SEC-01": {
+  "v": 4,
+  "triage": {
+   "status": "action_required",
+   "priority": "P1",
    "exposure": "internal",
    "confidence": 0.95,
-   "reason": "Sharing a read-only APM java agent jar volume across internal Java containers is secure and benign."
+   "reason": "Default or fallback credentials (e.g. eGov@123) are injected into the environment, risking unauthorized administrative access if exposed."
   },
-  "why": "Mounting read-only shared application agents (like OpenTelemetry JARs) across multiple containers is a secure and standard practice for instrumentation.",
-  "fix": "No change required. Read-only shared volumes for static agent binaries are safe.",
+  "why": "Using fallback default credentials like 'eGov@123' in Ansible blockinfile configurations can expose system components to unauthorized access if secrets retrieval fails. An attacker with network access could exploit these default passwords to compromise sensitive services like Keycloak.",
+  "fix": "Remove default fallback values for critical secrets in the Ansible task:\n```yaml\n           TOKEN_EXCHANGE_SYSTEM_PASSWORD: \"{{ kcprep_secrets.json.data.data.token_exchange_system_password }}\"\n```",
+  "verify": {
+   "verified": true,
+   "note": ""
+  }
+ },
+ "CMS-SEC-07": {
+  "v": 4,
+  "triage": {
+   "status": "action_required",
+   "priority": "P1",
+   "exposure": "public",
+   "confidence": 0.95,
+   "reason": "PostgreSQL is bound to 0.0.0.0 with no host firewall (ufw inactive), exposing citizen data directly to the public internet."
+  },
+  "why": "Publishing the PostgreSQL port (15432) directly on all interfaces (0.0.0.0) exposes the database instance to the public internet, making it vulnerable to brute-force attacks and potential data breaches.",
+  "fix": "Bind the port to localhost only in the postgres service definition within the docker-compose file:\n```yaml\n    ports:\n      - \"127.0.0.1:15432:5432\"\n```",
+  "verify": {
+   "verified": true,
+   "note": ""
+  }
+ },
+ "CMS-SEC-02": {
+  "v": 4,
+  "triage": {
+   "status": "action_required",
+   "priority": "P2",
+   "exposure": "local",
+   "confidence": 0.9,
+   "reason": "Piping remote scripts directly into bash executes untrusted code without integrity verification, risking arbitrary command execution."
+  },
+  "why": "Piping remote scripts directly into `bash` without integrity verification exposes the deployment process to Man-in-the-Middle (MitM) attacks or compromise of the upstream script repository, allowing arbitrary code execution on the remote server.",
+  "fix": "Download the script first, verify its checksum, and then execute it in the Ansible task:\n```yaml\n    - name: \"Install NodeSource Node 20 securely\"\n      ansible.builtin.shell: |\n        set -euo pipefail\n        curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/nodesource_setup.sh\n        bash /tmp/nodesource_setup.sh\n        apt-get install -y nodejs\n```",
+  "verify": {
+   "verified": true,
+   "note": ""
+  }
+ },
+ "CMS-SEC-03": {
+  "v": 4,
+  "triage": {
+   "status": "action_required",
+   "priority": "P2",
+   "exposure": "internal",
+   "confidence": 0.8,
+   "reason": "Configuring insecure registries permits plaintext image pulls susceptible to man-in-the-middle tampering."
+  },
+  "why": "Using insecure HTTP registries can allow attackers to perform Man-in-the-Middle attacks to intercept or tamper with pulled container images, leading to the deployment of malicious code.",
+  "fix": "Ensure all container registries enforce TLS and remove any insecure registry configurations:\n```yaml\n                 _ours: >-\n                   {{ {'log-driver': 'json-file',\n                       'log-opts': {'max-size': docker_log_max_size,\n                                    'max-file': docker_log_max_file_effective | string},\n                       'insecure-registries': []}\n```",
+  "verify": {
+   "verified": true,
+   "note": ""
+  }
+ },
+ "CMS-SEC-04": {
+  "v": 4,
+  "triage": {
+   "status": "action_required",
+   "priority": "P2",
+   "exposure": "local",
+   "confidence": 0.9,
+   "reason": "Disabling SSH host-key checking exposes deployment connections to man-in-the-middle attacks and credential interception."
+  },
+  "why": "Disabling SSH host-key checking (`StrictHostKeyChecking=no`) opens the deployment script to Man-in-the-Middle attacks, allowing an attacker to intercept credentials or execute arbitrary commands during Ansible provisioning.",
+  "fix": "Enable strict host key checking in the shell script generating the inventory:\n```bash\n        echo \"        ansible_ssh_common_args: '-o StrictHostKeyChecking=yes'\">> inventory/hosts.yml\n```",
+  "verify": {
+   "verified": true,
+   "note": ""
+  }
+ },
+ "CMS-SEC-08": {
+  "v": 4,
+  "triage": {
+   "status": "action_required",
+   "priority": "P1",
+   "exposure": "public",
+   "confidence": 0.95,
+   "reason": "Unauthenticated administrative API endpoints are exposed via nginx, allowing unprivileged remote attackers to execute admin actions."
+  },
+  "why": "Exposing internal management endpoints or developer tooling like MCP without authentication allows unauthenticated attackers to execute administrative functions such as user creation or data modification.",
+  "fix": "Add authentication requirements or restrict the location block to trusted internal IPs in the Nginx configuration:\n```nginx\n  location /mcp {\n    allow 127.0.0.1;\n    deny all;\n    proxy_pass http://127.0.0.1:8080;\n  }\n```",
+  "verify": {
+   "verified": true,
+   "note": ""
+  }
+ },
+ "risky-file-permissions": {
+  "v": 4,
+  "triage": {
+   "status": "action_required",
+   "priority": "P3",
+   "exposure": "local",
+   "confidence": 0.8,
+   "reason": "Files are created without explicit restrictive modes, risking exposure of sensitive configuration data to local users."
+  },
+  "why": "Creating files without explicit restrictive permissions can result in sensitive configuration files being readable by unprivileged local users on the host system.",
+  "fix": "Specify an explicit restrictive mode in the Ansible file creation task:\n```yaml\n    - name: Create DIGIT directory\n      file:\n        path: \"{{ digit_dir }}\"\n        state: directory\n        mode: '0700'\n```",
+  "verify": {
+   "verified": true,
+   "note": ""
+  }
+ },
+ "risky-shell-pipe": {
+  "v": 4,
+  "triage": {
+   "status": "action_required",
+   "priority": "P3",
+   "exposure": "local",
+   "confidence": 0.85,
+   "reason": "Shell pipelines lacking pipefail can mask command failures during deployment tasks, leading to inconsistent system states."
+  },
+  "why": "Running shell pipelines without `set -o pipefail` means that failures in earlier commands of a pipe are ignored, causing Ansible to report success even when a critical step fails.",
+  "fix": "Include `set -o pipefail` at the beginning of the shell block:\n```yaml\n    - name: \"Turbopass \u2014 sweep container when flag is OFF\"\n      ansible.builtin.shell: |\n        set -euo pipefail\n        if docker ps -a --filter name=^turbopass-search$ --format '{{ \"{{\" }}.Names{{ \"}}\" }}' | grep -q '^turbopass-search$'; then\n          docker rm -f turbopass-search\n        fi\n```",
+  "verify": {
+   "verified": true,
+   "note": ""
+  }
+ },
+ "CMS-SEC-06": {
+  "v": 4,
+  "triage": {
+   "status": "action_required",
+   "priority": "P3",
+   "exposure": "local",
+   "confidence": 0.85,
+   "reason": "Systemd services run without hardening directives like NoNewPrivileges=true, leaving potential privilege escalation vectors open."
+  },
+  "why": "Systemd service files running without hardening directives like `NoNewPrivileges=true` allow spawned processes to acquire new privileges via mechanisms like SUID binaries.",
+  "fix": "Add hardening directives to the systemd service file template:\n```ini\n[Service]\nNoNewPrivileges=true\nProtectSystem=full\n```",
+  "verify": {
+   "verified": true,
+   "note": ""
+  }
+ },
+ "CMS-SEC-05": {
+  "v": 4,
+  "triage": {
+   "status": "action_required",
+   "priority": "P3",
+   "exposure": "public",
+   "confidence": 0.9,
+   "reason": "Nginx configuration lacks server_tokens off, leaking software version information to potential attackers."
+  },
+  "why": "Failing to disable server tokens in Nginx exposes the exact web server version, assisting attackers in identifying vulnerabilities associated with that specific version.",
+  "fix": "Add `server_tokens off;` to the http or server block in the Nginx configuration:\n```nginx\nserver {\n  server_name {{ domain }};\n  server_tokens off;\n}\n```",
+  "verify": {
+   "verified": true,
+   "note": ""
+  }
+ },
+ "CMS-SEC-10": {
+  "v": 4,
+  "triage": {
+   "status": "action_required",
+   "priority": "P3",
+   "exposure": "local",
+   "confidence": 0.9,
+   "reason": "Disabling specific linter rules for architectural reasons does not introduce a direct runtime vulnerability."
+  },
+  "why": "Disabling security lint rules in configuration files can allow insecure patterns to be introduced into the codebase without detection during static analysis.",
+  "fix": "Remove the disabled rule from `.ansible-lint`:\n```yaml\n  # Remove - risky-file-permissions from skip list\n```",
   "verify": {
    "verified": true,
    "note": ""
