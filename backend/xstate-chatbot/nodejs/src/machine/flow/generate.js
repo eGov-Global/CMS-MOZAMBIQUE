@@ -168,6 +168,9 @@ function choiceWrite(step) {
 }
 
 function assertOptionsRouted(step, options) {
+  // one destination for every recognised option routes them all by construction,
+  // and `in` would throw on the bare-string form
+  if (typeof step.next === 'string' || step.next.to) return;
   const missing = options.filter((option) => !(optionValue(option) in step.next));
   if (missing.length) {
     throw new Error(`flow: step '${step.key}' offers option(s) ${missing.join(', ')} with no next target`);
@@ -484,6 +487,12 @@ function assertTargets(config, allowed = []) {
   return config;
 }
 
+// Deep-merges `source` into `target`'s state tree, in place, and returns
+// `target`. Used to splice a generated flow (from generate()) into a
+// hand-authored machine config (seva.js, pgr.js). When both sides define the
+// same compound state (both have `states`), their other fields and children
+// are merged recursively; otherwise `source`'s definition fully replaces
+// `target`'s for that key, so the generated flow always wins on conflicts.
 function mergeStates(target, source) {
   for (const key of Object.keys(source)) {
     const incoming = source[key];

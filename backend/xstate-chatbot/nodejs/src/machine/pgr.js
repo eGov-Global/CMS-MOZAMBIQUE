@@ -3,13 +3,14 @@ const { pgrService } = require('./service/service-loader');
 const localisationService = require('./util/localisation-service');
 const config = require('../env-variables');
 const { generate, mergeStates } = require('./flow/generate');
-const { buildSteps } = require('./flow/steps-pgr');
+const { join } = require('./flow/join');
+const buildStates = require('./flow/pgr-states');
+const transitions = require('./flow/pgr-transitions');
 const layout = require('./flow/layout');
 const legacyLocationStates = require('./flow/legacy-location');
 let event;
 const pgr =  {
   id: 'pgr',
-  initial: 'menu',
   onEntry: assign((context, event) => {
     context.slots.pgr = {}
     context.pgr = {slots: {}};
@@ -17,7 +18,6 @@ const pgr =  {
   states: {
     fileComplaint: {
       id: 'fileComplaint',
-      initial: 'type',
       states: {
       }, // fileComplaint.states
     },  // fileComplaint
@@ -231,10 +231,13 @@ let grammer = {
     ]
   }
 };
-mergeStates(
-  pgr.states,
-  generate(buildSteps({ messages, pgrService, localisationService, config }), layout.pgr)
+const flow = join(
+  buildStates({ messages, pgrService, localisationService, config }),
+  transitions,
+  layout.pgr
 );
+pgr.initial = flow.layout.initial[layout.pgr.root];
+mergeStates(pgr.states, generate(flow.steps, flow.layout));
 mergeStates(
   pgr.states.fileComplaint.states.location.states,
   legacyLocationStates({ messages, grammer, pgrService, config })

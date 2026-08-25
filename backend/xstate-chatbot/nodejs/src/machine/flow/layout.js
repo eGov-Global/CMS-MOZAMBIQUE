@@ -9,7 +9,7 @@
 // `wrappers` — intermediate group nodes, keyed by dotted path, with the `id`
 //              other steps target them by.
 // `place`    — step key -> the group path it belongs in. Absent means top level.
-// `initial`  — group path -> the step key that group starts at.
+// `root`     — the journey's own node name, so the entry map can name it.
 // `external` — names that resolve to themselves because they are declared
 //              outside the generator (hand-written shells and chassis states).
 //              This list shrinks to nothing as the chassis becomes steps.
@@ -18,6 +18,7 @@ const { assign } = require('xstate');
 
 module.exports = {
   pgr: {
+    root: 'pgr',
     wrappers: {
       'fileComplaint.type': { id: 'pgrType' },
       'fileComplaint.location': { id: 'location' },
@@ -34,15 +35,11 @@ module.exports = {
       confidentiality: ['fileComplaint'],
       persistComplaint: ['fileComplaint']
     },
-    initial: {
-      'fileComplaint.type': 'complaintType2Step',
-      'fileComplaint.location': 'boundary',
-      'fileComplaint.other': 'institution'
-    },
     external: ['fileComplaint', 'endstate', 'system_error']
   },
 
   seva: {
+    root: 'mseva',
     wrappers: {
       onboarding: {
         id: 'onboarding',
@@ -63,10 +60,6 @@ module.exports = {
       onboardingThankYou: ['onboarding'],
       preCondition: ['welcome'],
       invoke: ['welcome']
-    },
-    initial: {
-      onboarding: 'onboardingLocale',
-      welcome: 'preCondition'
     },
     external: ['pgr']
   }

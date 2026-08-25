@@ -1,6 +1,6 @@
 // Unreachable since the boundary walk replaced the geo/fuzzy-search location
 // flow. Kept verbatim (dedented only) so the behaviour can be revived; nothing
-// in the live flow targets these states. See src/machine/flow/steps-pgr.js.
+// in the live flow targets these states. See src/machine/flow/pgr-states.js.
 const { assign } = require('xstate');
 const dialog = require('../util/dialog');
 
