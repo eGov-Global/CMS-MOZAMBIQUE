@@ -1,6 +1,23 @@
 {
  "runs": [
   {
+   "file": "data/32832048374.json",
+   "runId": "32832048374",
+   "date": "2026-08-25 09:29 UTC",
+   "ts": "2026-08-25T09:29:14.040065+00:00",
+   "branch": "master",
+   "shaShort": "96ed2b4",
+   "pr": null,
+   "occurrences": 1033,
+   "types": 28,
+   "occBySeverity": {
+    "CRITICAL": 0,
+    "HIGH": 81,
+    "MEDIUM": 876,
+    "LOW": 76
+   }
+  },
+  {
    "file": "data/32826592421.json",
    "runId": "32826592421",
    "date": "2026-08-25 08:27 UTC",
@@ -14,8 +31,7 @@
     "CRITICAL": 0,
     "HIGH": 81,
     "MEDIUM": 876,
-    "LOW": 2,
-    "INFO": 74
+    "LOW": 76
    }
   },
   {
@@ -32,8 +48,7 @@
     "CRITICAL": 0,
     "HIGH": 16,
     "MEDIUM": 873,
-    "LOW": 2,
-    "INFO": 74
+    "LOW": 76
    }
   },
   {
@@ -50,8 +65,7 @@
     "CRITICAL": 0,
     "HIGH": 16,
     "MEDIUM": 873,
-    "LOW": 2,
-    "INFO": 74
+    "LOW": 76
    }
   },
   {
@@ -68,8 +82,7 @@
     "CRITICAL": 0,
     "HIGH": 16,
     "MEDIUM": 873,
-    "LOW": 2,
-    "INFO": 74
+    "LOW": 76
    }
   },
   {
@@ -86,8 +99,7 @@
     "CRITICAL": 0,
     "HIGH": 16,
     "MEDIUM": 873,
-    "LOW": 2,
-    "INFO": 74
+    "LOW": 76
    }
   },
   {
@@ -104,8 +116,7 @@
     "CRITICAL": 0,
     "HIGH": 16,
     "MEDIUM": 873,
-    "LOW": 2,
-    "INFO": 74
+    "LOW": 76
    }
   },
   {
@@ -122,8 +133,7 @@
     "CRITICAL": 0,
     "HIGH": 16,
     "MEDIUM": 873,
-    "LOW": 2,
-    "INFO": 74
+    "LOW": 76
    }
   },
   {
@@ -140,8 +150,7 @@
     "CRITICAL": 0,
     "HIGH": 16,
     "MEDIUM": 873,
-    "LOW": 2,
-    "INFO": 74
+    "LOW": 76
    }
   },
   {
@@ -158,8 +167,7 @@
     "CRITICAL": 0,
     "HIGH": 0,
     "MEDIUM": 57,
-    "LOW": 0,
-    "INFO": 0
+    "LOW": 0
    }
   }
  ]
