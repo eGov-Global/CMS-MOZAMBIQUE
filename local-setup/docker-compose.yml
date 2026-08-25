@@ -1041,6 +1041,33 @@ services:
     networks:
       - egov-network
 
+  rest-adapter:
+    build: ../backend/rest-adapter
+    container_name: rest-adapter
+    env_file:
+      - ../backend/rest-adapter/.env
+    environment:
+      # inside the compose network DIGIT is reached through Kong, not the public host
+      DIGIT_HOST: http://kong:8000/
+      USER_SERVICE_HOST: http://kong:8000/
+      # Kong strips /adapter and hands the prefix back as a header
+      PROXY_HOPS: "1"
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8090/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+    networks:
+      - egov-network
+
   kong:
     image: kong:3.6
     container_name: kong-gateway
