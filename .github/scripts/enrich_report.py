@@ -204,36 +204,11 @@ for f in findings:
 for r in rules.values():
     r["snippet"] = "\n---\n".join(snippet(l["path"], l.get("line"), ctx=10) for l in r["locs"]) or "(no code context)"
 
+# NO cross-run cache. Every run re-enriches every rule from scratch so results are never
+# diluted by stale enrichment carried over from a previous run (explicit requirement).
 cache = {}
-if os.path.exists(CACHE):
-    try: cache = json.load(open(CACHE))
-    except Exception: cache = {}
-elif REPO:
-    try:
-        cache = json.loads(urllib.request.urlopen(
-            f"https://raw.githubusercontent.com/{REPO}/gh-pages/{CACHE}", timeout=10).read())
-    except Exception as e:
-        log("no remote cache:", e)
-
-# Cache schema version. BUMP THIS whenever the enrichment schema or prompts change
-# (e.g. the triage taxonomy or rubric) so stale entries from older runs are re-enriched
-# instead of silently reused.
-#   v2 = action_required/acceptable/false_positive triage taxonomy
-#   v3 = stricter rubric: internal/behind-gateway lowers priority, does not dismiss
-#        standard hardening controls (cap_drop, no-new-privileges, TLS validation)
-#   v4 = deployment context corrected to verified live reality (no host firewall;
-#        datastores published on 0.0.0.0 -> security group is the sole control)
-#   v5 = 4-level priority scale P0..P3 (P0 = critical/act-now)
-CACHE_V = 5
-
-
-def _cache_ok(c):
-    """A cache entry is reusable only if it is the current schema version AND carries
-    real remediation. Missing/old-version/empty entries are re-enriched (self-healing)."""
-    return bool(c and c.get("v") == CACHE_V and c.get("why") and c.get("fix"))
-
-
-todo = [r for r in rules.values() if not _cache_ok(cache.get(r["id"]))]
+CACHE_V = 6  # bumped: cache is now single-run only, always fresh
+todo = list(rules.values())  # always re-enrich everything
 CTX = "Ansible remote-server deployment (setup path C: ./deploy.sh) plus its docker-compose stack for DIGIT/CMS, a public-sector complaint-management platform. The repository is PUBLIC."
 
 # Deployment topology the triager must reason WITH, so it judges real-world exposure
@@ -366,12 +341,12 @@ if todo:
                        "note": (v1.get(rid, {}).get("note") or v2.get(rid, {}).get("note") or "")},
         }
 
-# apply cache (annotate findings; never drop or alter raw data). Only apply current-schema
-# entries that carry REAL remediation - a stale/empty entry must not stamp misleading or
-# outdated triage/verify badges; those findings fall back to the curated floor instead.
+# apply this run's enrichment (annotate findings; never drop or alter raw data). Only apply
+# entries that carry REAL remediation - if the LLM produced nothing for a rule, the finding
+# keeps its curated floor rather than a misleading empty badge.
 for f in findings:
     c = cache.get(f["id"])
-    if not _cache_ok(c):
+    if not (c and c.get("why") and c.get("fix")):
         continue
     if c.get("triage"): f["triage"] = c["triage"]
     f["why"] = c["why"]
@@ -399,5 +374,4 @@ if any(f.get("enriched") for f in findings) or run["meta"]["executive_summary"]:
     run["meta"]["engine"] = f"Gemini ({MODEL})"
 
 json.dump(run, open(RUN, "w"), indent=1)
-json.dump(cache, open(CACHE, "w"), indent=1)
-log(f"enriched: {len(todo)} new rules; cache {len(cache)}; action-required {len(action)}/{len(findings)}.")
+log(f"enriched fresh: {len(todo)} rules this run; action-required {len(action)}/{len(findings)}.")

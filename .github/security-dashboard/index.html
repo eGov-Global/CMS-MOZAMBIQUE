@@ -162,6 +162,7 @@ table.area td.r{text-align:right;font-variant-numeric:tabular-nums;font-weight:6
 .rule .sep{color:var(--line-2)}
 .rtag{font-size:10.5px;color:var(--muted);background:var(--surface-3);border:1px solid var(--line);border-radius:6px;padding:1px 7px}
 .aitag{color:#7c3aed;font-weight:700;font-size:11.5px}
+.strix{color:#0f766e;font-weight:700;font-size:11.5px}
 .wf{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:13px}
 @media(max-width:640px){.wf{grid-template-columns:1fr}}
 .wf .b{background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;font-size:13px;line-height:1.55;color:var(--ink-2)}
@@ -440,11 +441,13 @@ function card(f,isAction){
   const vmark = vf ? (vf.verified ? `<span class="vf ok" title="Passed dual-pass review">✓ verified</span>`
                                   : `<span class="vf nr" title="${esc(vf.note||'flagged by a reviewer')}">⚠ needs review</span>`) : "";
   const aitag = f.enriched?`<span class="sep">·</span><span class="aitag" title="AI-generated remediation">✨ AI</span>`:'';
+  const sx = f.strix || (f.source==="Strix" ? {validated:true,cvss:f.cvss,cwe:f.cwe} : null);
+  const strixTag = sx ? `<span class="sep">·</span><span class="strix" title="Independently validated by Strix AI pentest">🛡 Strix${sx.cvss?` · CVSS ${sx.cvss}`:''}${sx.cwe?` · ${esc(sx.cwe)}`:''}</span>` : "";
   const edge = isAction ? `border-left:3px solid ${PRICOL[prioOf(f)]||'#cbd5e1'}` : "";
   return `<div class="finding${isAction?' fa':''}" style="${edge}">
    <div class="h"><span class="sev" style="background:${SOFT[f.severity]};color:${COL[f.severity]}">${cap(f.severity)}</span>${pri}
     <span class="t">${esc(f.title)}</span>${stat}<span class="cnt">×${f.count}</span></div>
-   <div class="rule"><code>${esc(f.id)}</code><span class="sep">·</span>${esc(f.source)}<span class="sep">·</span>${esc(f.area)} ${catT}${expo}${guide}${aitag}</div>
+   <div class="rule"><code>${esc(f.id)}</code><span class="sep">·</span>${esc(f.source)}<span class="sep">·</span>${esc(f.area)} ${catT}${expo}${guide}${aitag}${strixTag}</div>
    <div class="wf"><div class="b"><div class="k">Why it matters</div>${esc(f.why)}</div>
     <div class="b"><div class="k">How to fix ${vmark}</div>${esc(f.fix)}</div></div>
    <div class="loc1">First location: ${firstLink}</div>${det}

@@ -33,8 +33,7 @@ if [ -f security-audit.xlsx ]; then
   cp security-audit.xlsx "$work/$SUBDIR/security-audit-latest.xlsx"
 fi
 
-# carry the LLM enrichment cache forward (kept at root, not web-served)
-[ -f enrich-cache.json ] && cp enrich-cache.json "$work/enrich-cache.json" || true
+# (no enrichment cache is carried forward - every run enriches fresh by design)
 touch "$work/.nojekyll"
 
 # root redirect -> /security_scan, and remove any legacy root report artifacts

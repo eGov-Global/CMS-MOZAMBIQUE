@@ -12,6 +12,7 @@ Runs in CI as `.github/workflows/security-scan.yml` and publishes a public dashb
 | **KICS** | `docker-compose` files - exposed ports, protocols, privileged, host-network, host mounts (native severities) |
 | **Ansible dry-run** | `ansible-playbook --syntax-check` + `ansible-lint` run with the repo config **bypassed** (`-c /dev/null`) so the security rules the repo's own `.ansible-lint` suppresses (`risky-file-permissions`, `risky-shell-pipe`, `no-log-password`) are re-enabled and fed into the report |
 | **Custom rules** (`custom_rules.py`) | Setup-specific, high-signal checks derived from a review of the ansible code **and a read-only audit of the live cms-pilot VM**: datastore/admin ports on `0.0.0.0` (no host firewall), weak default credentials, `curl \| bash`, insecure registry, disabled SSH host-key checking, missing nginx security headers, unauthenticated `/mcp`, no host firewall, unhardened systemd units, suppressed security-lint config |
+| **Strix** (AI pentest, opt-in) | Autonomous AI code review of `local-setup` (source mode, no live target). Adds CVSS + CWE + independent validation. Overlaps **enrich** existing findings (CVSS/CWE badge); net-new are added. Manual opt-in only - see the Strix section. |
 | **GitHub secret scanning** (native) | Secrets - lower false positives than entropy-based scanners; Checkov secret scanning is intentionally off |
 
 Out of scope here (later phases): `local-setup/k8s/**` (Kubernetes/Tilt) and
@@ -80,13 +81,37 @@ are never altered (agents only annotate); likely false positives are **labelled,
 dropped**; per-rule results are cached on `gh-pages` so unchanged rules aren't re-run.
 Any failure falls back to curated text - it never breaks the pipeline.
 
+## Strix AI pentest (opt-in, manual)
+
+An autonomous AI security agent ([usestrix/strix](https://github.com/usestrix/strix)) does a
+**deep source-mode code review** of `local-setup` (no live target, no exploitation). It adds
+**CVSS scores, CWE IDs, and independent validation** on top of the static scanners. When a Strix
+finding overlaps one of ours, it **enriches** that finding with a `Strix · CVSS · CWE` badge
+instead of duplicating; net-new Strix findings are added as their own rows.
+
+**Cost:** runs on a **ChatGPT Plus/Pro subscription** (`chatgpt/gpt-5.4`) via the `STRIX_AUTH`
+secret - **no metered API charge**. It is token-heavy (deep scans make hundreds of calls and can
+briefly hit the plan's rate cap), so it is **manual opt-in only**, intended for an occasional
+(e.g. weekly) run - never per-push. Each run is **fresh** (no cache).
+
+**Enable:**
+1. Log in once locally: `strix auth login chatgpt` (browser OAuth).
+2. Store the credential as a repo secret: `base64 -i ~/.strix/subscription-auth.json` -> secret
+   **`STRIX_AUTH`**. (It contains a refresh token, so CI keeps working without re-login.)
+3. Run the workflow with the **`run_strix`** input checked. The step restores the credential,
+   runs `strix -n -t ./local-setup -m deep --scope-mode full`, and merges the SARIF.
+
+**Authorization:** source-mode only touches code in this repo - no system is attacked. (Strix's
+live/dynamic modes are deliberately not used here.)
+
 ## Reading the report
 
 - **Count** = how many times a rule matched, grouped into one issue type.
-- **Severity** = KICS native; Checkov findings are bucketed (Medium).
+- **Severity** = KICS native; Checkov bucketed (Medium); Strix from CVSS; **Info is folded into Low** (4-level scale).
 - **Status** (AI) = action required / acceptable / false positive. Only **action required**
   is tracked in the Excel audit; the "Hide non-actionable" toggle focuses the dashboard on it.
-- **Priority** (AI) = P1 (escape/host takeover) / P2 (escalation given a foothold) / P3 (defense-in-depth).
+- **Priority** (AI) = **P0** (critical / act now) / P1 (high) / P2 (medium) / P3 (defense-in-depth).
+- **Strix** (opt-in) = independent AI-pentest validation, shown as a `Strix · CVSS · CWE` badge.
 - **Category** = security domain (Container Isolation, Hardening, Network Exposure, TLS, Secrets, Resource Controls, Data Sharing).
 - **Verify** (AI) = the fix passed both critics (`verified`) or was flagged (`needs review`).
 
@@ -104,6 +129,7 @@ required in branch protection.
 | `.checkov.yaml` | Checkov scope (Ansible) |
 | `.github/scripts/custom_rules.py` | setup-specific security rules (CMS-SEC-*), grounded in the live-VM audit |
 | `.github/scripts/ansible_lint_to_findings.py` | convert the ansible-lint dry-run SARIF into security findings |
+| `.github/scripts/strix_to_findings.py` | convert the Strix pentest SARIF into findings (CVSS/CWE), dedup vs existing |
 | `.github/scripts/security_report.py` | merge scanners -> `run.json` (+ curated remediation, categories) |
 | `.github/scripts/enrich_report.py` | Gemini agent pipeline: deployment-aware triage, remediate, verify (optional) |
 | `.github/scripts/build_audit_xlsx.py` | build the multi-sheet Excel audit workbook |

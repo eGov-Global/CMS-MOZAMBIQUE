@@ -15,6 +15,11 @@ name: Security Scan - Ansible Remote Server Deployment
 
 on:
   workflow_dispatch:
+    inputs:
+      run_strix:
+        description: "Also run the Strix AI pentest (deep source review, ~30-60 min, uses your ChatGPT plan)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write # push reports to gh-pages
@@ -119,6 +124,31 @@ jobs:
           BASE=. OUT=custom.json python3 .github/scripts/custom_rules.py || echo "custom rules skipped (non-fatal)"
           SARIF=lint.sarif OUT=custom.json ANSIBLE_PREFIX="$ANSIBLE_DIR" python3 .github/scripts/ansible_lint_to_findings.py || echo "lint conversion skipped (non-fatal)"
 
+      # 2c) OPTIONAL Strix AI pentest (source-mode, no live target) - manual opt-in only.
+      #  Uses your ChatGPT subscription via the STRIX_AUTH secret (no metered API cost).
+      #  Deep, fresh scan of local-setup each run (no cache). Findings are converted and
+      #  merged - overlaps enrich existing findings with CVSS/CWE, net-new are added.
+      - name: Strix AI pentest (opt-in)
+        if: ${{ github.event.inputs.run_strix == 'true' }}
+        timeout-minutes: 90
+        env:
+          STRIX_LLM: "chatgpt/gpt-5.4"
+          STRIX_AUTH: ${{ secrets.STRIX_AUTH }}
+        run: |
+          if [ -z "$STRIX_AUTH" ]; then echo "STRIX_AUTH secret not set; skipping Strix."; exit 0; fi
+          curl -sSL https://strix.ai/install | bash
+          export PATH="$HOME/.strix/bin:$PATH"
+          mkdir -p ~/.strix
+          printf '%s' "$STRIX_AUTH" | base64 -d > ~/.strix/subscription-auth.json
+          chmod 600 ~/.strix/subscription-auth.json
+          strix -n -t ./local-setup -m deep --scope-mode full || echo "strix finished (findings or non-fatal)"
+          SARIF="$(ls -t strix_runs/*/findings.sarif 2>/dev/null | head -1)"
+          if [ -n "$SARIF" ]; then
+            SARIF="$SARIF" OUT=custom.json STRIX_PREFIX=local-setup python3 .github/scripts/strix_to_findings.py
+          else
+            echo "no Strix SARIF produced (auth or scan issue); continuing without Strix findings."
+          fi
+
       # 3) Merge into a structured run.json + summary card
       - name: Build report data
         if: always()
@@ -178,4 +208,5 @@ jobs:
           path: |
             run.json
             security-audit.xlsx
+            strix_runs/
           if-no-files-found: warn

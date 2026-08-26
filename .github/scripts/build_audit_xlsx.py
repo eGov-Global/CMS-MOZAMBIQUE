@@ -217,8 +217,13 @@ for f in action:
     loc = (f.get("locations") or [{}])[0]
     pr = priority_of(f)
     rf = PatternFill("solid", fgColor=PRI_SOFT.get(pr, NEUTRAL_SOFT))  # whole-row tint = priority soft
+    why = f.get("why", "")
+    sx = f.get("strix") or ({"cvss": f.get("cvss"), "cwe": f.get("cwe")} if f.get("source") == "Strix" else None)
+    if sx:  # surface independent Strix AI-pentest validation + CVSS/CWE inline
+        tag = "[Strix-validated" + (f" · CVSS {sx.get('cvss')}" if sx.get("cvss") else "") + (f" · {sx.get('cwe')}" if sx.get("cwe") else "") + "]  "
+        why = tag + why
     vals = {3: f.get("category", ""), 4: f.get("title", ""), 5: f.get("id", ""), 6: f.get("source", ""),
-            7: tri.get("exposure", ""), 8: f.get("count", 0), 9: f.get("why", ""), 10: f.get("fix", ""),
+            7: tri.get("exposure", ""), 8: f.get("count", 0), 9: why, 10: f.get("fix", ""),
             13: "Open", 16: tri.get("reason", "")}
     for c, v in vals.items():
         cell = ws.cell(row=row, column=c, value=v)

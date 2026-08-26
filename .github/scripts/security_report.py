@@ -295,13 +295,15 @@ def from_kics(data):
 
 
 def from_custom(data):
-    """Setup-specific findings emitted by custom_rules.py (already root-relative)."""
+    """Findings emitted by custom_rules.py / ansible-lint / Strix (already root-relative).
+    Carries through source-provided why/fix (Strix) and cvss/cwe when present."""
     out = []
     for f in (data or []):
         out.append({"source": f.get("source", "Custom"), "area": f.get("area", "ansible"),
                     "severity": norm_sev(f.get("severity")), "id": f.get("id", ""),
                     "title": f.get("title", ""), "file": (f.get("file") or "").lstrip("/"),
-                    "line": f.get("line"), "desc": f.get("desc", ""), "guide": f.get("guide") or ""})
+                    "line": f.get("line"), "desc": f.get("desc", ""), "guide": f.get("guide") or "",
+                    "why": f.get("why"), "fix": f.get("fix"), "cvss": f.get("cvss"), "cwe": f.get("cwe")})
     return out
 
 
@@ -358,41 +360,69 @@ def main():
         k = (f["severity"], f["source"], f["id"], f["title"])
         g = groups.setdefault(k, {"severity": f["severity"], "source": f["source"], "area": f["area"],
                                   "id": f["id"], "title": f["title"], "guide": f["guide"],
-                                  "locations": [], "_desc": f.get("desc", "")})
+                                  "locations": [], "_desc": f.get("desc", ""),
+                                  "_why": f.get("why"), "_fix": f.get("fix"),
+                                  "cvss": f.get("cvss"), "cwe": f.get("cwe")})
         if f["file"]:
             g["locations"].append({"path": f["file"], "line": f["line"],
                                    "url": blob(meta_repo, sha, f["file"], f["line"])})
     grouped = []
     for g in groups.values():
-        why, fix, curated, ref = remediate(g["id"], g["title"], g.pop("_desc", ""))
-        g["why"], g["fix"], g["curated"], g["count"] = why, fix, curated, len(g["locations"])
+        desc = g.pop("_desc", ""); sw, sf = g.pop("_why", None), g.pop("_fix", None)
+        if sw and sf:  # source-provided remediation (Strix) - authoritative, keep verbatim
+            g["why"], g["fix"], g["curated"] = sw, sf, True
+        else:
+            why, fix, curated, ref = remediate(g["id"], g["title"], desc)
+            g["why"], g["fix"], g["curated"] = why, fix, curated
+            if ref:  # prefer a vetted authoritative reference over the scanner's own link
+                g["guide"] = ref
         g["category"] = sec_category(g["id"], g["title"])
-        # Prefer a vetted authoritative reference over the scanner's own link,
-        # which can point at dead/legacy documentation.
-        if ref:
-            g["guide"] = ref
+        g["count"] = len(g["locations"])
         grouped.append(g)
+
+    # Strix corroboration: when a Strix finding overlaps an existing (non-Strix) finding
+    # (same file, nearby line), attach its CVSS/CWE + validation to that finding and drop
+    # the duplicate Strix row. Net-new Strix findings stay as their own findings.
+    def _locs(g):
+        return [(l["path"], l.get("line") or 0) for l in g.get("locations", [])]
+    others = [g for g in grouped if g["source"] != "Strix"]
+    drop = set()
+    for s in [g for g in grouped if g["source"] == "Strix"]:
+        for o in others:
+            olocs = _locs(o)
+            if any(sp == op and abs(sl - ol) <= 15 for (sp, sl) in _locs(s) for (op, ol) in olocs):
+                o["strix"] = {"validated": True, "cvss": s.get("cvss"), "cwe": s.get("cwe"), "title": s["title"]}
+                drop.add(id(s)); break
+    grouped = [g for g in grouped if id(g) not in drop]
+
     order = {s: i for i, s in enumerate(SEV_ORDER)}
     grouped.sort(key=lambda g: (order.get(g["severity"], 9), -g["count"]))
 
     types_by = collections.Counter(g["severity"] for g in grouped)
-    occ_by = collections.Counter(f["severity"] for f in findings)
+    occ_by = collections.Counter()
+    for g in grouped:
+        occ_by[g["severity"]] += len(g["locations"])
     pr = None
     if os.environ.get("PR_NUMBER"):
         n = os.environ["PR_NUMBER"]
         pr = {"number": int(n), "title": os.environ.get("PR_TITLE", ""),
               "url": f"https://github.com/{meta_repo}/pull/{n}"}
 
+    scanners = ["Checkov", "KICS", "Custom rules"]
+    if any(g["source"] == "Strix" or g.get("strix") for g in grouped):
+        scanners.append("Strix (AI pentest)")
+    occurrences = sum(len(g["locations"]) for g in grouped)
+
     run = {
         "meta": {
             "repo": meta_repo, "branch": os.environ.get("REF", ""), "sha": sha, "shaShort": sha[:7],
             "runId": os.environ.get("RUN_ID", ""), "runUrl": os.environ.get("RUN_URL", "#"),
             "pr": pr, "scope": os.environ.get("SCAN_SCOPE", "Ansible Deployment - Remote Server"),
-            "scanners": ["Checkov", "KICS", "Custom rules"],
+            "scanners": scanners,
             "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         },
-        "summary": {"types": len(grouped), "occurrences": len(findings),
+        "summary": {"types": len(grouped), "occurrences": occurrences,
                     "typesBySeverity": {s: types_by.get(s, 0) for s in SEV_ORDER},
                     "occBySeverity": {s: occ_by.get(s, 0) for s in SEV_ORDER}},
         "findings": grouped,
