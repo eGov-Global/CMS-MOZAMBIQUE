@@ -7,3 +7,4 @@ seed-1m-*.log
 # Test result artifacts — keep the folder (.gitkeep) but ignore all runs
 /results/*
 !/results/.gitkeep
+Claude.md
