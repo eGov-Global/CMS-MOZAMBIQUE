@@ -354,6 +354,15 @@ for f in findings:
     if c.get("verify"): f["verify"] = c["verify"]
     f["enriched"] = True
 
+# Severity floor on priority: a CRITICAL finding (e.g. a CVSS 9.8 dependency RCE surfaced
+# by Strix) must never sit below P0 - the context triage can under-rate a standard high-CVSS
+# CVE. We only raise urgency here, never lower it, and leave HIGH/MEDIUM to the triage's
+# nuanced call (a high-severity build-time dep legitimately can be P3).
+for f in findings:
+    t = f.get("triage") or {}
+    if t.get("status") == "action_required" and f.get("severity") == "CRITICAL" and t.get("priority") != "P0":
+        t["priority"] = "P0"; f["triage"] = t
+
 # executive summary + priorities over ACTION-REQUIRED findings only (exclude acceptable / FPs)
 def _status(f): return (f.get("triage") or {}).get("status")
 action = [f for f in findings if _status(f) == "action_required"]
