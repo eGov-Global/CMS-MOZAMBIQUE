@@ -1,5 +1,5 @@
-import { pgrLifecycle, transactionDuration, transactionSuccess } from './pgr-lifecycle.js';
-import { makeHandleSummary, reportThresholds } from '../helpers/report.js';
+import { pgrLifecycle, transactionDuration, transactionSuccess } from '../pgr-lifecycle.js';
+import { makeHandleSummary, reportThresholds } from '../../helpers/report.js';
 
 const META = {
   title: 'Ramp 300 VU',

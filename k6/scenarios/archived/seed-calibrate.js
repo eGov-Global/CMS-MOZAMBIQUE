@@ -1,10 +1,10 @@
 // Quick calibration: 1000 iterations at 200 VUs, no think time
 import { Trend, Rate, Counter } from 'k6/metrics';
 import exec from 'k6/execution';
-import { login } from '../helpers/auth.js';
-import { createComplaint, updateComplaint } from '../helpers/pgr.js';
-import { makeHandleSummary, reportThresholds } from '../helpers/report.js';
-import { getEnv } from '../config/environments.js';
+import { login } from '../../helpers/auth.js';
+import { createComplaint, updateComplaint } from '../../helpers/pgr.js';
+import { makeHandleSummary, reportThresholds } from '../../helpers/report.js';
+import { getEnv } from '../../config/environments.js';
 
 const META = {
   title: 'Seed calibrate',

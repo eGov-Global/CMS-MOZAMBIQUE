@@ -1,6 +1,6 @@
-import { pgrLifecycle, transactionDuration, transactionSuccess } from './pgr-lifecycle.js';
-import { THRESHOLDS } from '../config/thresholds.js';
-import { makeHandleSummary, reportThresholds } from '../helpers/report.js';
+import { pgrLifecycle, transactionDuration, transactionSuccess } from '../pgr-lifecycle.js';
+import { THRESHOLDS } from '../../config/thresholds.js';
+import { makeHandleSummary, reportThresholds } from '../../helpers/report.js';
 
 const META = {
   title: 'Ramp 10 VU',

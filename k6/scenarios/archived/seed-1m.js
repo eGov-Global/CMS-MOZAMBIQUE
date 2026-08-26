@@ -7,10 +7,10 @@
 import { sleep } from 'k6';
 import { Trend, Rate, Counter } from 'k6/metrics';
 import exec from 'k6/execution';
-import { login } from '../helpers/auth.js';
-import { createComplaint, updateComplaint } from '../helpers/pgr.js';
-import { makeHandleSummary, reportThresholds } from '../helpers/report.js';
-import { getEnv } from '../config/environments.js';
+import { login } from '../../helpers/auth.js';
+import { createComplaint, updateComplaint } from '../../helpers/pgr.js';
+import { makeHandleSummary, reportThresholds } from '../../helpers/report.js';
+import { getEnv } from '../../config/environments.js';
 
 export const transactionDuration = new Trend('transaction_duration', true);
 export const transactionSuccess = new Rate('transaction_success');

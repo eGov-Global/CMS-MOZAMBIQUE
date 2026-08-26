@@ -1,10 +1,10 @@
 import { sleep } from 'k6';
 import { Trend, Rate } from 'k6/metrics';
 import exec from 'k6/execution';
-import { login } from '../helpers/auth.js';
-import { createComplaint, updateComplaint, searchComplaint } from '../helpers/pgr.js';
-import { makeHandleSummary, reportThresholds } from '../helpers/report.js';
-import { getEnv } from '../config/environments.js';
+import { login } from '../../helpers/auth.js';
+import { createComplaint, updateComplaint, searchComplaint } from '../../helpers/pgr.js';
+import { makeHandleSummary, reportThresholds } from '../../helpers/report.js';
+import { getEnv } from '../../config/environments.js';
 
 const META = {
   title: 'Variable throughput',
