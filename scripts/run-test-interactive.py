@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+import os
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 SCENARIOS_DIR = ROOT_DIR / "k6" / "scenarios"
@@ -57,9 +58,14 @@ def main():
     env = prompt_choice("Environment", envs)
     profile = prompt_choice("CPU profile", profiles)
     scenario = prompt_choice("Scenario", scenarios)
+    expose_dashboard = prompt_choice("Expose live dashboard on 0.0.0.0 (e.g. for Kong on UAT)", ["no", "yes"])
 
     run_test_script = ROOT_DIR / "scripts" / "run-test.sh"
-    return subprocess.run([str(run_test_script), env, profile, scenario]).returncode
+    run_env = os.environ.copy()
+    if expose_dashboard == "yes":
+        run_env["K6_WEB_DASHBOARD_HOST"] = "0.0.0.0"
+
+    return subprocess.run([str(run_test_script), env, profile, scenario], env=run_env).returncode
 
 
 if __name__ == "__main__":
