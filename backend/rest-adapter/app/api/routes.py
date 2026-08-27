@@ -13,7 +13,7 @@ api = Blueprint("api", __name__)
 
 @api.get("/health")
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok-v20260827"})
 
 
 @api.post("/complaints")
