@@ -37,9 +37,23 @@ class ReceptionOfficerSession:
     def current(self) -> AuthenticatedOfficer:
         with self._lock:
             if self._is_stale():
-                self._officer = self._log_in()
-                self._obtained_at = time.monotonic()
+                self._refresh()
             return self._officer
+
+    def renew(self) -> AuthenticatedOfficer:
+        """Force a fresh login, whatever the cache thinks.
+
+        DIGIT can invalidate a token well before the TTL — its advertised
+        `expires_in` is not reliable — so a 401 means re-authenticate now rather
+        than wait for the cache to lapse.
+        """
+        with self._lock:
+            self._refresh()
+            return self._officer
+
+    def _refresh(self):
+        self._officer = self._log_in()
+        self._obtained_at = time.monotonic()
 
     def _is_stale(self) -> bool:
         if self._officer is None:
