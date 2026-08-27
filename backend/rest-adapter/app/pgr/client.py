@@ -1,5 +1,8 @@
 """The only module that talks to pgr-services."""
 
+import copy
+import logging
+
 import requests
 
 from app.domain.errors import PgrRequestFailed
@@ -10,6 +13,9 @@ CREATE_PATH = "pgr-services/v2/request/_create"
 SEARCH_PATH = "pgr-services/v2/request/_search"
 JSON_HEADERS = {"Content-Type": "application/json"}
 SEARCH_LIMIT = 200  # pgr.search.max.limit; the service caps anything higher
+REDACTED = "[REDACTED]"
+
+logger = logging.getLogger(__name__)
 
 
 class PgrClient:
@@ -61,6 +67,10 @@ class PgrClient:
 
     def _post(self, path, query, body) -> dict:
         url = self._digit_host + path
+        logger.debug(
+            "Sending request to PGR",
+            extra={"path": url, "query": query, "headers": JSON_HEADERS, "payload": _redacted(body)},
+        )
         try:
             response = requests.post(
                 url, params=query, json=body, headers=JSON_HEADERS, timeout=self._timeout_seconds
@@ -74,6 +84,14 @@ class PgrClient:
                 details={"status": response.status_code, "body": _short(response.text)},
             )
         return response.json()
+
+def _redacted(body: dict) -> dict:
+    """The auth token in RequestInfo is a bearer credential - never log it."""
+    clone = copy.deepcopy(body)
+    request_info = clone.get("RequestInfo")
+    if isinstance(request_info, dict) and "authToken" in request_info:
+        request_info["authToken"] = REDACTED
+    return clone
 
 
 def _wrappers(response: dict) -> list:

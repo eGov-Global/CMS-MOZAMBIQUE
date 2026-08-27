@@ -9,5 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY run.py .
 
+ENV LOG_DIR=/var/adapter/logs
+VOLUME ["/var/adapter/logs"]
+
 EXPOSE 8090
 CMD ["gunicorn", "--bind", "0.0.0.0:8090", "--workers", "2", "run:app"]

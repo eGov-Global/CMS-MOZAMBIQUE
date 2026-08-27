@@ -14,10 +14,12 @@ from app.pgr.labels import LabelService
 from app.pgr.master_data import MasterDataService
 from app.pgr.reception_officer import ReceptionOfficerSession
 from app.pgr.filestore import FileStoreClient
+from app.logging_config import configure_logging
 
 
 def create_app(config=None) -> Flask:
     config = config or load_config()
+    configure_logging(config)
 
     app = Flask(__name__)
     app.config["ADAPTER"] = config

@@ -35,6 +35,16 @@ class MasterDataSettings:
     localisation_modules: tuple
     default_locale: str
 
+@dataclass(frozen=True)
+class LoggingSettings:
+    """Where logs go, how big they get before rotating, and how much detail."""
+
+    dir: str
+    level: str
+    max_bytes: int
+    backup_count: int
+    output: str
+
 
 @dataclass(frozen=True)
 class Config:
@@ -54,6 +64,7 @@ class Config:
     defaults: ComplaintDefaults
     master_data: MasterDataSettings
     filestore_module: str
+    logging: LoggingSettings
 
 
 def load_config() -> Config:
@@ -89,6 +100,13 @@ def load_config() -> Config:
             default_locale=os.getenv("DEFAULT_LOCALE", "pt_PT"),
         ),
         filestore_module=os.getenv("FILESTORE_MODULE", "PGR"),
+        logging=LoggingSettings(
+            dir=os.getenv("LOG_DIR", "logs"),
+            level=os.getenv("LOG_LEVEL", "INFO").upper(),
+            max_bytes=int(os.getenv("LOG_MAX_BYTES", str(10 * 1024 * 1024))), # 10 MB
+            backup_count=int(os.getenv("LOG_BACKUP_COUNT", "5")),
+            output=os.getenv("LOG_OUTPUT", "both").lower(),
+        ),
     )
 
 
