@@ -18,9 +18,10 @@ REDACTED = "[REDACTED]"
 logger = logging.getLogger(__name__)
 
 
+
 class PgrClient:
     def __init__(self, digit_host, city_tenant_id, search_tenant_id, defaults, session,
-                 citizens, extra_filers, timeout_seconds):
+                 citizens, extra_filers, timeout_seconds, district_for):
         self._digit_host = digit_host
         self._city_tenant_id = city_tenant_id
         self._search_tenant_id = search_tenant_id
@@ -29,10 +30,12 @@ class PgrClient:
         self._citizens = citizens
         self._extra_filers = extra_filers
         self._timeout_seconds = timeout_seconds
+        self._district_for = district_for
+
 
     def file(self, complaint) -> FiledComplaint:
         officer = self._session.current()
-        body = payloads.create_body(complaint, officer, self._city_tenant_id, self._defaults)
+        body = payloads.create_body(complaint, officer, self._city_tenant_id, self._defaults, self._district_for)
         response = self._post(CREATE_PATH, {"tenantId": self._city_tenant_id}, body)
         return _first_complaint(response, "Complaint was created but PGR returned no service")
 
@@ -72,6 +75,7 @@ class PgrClient:
             extra={"path": url, "query": query, "headers": JSON_HEADERS, "payload": _redacted(body)},
         )
         try:
+
             response = requests.post(
                 url, params=query, json=body, headers=JSON_HEADERS, timeout=self._timeout_seconds
             )
@@ -92,6 +96,7 @@ def _redacted(body: dict) -> dict:
     if isinstance(request_info, dict) and "authToken" in request_info:
         request_info["authToken"] = REDACTED
     return clone
+
 
 
 def _wrappers(response: dict) -> list:

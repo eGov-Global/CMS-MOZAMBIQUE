@@ -23,8 +23,9 @@ def create_app(config=None) -> Flask:
 
     app = Flask(__name__)
     app.config["ADAPTER"] = config
-    app.config["PGR_CLIENT"] = _build_pgr_client(config)
-    app.config["MASTER_DATA"] = _build_master_data(config)
+    master_data = _build_master_data(config)
+    app.config["PGR_CLIENT"] = _build_pgr_client(config, master_data)
+    app.config["MASTER_DATA"] = master_data
     app.config["PHONES"] = PhoneNumbers(config.country_code, config.mobile_number_length)
     app.config["FILE_STORE"] = _build_file_store(config)
 
@@ -52,7 +53,7 @@ def _trust_proxy(app, hops):
         )
 
 
-def _build_pgr_client(config) -> PgrClient:
+def _build_pgr_client(config, master_data) -> PgrClient:
     session = ReceptionOfficerSession(
         credentials=config.officer,
         user_service_host=config.user_service_host,
@@ -73,7 +74,9 @@ def _build_pgr_client(config) -> PgrClient:
         citizens=citizens,
         extra_filers=config.extra_filers,
         timeout_seconds=config.request_timeout_seconds,
+        district_for=master_data.district_for,
     )
+
 
 
 def _build_master_data(config) -> MasterDataService:
@@ -90,6 +93,7 @@ def _build_master_data(config) -> MasterDataService:
         root_tenant_id=config.master_data.root_tenant_id,
         labels=labels,
         timeout_seconds=config.request_timeout_seconds,
+        locality_hierarchy_type=config.master_data.locality_hierarchy_type,
     )
 
 def _build_file_store(config) -> FileStoreClient:

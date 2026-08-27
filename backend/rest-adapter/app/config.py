@@ -34,6 +34,8 @@ class MasterDataSettings:
     root_tenant_id: str
     localisation_modules: tuple
     default_locale: str
+    # Empty means resolve it dynamically from boundary-hierarchy-definition instead.
+    locality_hierarchy_type: str
 
 @dataclass(frozen=True)
 class LoggingSettings:
@@ -98,6 +100,7 @@ def load_config() -> Config:
             root_tenant_id=_required("ROOT_TENANT_ID"),
             localisation_modules=_csv("LOCALISATION_MODULES", "rainmaker-pgr,common-masters"),
             default_locale=os.getenv("DEFAULT_LOCALE", "pt_PT"),
+            locality_hierarchy_type=os.getenv("LOCALITY_HIERARCHY_TYPE", ""),
         ),
         filestore_module=os.getenv("FILESTORE_MODULE", "PGR"),
         logging=LoggingSettings(

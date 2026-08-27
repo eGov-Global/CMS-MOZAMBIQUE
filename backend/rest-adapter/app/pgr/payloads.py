@@ -11,13 +11,30 @@ So the adapter authenticates as an employee, omits `accountId` entirely, and sen
 them if they do not exist. Name and mobile number are both mandatory on that block.
 """
 
+from app.domain.errors import InvalidRequest
+
+
 APPLY = "APPLY"
+# Keyed by locality code (see app/pgr/master_data.py's boundary walk). Only
+# Maputo's 7 municipal districts are configured today; anything else falls
+# through to InvalidRequest in _geo_location rather than filing with no
+# location at all.
+LOCALITY_CITY_CENTERS = {
+    "kampfumu": {"latitude": -25.969, "longitude": 32.573},
+    "nlhamankulu": {"latitude": -25.955, "longitude": 32.588},
+    "kamaxakeni": {"latitude": -25.938, "longitude": 32.598},
+    "kamavota": {"latitude": -25.930, "longitude": 32.615},
+    "kamubukwana": {"latitude": -25.955, "longitude": 32.630},
+    "katembe": {"latitude": -25.988, "longitude": 32.556},
+    "kanyaka": {"latitude": -26.017, "longitude": 32.933},
+}
 
 
-def create_body(complaint, officer, city_tenant_id, defaults) -> dict:
+
+def create_body(complaint, officer, city_tenant_id, defaults, district_for) -> dict:
     return {
         "RequestInfo": _request_info(officer),
-        "service": _service(complaint, city_tenant_id, defaults),
+        "service": _service(complaint, city_tenant_id, defaults, district_for),
         "workflow": {"action": APPLY, "verificationDocuments": _verification_documents(complaint)},
     }
 
@@ -42,14 +59,14 @@ def _request_info(officer) -> dict:
     return {"authToken": officer.token, "userInfo": officer.user_info}
 
 
-def _service(complaint, city_tenant_id, defaults) -> dict:
+def _service(complaint, city_tenant_id, defaults, district_for) -> dict:
     return {
         "tenantId": city_tenant_id,
         "serviceCode": complaint.service_code,
         "description": complaint.description,
         "source": defaults.source,
         "citizen": _citizen(complaint, defaults),
-        "address": _address(complaint, city_tenant_id),
+        "address": _address(complaint, city_tenant_id, district_for),
         "extendedAttributes": _extended_attributes(complaint, defaults),
     }
 
@@ -64,8 +81,8 @@ def _citizen(complaint, defaults) -> dict:
 
 
 
-def _address(complaint, city_tenant_id) -> dict:
-    """No geoLocation unless the portal sent one: this channel usually has no map."""
+def _address(complaint, city_tenant_id, district_for) -> dict:
+    """Falls back to the locality's city center when the portal sent no geoLocation."""
     return {
         "city": city_tenant_id,
         "locality": {"code": complaint.locality_code},
@@ -73,14 +90,23 @@ def _address(complaint, city_tenant_id) -> dict:
         "buildingName": complaint.building_name,
         "street": complaint.street,
         "pincode": complaint.pincode,
-        "geoLocation": _geo_location(complaint),
+        "geoLocation": _geo_location(complaint, district_for),
     }
 
 
-def _geo_location(complaint):
-    if complaint.latitude is None or complaint.longitude is None:
-        return None
-    return {"latitude": complaint.latitude, "longitude": complaint.longitude}
+def _geo_location(complaint, district_for):
+    if complaint.latitude is not None and complaint.longitude is not None:
+        return {"latitude": complaint.latitude, "longitude": complaint.longitude}
+
+    district = district_for(complaint.locality_code)
+    center = LOCALITY_CITY_CENTERS.get(district)
+    if center is None:
+        raise InvalidRequest(
+            f"No geoLocation existant "
+            f"for locality '{complaint.locality_code}' (district: {district})"
+        )
+    return center
+
 
 
 

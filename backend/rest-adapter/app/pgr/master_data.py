@@ -28,12 +28,14 @@ JSON_HEADERS = {"Content-Type": "application/json"}
 
 
 class MasterDataService:
-    def __init__(self, digit_host, city_tenant_id, root_tenant_id, labels, timeout_seconds):
+    def __init__(self, digit_host, city_tenant_id, root_tenant_id, labels, timeout_seconds,
+                 locality_hierarchy_type=""):
         self._digit_host = digit_host
         self._city_tenant_id = city_tenant_id
         self._root_tenant_id = root_tenant_id
         self._labels = labels
         self._timeout_seconds = timeout_seconds
+        self._locality_hierarchy_type = locality_hierarchy_type
 
     def departments(self, locale) -> list:
         rows = self._mdms(COMMON_MASTERS_MODULE, DEPARTMENT_MASTER)
@@ -58,17 +60,21 @@ class MasterDataService:
         )
 
     def localities(self, path, locale) -> WalkStep:
-        hierarchy_type = self._boundary_hierarchy_type()
+        hierarchy_type = self._locality_hierarchy_type or self._boundary_hierarchy_type()
         if not hierarchy_type:
             return WalkStep(level="", options=[], is_leaf=True, path=path)
 
         nodes = _descend(self._boundary_roots(hierarchy_type), path)
         translate = self._labels.translator(locale)
+        # DIGIT registers boundary labels as {TENANT}_{hierarchyType}_{code}, the
+        # code kept in its original case - unlike the complaint hierarchy's labels,
+        # this isn't a plain uppercased code.
+        label_prefix = f"{self._city_tenant_id.upper()}_{hierarchy_type}_"
 
         return WalkStep(
             level=nodes[0].get("boundaryType", "") if nodes else "",
             options=sorted(
-                (Option(code=node["code"], name=translate(node["code"].upper(), node["code"])) for node in nodes),
+                (Option(code=node["code"], name=translate(label_prefix + node["code"], node["code"])) for node in nodes),
                 key=lambda option: option.name,
             ),
             is_leaf=all(not node.get("children") for node in nodes),
@@ -133,6 +139,15 @@ class MasterDataService:
             )
         return response.json()
 
+    def district_for(self, locality_code):
+        """The district ancestor of any locality code, per the active boundary hierarchy."""
+        hierarchy_type = self._locality_hierarchy_type or self._boundary_hierarchy_type()
+        if not hierarchy_type:
+            return None
+        path = _path_to(self._boundary_roots(hierarchy_type), locality_code)
+        return path[1] if len(path) > 1 else None
+
+
 
 def _hierarchy_type(levels):
     return levels[0].get("hierarchyType") if levels else None
@@ -168,3 +183,14 @@ def _descend(nodes, path) -> list:
 def _is_other(row) -> bool:
     """'Other' options sort last, wherever the deployment placed them."""
     return str(row.get("name", "")).strip().lower() in {"other", "others", "outro", "outros"}
+
+def _path_to(nodes, code, trail=()) -> tuple:
+    """Codes from the root down to `code`, inclusive - or () if not found."""
+    for node in nodes:
+        node_code = node.get("code")
+        if node_code == code:
+            return trail + (node_code,)
+        found = _path_to(node.get("children") or [], code, trail + (node_code,))
+        if found:
+            return found
+    return ()
