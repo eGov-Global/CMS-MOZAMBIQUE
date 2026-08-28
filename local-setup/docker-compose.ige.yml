@@ -30,3 +30,19 @@ services:
   postgres-db:
     image: postgres:16
     platform: linux/arm64
+  # Citizen-portal REST adapter (backend/rest-adapter). No published registry
+  # image — always the locally-built tag (see playbook-deploy.yml's
+  # "Build rest-adapter image locally" task). No host port published: Kong
+  # reaches it by container name on the shared egov-network.
+  rest-adapter:
+    image: ${REST_ADAPTER_IMAGE:-rest-adapter:local}
+    container_name: rest-adapter
+    env_file:
+      - ./rest-adapter/.env
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8090/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped

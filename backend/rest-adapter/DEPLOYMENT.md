@@ -7,6 +7,16 @@ Reference values below are UAT (`mzmpm02srv407`, stack in `/opt/digit`, public a
 `https://uat.falacidadao.gov.mz`). Adjust host names and the network name for other
 environments.
 
+> **As of `enable_rest_adapter` landing in `local-setup/ansible`, the steps below
+> are superseded for any tenant deployed via `playbook-deploy.yml`.** Set
+> `enable_rest_adapter: true` plus `adapter_api_key` /
+> `reception_officer_username` / `reception_officer_password` in that tenant's
+> `inventory/host_vars/<tenant>.yml`, and the normal deploy run builds, configures,
+> and starts the container as part of the managed stack — no separate
+> `docker build`/`docker run`, no manual Kong edit. This document stays as the
+> manual/reference procedure for anything deployed outside that flow.
+
+
 ---
 
 ## 1. New deployment
