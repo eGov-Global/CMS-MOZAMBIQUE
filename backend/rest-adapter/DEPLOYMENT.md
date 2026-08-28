@@ -1,90 +1,235 @@
-# Deploying to UAT
+# Deploying the REST adapter
 
-Two things happen on every deploy: the adapter runs as a Docker container, and
-Kong's route to it gets (re)applied. The exact commands below are a best-effort
-reconstruction from what's in this repo (`Dockerfile`, `local-setup/kong/kong.yml`) —
-adjust anything that doesn't match how the UAT host/Kong instance is actually
-managed (compose vs. bare `docker run`, declarative vs. Admin API Kong config,
-whatever supervises restarts).
+The adapter runs as a Docker container on the DIGIT host, joined to the DIGIT
+compose network, and is published through Kong at `/adapter`.
 
-## 1. Build the image
+Reference values below are UAT (`mzmpm02srv407`, stack in `/opt/digit`, public at
+`https://uat.falacidadao.gov.mz`). Adjust host names and the network name for other
+environments.
 
-```bash
-docker build -t rest-adapter:<tag> backend/rest-adapter
-```
+---
 
-## 2. Provide `.env`
+## 1. New deployment
 
-Copy `backend/rest-adapter/.env.example`, fill in the UAT values (`DIGIT_HOST`,
-`USER_SERVICE_HOST`, tenant IDs, reception officer credentials, `ADAPTER_API_KEY`,
-etc.), and make it available to the container — e.g. `--env-file` or however
-secrets are provisioned on that host. Do not commit a filled-in `.env`.
-
-## 3. Run the container
+### 1.1 Get the code
 
 ```bash
-docker run -d \
-  --name rest-adapter \
-  --env-file /path/to/uat.env \
-  -p 8090:8090 \
-  --restart unless-stopped \
-  rest-adapter:<tag>
+git clone -b rest-adapter-citizen-portal https://github.com/eGov-Global/CMS-MOZAMBIQUE.git ~/CMS-MOZAMBIQUE
 ```
 
-If DIGIT itself is reached through Kong on that host (as in local-setup), point
-`DIGIT_HOST`/`USER_SERVICE_HOST` at Kong's address instead of the public one, and
-set `PROXY_HOPS=1` so `X-Forwarded-Prefix` is honoured.
+```bash
+cd ~/CMS-MOZAMBIQUE/backend/rest-adapter
+```
 
-## 4. Update Kong
+### 1.2 Create `.env`
 
-Kong needs a service + route (+ the prefix-forwarding plugin) pointing at the
-adapter, matching the `rest-adapter` entry in `local-setup/kong/kong.yml`:
+`.env` is gitignored and never ships with the code.
+
+```bash
+cp .env.example .env
+```
+
+```bash
+chmod 600 .env
+```
+
+Set at least:
+
+| Setting | Value | Why |
+|---|---|---|
+| `ADAPTER_API_KEY` | a long random string | the only guard on the API — `openssl rand -hex 32` |
+| `RECEPTION_OFFICER_USERNAME` / `_PASSWORD` | the employee account | must hold the `EMPLOYEE` base role, not just `CMS_RECEPTION_OFFICER` |
+| `DIGIT_HOST` | `http://kong:8000/` | Kong's proxy port *inside* the network; `18000` is host-side only |
+| `USER_SERVICE_HOST` | `http://kong:8000/` | same gateway |
+| `ROOT_TENANT_ID` | `mz` | employee login happens at the state root |
+| `CITY_TENANT_ID` | `mz` | where complaints are filed |
+| `SEARCH_TENANT_ID` | `mz` | state root, so the tenant clause is a prefix match |
+| `PROXY_HOPS` | `1` | honours `X-Forwarded-Prefix`, so Swagger advertises `/adapter` |
+| `COMPLAINT_SOURCE` | `linhaverde` | must appear in pgr-services' `allowed.source` |
+
+Routing every outbound call through Kong means the adapter needs no DNS entry for
+the public hostname and no `--add-host`.
+
+### 1.3 Build
+
+Tag by commit so a rollback has something to go back to.
+
+```bash
+docker build -t rest-adapter:$(git rev-parse --short HEAD) .
+```
+
+```bash
+docker tag rest-adapter:$(git rev-parse --short HEAD) rest-adapter:current
+```
+
+### 1.4 Run, on the DIGIT network
+
+The container name must match the `url` in Kong's config — Kong resolves it through
+Docker's embedded DNS, which only works on a shared network.
+
+```bash
+docker run -d --name rest-adapter --restart unless-stopped --env-file .env -p 8090:8090 --network digit_egov-network rest-adapter:current
+```
+
+```bash
+curl -s localhost:8090/health
+```
+
+### 1.5 Publish through Kong
+
+Kong is DB-less; its config is the declarative file the container mounts. On the
+DIGIT host that is `/opt/digit/kong/kong.yml`, which Ansible syncs from
+`local-setup/kong/` — **edit it in the repo, or the next deploy overwrites it.**
+
+The entry is already in `local-setup/kong/kong.yml`:
 
 ```yaml
 - name: rest-adapter
-  url: http://rest-adapter:8090   # adjust to how the container is reachable on UAT
+  url: http://rest-adapter:8090
+  tags:
+  - adapter
   routes:
-    - name: adapter-route
-      paths:
-        - /adapter
-      strip_path: true
+  - name: adapter-route
+    paths:
+    - /adapter
+    strip_path: true
   plugins:
-    # strip_path removes /adapter before forwarding, so the app sees its own root
-    # routes. This header hands the prefix back, which is what makes Swagger UI
-    # advertise /adapter in `servers` instead of /.
-    - name: request-transformer
-      config:
-        add:
-          headers:
-            - "X-Forwarded-Prefix:/adapter"
+  - name: request-transformer
+    config:
+      add:
+        headers:
+        - "X-Forwarded-Prefix:/adapter"
 ```
 
-Apply it however Kong config is managed on UAT (declarative config sync, `decK`,
-or the Admin API directly) — this repo doesn't currently record which.
+`strip_path: true` removes `/adapter` so the app sees its own root routes; the
+header hands the prefix back so Swagger's `servers` block is correct.
 
-## 5. Verify
+Apply it:
 
 ```bash
-curl https://<uat-host>/adapter/health
+cd /opt/digit
 ```
 
-Expect `{"status": "ok"}`. If it hangs or 404s, check: the container is actually
-listening on 8090, Kong's route/service point at the right address, and
-`strip_path`/the `X-Forwarded-Prefix` header are both in place (otherwise
-`/docs` and the OpenAPI `servers` block will point at the wrong base path).
+```bash
+sudo docker compose -f docker-compose.egov-digit.yaml restart kong
+```
 
-## Known gaps in this doc
+`/opt/digit` has no `docker-compose.yml`, so the `-f` flag is required. `restart`
+touches only Kong — it does not follow `depends_on` in either direction.
 
-- Where `.env` actually lives on the UAT host, and how it's kept in sync with
-  `.env.example` as new settings are added (e.g. the recent `LOG_*` and
-  `LOCALITY_HIERARCHY_TYPE` settings).
-- Whether the container is run standalone or via a compose file specific to
-  UAT (not present in this repo — only `local-setup/docker-compose.yml`, which
-  is for local dev).
-- How Kong's config is actually applied/persisted on that host.
-- Log rotation to disk (`LOG_DIR`, `LOG_OUTPUT=file`) assumes a writable,
-  persistent volume if the container is ever recreated — confirm one is mounted,
-  or logs disappear with the container.
+### 1.6 Verify
 
-Fill these in as they're confirmed, so this stops being a reconstruction and
-becomes the actual record.
+```bash
+sudo docker exec kong-gateway getent hosts rest-adapter
+```
+
+```bash
+curl -s https://uat.falacidadao.gov.mz/adapter/health
+```
+
+```bash
+curl -s https://uat.falacidadao.gov.mz/adapter/docs/openapi.yaml | grep -A 1 '^servers:'
+```
+
+Must read `- url: /adapter`. `- url: /` means `PROXY_HOPS` is missing and Swagger's
+Try-it-out will call the wrong paths.
+
+```bash
+curl -s -H "X-Adapter-Key: <key>" "https://uat.falacidadao.gov.mz/adapter/complaints?mobileNumber=<number>" | head -c 300
+```
+
+That last call exercises officer login, the token cache and the search workaround in
+one go. Swagger UI is at `https://uat.falacidadao.gov.mz/adapter/docs`.
+
+---
+
+## 2. Updating the adapter
+
+`docker restart` is not enough: `--env-file` is read when a container is *created*,
+and a restart keeps the old image. Every update recreates the container.
+
+### 2.1 Pull
+
+```bash
+cd ~/CMS-MOZAMBIQUE/backend/rest-adapter
+```
+
+```bash
+git pull
+```
+
+### 2.2 Check `.env` for new settings
+
+`.env` never updates itself; new settings land in `.env.example` only. This lists
+keys the example has and yours does not:
+
+```bash
+comm -23 <(grep -oE '^[A-Z_]+=' .env.example | sort -u) <(grep -oE '^[A-Z_]+=' .env | sort -u)
+```
+
+Empty means nothing to do. Otherwise add each key — the comment above it in
+`.env.example` explains it.
+
+### 2.3 Rebuild
+
+```bash
+docker build -t rest-adapter:$(git rev-parse --short HEAD) .
+```
+
+```bash
+docker tag rest-adapter:$(git rev-parse --short HEAD) rest-adapter:current
+```
+
+### 2.4 Recreate
+
+```bash
+docker rm -f rest-adapter
+```
+
+```bash
+docker run -d --name rest-adapter --restart unless-stopped --env-file .env -p 8090:8090 --network digit_egov-network rest-adapter:current
+```
+
+`--network` is not optional: `docker network connect` does not survive `docker rm`,
+and without it Kong fails with
+`failed the initial dns/balancer resolve for 'rest-adapter'`.
+
+### 2.5 Verify
+
+```bash
+curl -s localhost:8090/health
+```
+
+```bash
+curl -s https://uat.falacidadao.gov.mz/adapter/health
+```
+
+Kong needs nothing on a code or `.env` change — the service still points at the same
+name. Restart Kong only when the **route** changes (path, `strip_path`, the
+`X-Forwarded-Prefix` plugin). Kong also caches DNS failures, so if the container was
+missing for a while, restart Kong once after it is back.
+
+### 2.6 Rollback
+
+```bash
+docker images rest-adapter
+```
+
+```bash
+docker rm -f rest-adapter
+```
+
+```bash
+docker run -d --name rest-adapter --restart unless-stopped --env-file .env -p 8090:8090 --network digit_egov-network rest-adapter:<previous-tag>
+```
+
+Extra `.env` keys are ignored by an older image, so `.env` needs no rollback.
+
+---
+
+## Still to confirm
+
+- Log rotation to disk (`LOG_DIR`, `LOG_OUTPUT=file`) needs a mounted volume, or
+  logs vanish when the container is recreated.
+- Whether the adapter should be a service in `docker-compose.egov-digit.yaml`
+  instead of a standalone `docker run`, so the stack manages it.
