@@ -10,7 +10,7 @@ the canonical source for the mobile app**; do not commit to the old repository.
 - **Flutter version (pinned, local = CI):** `3.38.7` — declared in
   [.github/workflows/mobile-ci.yml](../.github/workflows/mobile-ci.yml) and
   [.github/workflows/mobile-build-apk.yml](../.github/workflows/mobile-build-apk.yml).
-- **Android application ID:** `mz.gov.mctd.cms_mozambique` — must stay stable;
+- **Android application ID:** `mz.gov.falacidadao` — must stay stable;
   it identifies the app in the Google Play Console.
 - **iOS bundle:** see [ios/Runner/Info.plist](ios/Runner/Info.plist).
 
@@ -151,7 +151,7 @@ listing.
 ## Google Play readiness
 
 The pipeline already produces the Play artifact (the `.aab`) and the
-application ID `mz.gov.mctd.cms_mozambique` is stable. When publishing is
+application ID `mz.gov.falacidadao` is stable. When publishing is
 switched on, the intended flow is:
 
 ```
