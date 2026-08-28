@@ -1,4 +1,4 @@
-package mz.gov.mctd.cms_mozambique
+package mz.gov.falacidadao
 
 import io.flutter.embedding.android.FlutterActivity
 

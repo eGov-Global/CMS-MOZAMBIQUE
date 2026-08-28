@@ -116,7 +116,7 @@ void main() {
     ConnectivityPlatform.instance = _FakeConnectivityPlatform();
     PackageInfo.setMockInitialValues(
       appName: 'CMS Mozambique',
-      packageName: 'mz.gov.mctd.cms_mozambique',
+      packageName: 'mz.gov.falacidadao',
       version: '0.0.0',
       buildNumber: '0',
       buildSignature: '',
