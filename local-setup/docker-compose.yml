@@ -1042,6 +1042,10 @@ services:
       - egov-network
 
   rest-adapter:
+    # Opt-in: `.env` is gitignored (see backend/rest-adapter/README.md for setup),
+    # so a plain `docker compose up -d` must not try to start this or it fails
+    # with "env file ... not found" for everyone who hasn't set it up.
+    profiles: ["adapter"]
     build: ../backend/rest-adapter
     container_name: rest-adapter
     env_file:
@@ -1168,6 +1172,8 @@ services:
       GATUS_PROFILE_KEYCLOAK: "false"
       GATUS_PROFILE_NOTIFICATIONS: "false"
       GATUS_AUDIT: "false"
+      # rest-adapter is profile-gated (["adapter"]) and off in a plain `up -d`.
+      GATUS_REST_ADAPTER: "false"
       GATUS_PROXIES: "true"
       GATUS_SMS_PORT: "8080"
     deploy:
