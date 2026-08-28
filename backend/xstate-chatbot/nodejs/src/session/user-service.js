@@ -146,10 +146,10 @@ class UserService {
   }
 
   async createUser(mobileNumber, tenantId) {
-    // Validate mobile number format against the configured country/length
+    // Validate mobile number format (should be 10 digits)
     const cleanMobileNumber = this.sanitizeMobileNumber(mobileNumber);
     if (!cleanMobileNumber) {
-      throw new Error(`Invalid mobile number format: ${mobileNumber}. Expected ${config.mobileNumberLength} digits, optionally prefixed with ${config.countryCode}.`);
+      throw new Error(`Invalid mobile number format: ${mobileNumber}. Expected 10 digits.`);
     }
 
     let requestBody = {
@@ -198,25 +198,23 @@ class UserService {
     }
   }
 
-  // Helper method to sanitize mobile number.
-  // Accepts the national number, or the same number prefixed with the country
-  // code, and always returns the national form — that is what DIGIT stores as
-  // the citizen's identity.
+  // Helper method to sanitize mobile number
   sanitizeMobileNumber(mobileNumber) {
     if (!mobileNumber) return null;
 
-    const digitsOnly = String(mobileNumber).replace(/\D/g, '');
-    const countryCode = String(config.countryCode).replace(/\D/g, '');
-    const nationalLength = config.mobileNumberLength;
+    // Remove any non-digit characters
+    const digitsOnly = mobileNumber.replace(/\D/g, '');
 
-    if (digitsOnly.length === nationalLength) {
+    // Handle different formats:
+    // 918750975975 (12 digits with country code) -> 8750975975 (10 digits)
+    // 8750975975 (10 digits) -> 8750975975 (keep as is)
+    if (digitsOnly.length === 12 && digitsOnly.startsWith('91')) {
+      return digitsOnly.substring(2); // Remove '91' country code
+    } else if (digitsOnly.length === 10) {
       return digitsOnly;
+    } else {
+      return null; // Invalid format
     }
-    if (countryCode && digitsOnly.length === countryCode.length + nationalLength
-        && digitsOnly.startsWith(countryCode)) {
-      return digitsOnly.slice(countryCode.length);
-    }
-    return null;
   }
 }
 

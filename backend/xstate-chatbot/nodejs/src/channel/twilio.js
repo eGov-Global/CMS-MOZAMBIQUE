@@ -2,7 +2,17 @@ const config = require('../env-variables');
 const fetch = require("node-fetch");
 const axios = require('axios');
 var FormData = require("form-data");
-const mediaTypes = require('../media-types');
+
+const MIME_TYPE_EXTENSIONS = {
+    'image/jpeg': '.jpg',
+    'image/jpg': '.jpg',
+    'image/png': '.png',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+    'application/pdf': '.pdf',
+    'application/msword': '.doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
+};
 
 class TwilioWhatsAppProvider {
 
@@ -19,25 +29,7 @@ class TwilioWhatsAppProvider {
     }
 
     getExtensionForMimeType(contentType) {
-        return mediaTypes.extensionForMimeType(contentType);
-    }
-
-    async fileStoreAPICall(fileName, fileData, contentType = null, tenantId = null) {
-        var url = config.egovServices.egovServicesHost + config.egovServices.egovFilestoreServiceUploadEndpoint;
-        url = url + '&tenantId=' + (tenantId || config.rootTenantId);
-        var form = new FormData();
-        form.append("file", fileData, {
-            filename: fileName,
-            contentType: mediaTypes.filestoreContentType(fileName) || contentType || 'application/octet-stream'
-        });
-        let response = await axios.post(url, form, {
-            headers: {
-                ...form.getHeaders()
-            }
-        });
-
-        var filestore = response.data;
-        return filestore['files'][0]['fileStoreId'];
+        return MIME_TYPE_EXTENSIONS[contentType] || '';
     }
 
     getMimeTypeFromBase64(fileInBase64String) {
@@ -200,10 +192,7 @@ class TwilioWhatsAppProvider {
             const mediaType = requestBody.MediaContentType0 || '';
             const fileExtension = this.getExtensionForMimeType(mediaType);
 
-            if (mediaType && !mediaTypes.isSupportedMimeType(mediaType)) {
-                type = 'unsupported';
-                input = ' ';
-            } else if (mediaType.startsWith('image/')) {
+            if (mediaType.startsWith('image/')) {
                 type = 'image';
             } else if (mediaType) {
                 type = 'document';
@@ -279,20 +268,9 @@ class TwilioWhatsAppProvider {
         return reformattedMessage;
     }
 
-    // Twilio wants E.164. `to` may arrive national (849904390) or already
-    // prefixed (258849904390), so strip the country code before re-adding it.
-    toWhatsAppNumber(to) {
-        const digits = String(to).replace(/\D/g, '');
-        const countryCode = String(config.countryCode).replace(/\D/g, '');
-        const national = countryCode && digits.startsWith(countryCode)
-            ? digits.slice(countryCode.length)
-            : digits;
-        return `whatsapp:+${countryCode}${national}`;
-    }
-
     async sendTextMessage(to, body) {
         const params = new URLSearchParams();
-        params.append('To', this.toWhatsAppNumber(to));
+        params.append('To', `whatsapp:+91${to}`);
         params.append('From', `whatsapp:${this.whatsappNumber.startsWith('+') ? this.whatsappNumber : '+' + this.whatsappNumber}`);
         params.append('Body', body);
 
@@ -301,7 +279,7 @@ class TwilioWhatsAppProvider {
 
     async sendMediaMessage(to, mediaUrl, caption = '') {
         const params = new URLSearchParams();
-        params.append('To', this.toWhatsAppNumber(to));
+        params.append('To', `whatsapp:+91${to}`);
         params.append('From', `whatsapp:${this.whatsappNumber.startsWith('+') ? this.whatsappNumber : '+' + this.whatsappNumber}`);
         params.append('MediaUrl', mediaUrl);
         if (caption) {
@@ -313,7 +291,7 @@ class TwilioWhatsAppProvider {
 
     async sendTemplateMessage(to, contentSid, contentVariables = {}) {
         const params = new URLSearchParams();
-        params.append('To', this.toWhatsAppNumber(to));
+        params.append('To', `whatsapp:+91${to}`);
         params.append('From', `whatsapp:${this.whatsappNumber.startsWith('+') ? this.whatsappNumber : '+' + this.whatsappNumber}`);
         params.append('ContentSid', contentSid);
         if (Object.keys(contentVariables).length > 0) {

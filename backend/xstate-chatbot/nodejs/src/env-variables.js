@@ -19,19 +19,8 @@ const envVariables = {
 
     supportedLocales: process.env.SUPPORTED_LOCALES || 'en_IN',
 
-    // Phone identity is per-country CONFIG, not code. countryCode is the dialling
-    // prefix without '+'; mobileNumberLength is the national number length.
-    // MZ: 258 / 9 (^8[0-9]{8}$).   IN: 91 / 10.
-    countryCode: process.env.COUNTRY_CODE || '91',
-    mobileNumberLength: parseInt(process.env.MOBILE_NUMBER_LENGTH || '10', 10),
-
-    descriptionMinLength: parseInt(process.env.DESCRIPTION_MIN_LENGTH || '20', 10),
-
-    caseRelatedTo: process.env.CASE_RELATED_TO || 'IGE',
-    instituteNameMaxLength: parseInt(process.env.INSTITUTE_NAME_MAX_LENGTH || '300', 10),
-
     // Sandbox mode configuration
-    isSandboxMode: process.env.ENABLE_SANDBOX_MODE === 'true',
+    enableSandboxMode: process.env.ENABLE_SANDBOX_MODE === 'true',
     tenantManagementHost: process.env.TENANT_MANAGEMENT_HOST || 'https://sandbox.digit.org',
     sandboxHost: process.env.SANDBOX_HOST || 'https://sandbox.digit.org',
 

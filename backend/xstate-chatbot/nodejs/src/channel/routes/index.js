@@ -3,32 +3,32 @@ const express = require("express"),
   config = require("../../env-variables"),
   sessionManager = require("../../session/session-manager"),
   channelProvider = require("../"),
-  remindersService = require("../../machine/service/reminders-service"),
-  InboundRequestParser = require("../../session/inbound-message-parser"),
-  { resolveUploadTenantId } = require("../../session/upload-tenant");
+  remindersService = require("../../machine/service/reminders-service");
 
 router.post("/message", async (req, res) => {
-  console.log("Request URL: " + req.originalUrl);
-  console.log('Request Body Object: ' + JSON.stringify(req.body));
-  
   try {
+    console.log("Request URL: " + req.originalUrl);
+    console.log('Request Body Object: ' + JSON.stringify(req.body));
     
-    const tenantId = resolveUploadTenantId(req, config);
-    const inboundRequestParser = InboundRequestParser.create(req, channelProvider, tenantId);
-    const inboundRequestModel = await inboundRequestParser.parseMessage();
-
-    if (inboundRequestModel) {
-      sessionManager
-        .authenticateAndDispatch(inboundRequestModel)
-        .catch((error) => console.error("authenticateAndDispatch failed:", error));
+    // Check if this is an image upload in sandbox mode
+    let tenantIdForUpload = null;
+    if (config.enableSandboxMode && req.body && req.body.NumMedia && parseInt(req.body.NumMedia) > 0) {
+      // This is an image upload - try to get tenant from tracker
+      // Extract mobile number from the From field (format: whatsapp:+917061170992)
+      let fromNumber = req.body.From;
+      if (fromNumber && fromNumber.includes(':')) {
+        let mobileNumber = fromNumber.split(':')[1].replace('+91', '');
+        tenantIdForUpload = sessionManager.getTenantForMobileNumber(mobileNumber);
+        console.log(`Image upload detected for ${mobileNumber}, using tenant: ${tenantIdForUpload || 'default'}`);
+      }
     }
-
+    
+    let reformattedMessage = await channelProvider.processMessageFromUser(req, tenantIdForUpload);
+    if (reformattedMessage != null) sessionManager.fromUser(reformattedMessage);
   } catch (e) {
     console.log(e);
-  } finally {
-    res.end();
   }
-
+  res.end();
 });
 
 // Handle WhatsApp delivery status webhooks (both GET and POST)
@@ -61,9 +61,7 @@ router.all("/status", async (req, res) => {
     // Handle actual user status messages (if any)
     let reformattedMessage = await channelProvider.processMessageFromUser(req);
     if (reformattedMessage != null) {
-      sessionManager
-        .authenticateAndDispatch(reformattedMessage)
-        .catch((error) => console.error("authenticateAndDispatch failed:", error));
+      sessionManager.fromUser(reformattedMessage);
     }
     
     res.status(200).send("OK");
