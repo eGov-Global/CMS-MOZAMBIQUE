@@ -186,6 +186,18 @@ data:
         conditions:
           - "[STATUS] == 200"
 
+      # rest-adapter exists only via the per-tenant overlay docker-compose.ige.yml
+      # (enable_rest_adapter: true); this tier has no rest-adapter manifest, so
+      # GATUS_REST_ADAPTER is "false" below -- defined here only to keep both
+      # catalogues identical.
+      - name: REST Adapter
+        group: Core Services
+        enabled: ${GATUS_REST_ADAPTER}
+        url: "http://rest-adapter:8090/health"
+        interval: 30s
+        conditions:
+          - "[STATUS] == 200"
+
       # ==================== Optional stacks (profile-gated) ====================
       # These services only exist when their compose profile is active (see
       # docker-compose.egov-digit.yaml), so their checks are gated on a matching
@@ -533,6 +545,9 @@ spec:
             # No nginx proxy Deployments in the k3s tier either.
             # No audit-service Deployment in the k3s tier either.
             - name: GATUS_AUDIT
+              value: "false"
+            # No rest-adapter Deployment in the k3s tier either.
+            - name: GATUS_REST_ADAPTER
               value: "false"
             - name: GATUS_PROXIES
               value: "false"
