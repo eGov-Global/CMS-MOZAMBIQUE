@@ -1249,7 +1249,6 @@
              | default('novu-dashboard:local' if (build_novu_dashboard | default(false))
                        else 'ghcr.io/novuhq/novu/dashboard:' ~ (novu_dashboard_version | default('2.3.0'))) }}
 
-    
     # rest-adapter has no published registry image yet, so it's always the
     # locally-built tag when enabled (mirrors mcp/novu-dashboard's build:true
     # branch, minus the pull alternative since none exists).
