@@ -1,0 +1,107 @@
+# Version bump for the mobile app — via pull request, never a direct push.
+#
+# The CMS-App original committed the bump straight to the branch; that is
+# incompatible with this repository's review model (CODEOWNERS approval on
+# protected branches), so this variant pushes a `mobile/bump-version-X.Y.Z`
+# branch and opens a PR against develop instead. Tagging (app-vX.Y.Z) happens
+# manually AFTER that PR merges, which is what triggers the release build in
+# mobile-build-apk.yml.
+#
+# Note: PRs created with the built-in GITHUB_TOKEN do not trigger other
+# workflows (a GitHub limitation), so mobile-ci will not run on the bump PR
+# automatically — close/reopen the PR or push an empty commit if you need the
+# CI check, or just review it: the diff is two files.
+name: Mobile Bump Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Which part of the SemVer to bump'
+        required: true
+        type: choice
+        default: patch
+        options: [patch, minor, major]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+defaults:
+  run:
+    working-directory: mobile
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Bump version in pubspec.yaml
+        id: bump
+        shell: bash
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          CURRENT_LINE=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          NAME=${CURRENT_LINE%+*}
+          CODE=${CURRENT_LINE#*+}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$NAME"
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR+1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH+1)) ;;
+          esac
+          NEW_NAME="$MAJOR.$MINOR.$PATCH"
+          NEW_CODE=$((CODE+1))
+          sed -i "s/^version:.*/version: $NEW_NAME+$NEW_CODE/" pubspec.yaml
+          {
+            echo "previous=$NAME+$CODE"
+            echo "name=$NEW_NAME"
+            echo "code=$NEW_CODE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Stamp CHANGELOG
+        shell: bash
+        env:
+          NEW_NAME: ${{ steps.bump.outputs.name }}
+        run: |
+          set -euo pipefail
+          DATE=$(date -u +%Y-%m-%d)
+          # New section goes directly under the H1 on line 1.
+          {
+            head -n 1 CHANGELOG.md
+            echo ""
+            echo "## [$NEW_NAME] - $DATE"
+            echo ""
+            echo "- _Describe the changes in this release before tagging app-v$NEW_NAME._"
+            tail -n +2 CHANGELOG.md
+          } > CHANGELOG.md.new
+          mv CHANGELOG.md.new CHANGELOG.md
+
+      - name: Push branch and open PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_NAME: ${{ steps.bump.outputs.name }}
+          NEW_CODE: ${{ steps.bump.outputs.code }}
+          PREVIOUS: ${{ steps.bump.outputs.previous }}
+        run: |
+          set -euo pipefail
+          BRANCH="mobile/bump-version-$NEW_NAME"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add pubspec.yaml CHANGELOG.md
+          git commit -m "chore(mobile): bump version to $NEW_NAME+$NEW_CODE (was $PREVIOUS)"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --base develop \
+            --head "$BRANCH" \
+            --title "chore(mobile): bump app version to $NEW_NAME" \
+            --body "$(printf 'Bumps the mobile app from %s to %s+%s.\n\nAfter merging, tag the merge commit as app-v%s to trigger the signed release build (mobile-build-apk.yml).\n\nFill in the CHANGELOG entry before tagging.' "$PREVIOUS" "$NEW_NAME" "$NEW_CODE" "$NEW_NAME")"
