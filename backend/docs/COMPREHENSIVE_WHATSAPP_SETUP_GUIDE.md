@@ -55,7 +55,7 @@ You should see `novu-api`, `novu-dashboard`, `novu-worker`, `novu-ws`, `novu-mon
 This step configures the Novu environment, creates the Twilio integration, and sets up workflows.
 
 1. **Locate Configuration**: Navigate to `novu-bridge/config`. (cd backend/novu-bridge/config)
-2. **Edit Environment**: `.env.novu`:
+2. **Create Environment file**: `cp .env.novu.example .env.novu` (the real `.env.novu` is gitignored — never commit credentials), then edit it:
    - `NOVU_BASE_URL`: `http://localhost:3000` (port-forward novu-api on port:3000).
    - `NOVU_API_KEY`: Obtain from Novu Dashboard → **Settings → API Keys** (use the **Dev** environment key).
      > **If the dashboard is not accessible**, retrieve the key via API:

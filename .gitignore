@@ -140,3 +140,8 @@ charts/*.tgz
 local-testing/
 .agent/
 .playwright-mcp/
+# Real Novu/Twilio credentials live in an UNTRACKED .env.novu (copy from
+# .env.novu.example). The template used to be tracked under the real name and
+# operators edited it in place — srv408 ended up with live Twilio credentials
+# in a local commit, one `git push` away from the public repo.
+backend/novu-bridge/config/.env.novu

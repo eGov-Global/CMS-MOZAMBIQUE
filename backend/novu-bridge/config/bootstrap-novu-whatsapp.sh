@@ -53,7 +53,8 @@ require_cmd jq
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NOVU_ENV_FILE="${NOVU_ENV_FILE:-${SCRIPT_DIR}/.env.novu}"
 if [[ -f "$NOVU_ENV_FILE" ]]; then
-  # EXPLICIT ENV WINS. The tracked .env.novu holds DUMMY values, so it must only
+  # EXPLICIT ENV WINS. .env.novu is UNTRACKED (operator copies .env.novu.example
+    # and fills real values), so this file, when present, must only
   # FILL variables the caller did NOT already provide — never override them.
   # Snapshot the vars we care about (name + whether set), source the file, then
   # restore any that were already set so the dummy values can't clobber them.

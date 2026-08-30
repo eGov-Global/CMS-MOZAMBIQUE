@@ -164,7 +164,7 @@ Create a database. Flyway auto-creates the `nb_dispatch_log` table.
 Bootstrap Novu with the provider integration and the per-channel workflows
 using [`config/bootstrap-novu-whatsapp.sh`](config/bootstrap-novu-whatsapp.sh)
 (requires `curl` + `jq`; credentials via a `.env.novu`-style file — see
-[`config/.env.novu`](config/.env.novu)). Providers can also be onboarded at
+[`config/.env.novu.example`](config/.env.novu.example)). Providers can also be onboarded at
 runtime through the configurator's provider management screens (the
 `/providers*` endpoints above).
 

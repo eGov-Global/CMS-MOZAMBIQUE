@@ -674,7 +674,8 @@ do_step8() {
   # never appear on the command line or in this script's narration. NOVU_WORKFLOW_ID
   # is pinned to the WhatsApp id explicitly; the sms/email ids follow WF_*.
   # NOVU_ENV_FILE=/dev/null: defense-in-depth so the bootstrap never sources the
-  # tracked dummy config/.env.novu and clobbers the explicit env we pass here.
+  # operator .env.novu (untracked; copied from .env.novu.example) and clobbers
+  # the explicit env we pass here.
   if ! NOVU_ENV_FILE=/dev/null \
        NOVU_API_KEY="$key" \
        TWILIO_ACCOUNT_SID="$TWILIO_ACCOUNT_SID" \
