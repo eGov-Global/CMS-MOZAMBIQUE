@@ -18,7 +18,7 @@ class StateRepository {
     async getActiveStateForUserId(userId) {
         const query = 'SELECT (state) FROM eg_chat_state_v2 WHERE user_id = $1 AND active = true';
         let result = await pool.query(query, [userId]);
-        if(result.rowCount >= 1) {
+        if(result.rowCount >= 1) { 
             let state = result.rows[0].state;
             return ChatState.create(state);
         }

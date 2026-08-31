@@ -5,6 +5,7 @@ const ChatState = require("./chat-state");
 const telemetry = require("./telemetry");
 const uuid = require("uuid");
 const config = require("../env-variables");
+const { InvalidChatState } = require("./errors");
 
 class ChatService {
   constructor(sessionManager) {
@@ -27,6 +28,10 @@ class ChatService {
     stateMachineService.send(event, inboundRequestModel);
   }
 
+  /**
+   * Retrieves the active chat state for the given user. If no active state exists,
+   * a new chat state is created, persisted, and returned.
+   */
   async getOrCreateChatState(sessionUserId, user) {
     const existingState = await chatStateRepository.getActiveStateForUserId(sessionUserId);
     if (existingState) {
@@ -46,33 +51,27 @@ class ChatService {
     return chatState;
   }
 
+  /**
+   * Retrieves the state machine service for the given chat state and reformatted message.
+   */
   getStateMachineServiceFor(chatState, reformattedMessage) {
     const context = this.refreshContext(chatState.context, reformattedMessage);
     const locale = context.user.locale;
     const resolvedState = this.resolvePersistedState(chatState, context);
 
     const stateMachineService = this.startService(resolvedState, context);
-    this.persistOnTransition(stateMachineService, reformattedMessage, locale);
+    this.addTransitionPersistanceHandler(stateMachineService, reformattedMessage, locale);
 
     return stateMachineService;
   }
 
   startService(resolvedState, context) {
-    return resolvedState
-      ? interpret(sevaStateMachine).start(resolvedState)
-      : interpret(
-          sevaStateMachine.withContext({
-            chatInterface: this.sessionManager,
-            user: context.user,
-            extraInfo: context.extraInfo,
-            slots: { pgr: {} },
-          })
-        ).start();
+    return interpret(sevaStateMachine).start(resolvedState)
   }
 
   // On every state change, persist the sanitized state and log the transition.
   // Fire-and-forget: the caller already has the stateMachineService and must not block on this.
-  persistOnTransition(stateMachineService, reformattedMessage, locale) {
+  addTransitionPersistanceHandler(stateMachineService, reformattedMessage, locale) {
     stateMachineService.onTransition((state) => {
       if (!state.changed) return;
 
@@ -91,6 +90,7 @@ class ChatService {
           timeStamp
         );
         const sessionId = await chatStateRepository.getSessionId(userId);
+        
         telemetry.log(userId, "transition", {
           input: reformattedMessage.message.input,
           source: sourceStrings[sourceStrings.length - 1],
@@ -108,19 +108,22 @@ class ChatService {
   // preserving locale and falling back to the saved mobileNumber if the new
   // message didn't carry one.
   refreshContext(context, reformattedMessage) {
-    context.chatInterface = this.sessionManager;
-
-    const locale = context.user.locale;
+    
     const savedMobileNumber = context.user.mobileNumber;
+    const savedLocale = context.user.locale;
+    
+    context.chatInterface = this.sessionManager;
     context.user = reformattedMessage.user;
-    context.user.locale = locale;
-    if (!context.user.mobileNumber && savedMobileNumber) {
+    context.user.locale = reformattedMessage.user.locale || savedLocale;
+
+    if (!context.user.mobileNumber && savedMobileNumber)
       context.user.mobileNumber = savedMobileNumber;
-    }
+    
     context.extraInfo = reformattedMessage.extraInfo;
 
     return context;
   }
+
 
   // A persisted state.value naming a state the machine no longer has makes
   // resolveState throw, and it throws BEFORE service.send — so not even
@@ -128,16 +131,13 @@ class ChatService {
   // Discard the position (and the stale scratch context that described it)
   // and start over at `start`, which routes the incoming message to #welcome.
   resolvePersistedState(chatState, context) {
-    try {
-      return sevaStateMachine
-        .withContext(context)
-        .resolveState(State.create(chatState.raw));
-    } catch (error) {
-      console.error(
-        `Discarding unresolvable chat state for user ${context.user.userId}: ${error.message}`
-      );
-      return null;
-    }
+      try {
+        return sevaStateMachine
+          .withContext(context)
+          .resolveState(State.create(chatState.raw));
+      } catch (error) {
+        throw new InvalidChatState(error.message);
+      }
   }
 
   createChatStateFor(user) {
