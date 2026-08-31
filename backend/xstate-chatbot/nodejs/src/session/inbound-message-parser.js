@@ -10,6 +10,7 @@
  * instance.
  */
 const config = require('../env-variables');
+const { ValidationError } = require('./errors');
 
 
 const InboundMessage = require("../machine/util/inbound-message.js");
@@ -23,9 +24,8 @@ class InboundRequestParser {
   }
 
   static create(req, provider) {
-    if (!provider) {
-      throw new Error("InboundRequestParser: a channel provider is required.");
-    }
+    if (!provider)
+      throw new ValidationError("InboundRequestParser: a channel provider is required.");
 
     const instance = new InboundRequestParser(req, provider);
     instance.parseRequestBody();

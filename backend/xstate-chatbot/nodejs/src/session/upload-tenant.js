@@ -1,5 +1,7 @@
 const sessionManager = require("./session-manager");
 const userService = require("./user-service");
+const { ValidationError } = require("./errors");
+
 
 /**
  * Which tenant an inbound attachment should be stored against.
@@ -35,9 +37,9 @@ function resolveTenantForUpload(body) {
 function extractAndValidateMobileNumber(body) {
   const mobileNumber = userService.sanitizeMobileNumber(body.From);
 
-  if (!mobileNumber) {
-    throw new Error("Unable to resolve mobile number from upload request");
-  }
+  if (!mobileNumber) 
+    throw new ValidationError("Unable to resolve mobile number from upload request");
+
 
   return mobileNumber;
 }

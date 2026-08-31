@@ -1,13 +1,17 @@
 const config = require('../env-variables');
 const fetch = require('node-fetch');
 require('url-search-params-polyfill');
+const { ValidationError, AuthenticationError, ExternalServiceError } = require('./errors');
+const { StatusCodes } = require('http-status-codes');
+
+
 
 class UserService {
 
   async getUserForMobileNumber(mobileNumber, tenantId) {
     try {
       let user = await this.loginOrCreateUser(mobileNumber, tenantId);
-      if (!user || !user.userInfo) throw new Error('User info is incomplete');
+      if (!user || !user.userInfo) throw new AuthenticationError('User info is incomplete');
 
       user.userId = user.userInfo.uuid;
       user.mobileNumber = mobileNumber;
@@ -30,7 +34,7 @@ class UserService {
       }
       
       if (!user) 
-        throw new Error(`Unable to authenticate user ${mobileNumber} for tenant ${tenantId}`);
+        throw new AuthenticationError(`Unable to authenticate user ${mobileNumber} for tenant ${tenantId}`);
 
       user = await this.enrichuserDetails(user);
       return user;
@@ -41,14 +45,14 @@ class UserService {
 
   validateInputs(mobileNumber, tenantId) {
     if (!mobileNumber || !tenantId) 
-      throw new Error('Mobile number and tenant ID are required');
+      throw new ValidationError('Mobile number and tenant ID are required');
   }
 
   async createNewUser(mobileNumber, tenantId) {
     try {
       const createResult = await this.createUser(mobileNumber, tenantId);
       if (!createResult) 
-        throw new Error(`Failed to create user for ${mobileNumber}`);
+        throw new ExternalServiceError(`Failed to create user for ${mobileNumber}`);
       
       return createResult;
        
@@ -72,9 +76,6 @@ async authenticateCreatedUser(createResult, mobileNumber, tenantId) {
 
     return await this.loginAfterCreation(mobileNumber, tenantId);
   } 
-
-
-
 
   async loginAfterCreation(mobileNumber, tenantId) {
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -107,7 +108,7 @@ async authenticateCreatedUser(createResult, mobileNumber, tenantId) {
 
     try {
       let response = await fetch(url, options);
-      if (response.status === HttpStatus.OK) {
+      if (response.status === StatusCodes.OK) {
         let body = await response.json();
         user.userInfo.name = body.name;
         user.userInfo.locale = body.locale;
@@ -147,7 +148,7 @@ async authenticateCreatedUser(createResult, mobileNumber, tenantId) {
     try {
       let response = await fetch(url, options);
 
-      if (response.status === 200) {
+      if (response.status === StatusCodes.OK) {
         let body = await response.json();
         return {
           authToken: body.access_token,
@@ -165,9 +166,8 @@ async authenticateCreatedUser(createResult, mobileNumber, tenantId) {
   async createUser(mobileNumber, tenantId) {
     // Validate mobile number format against the configured country/length
     const cleanMobileNumber = this.sanitizeMobileNumber(mobileNumber);
-    if (!cleanMobileNumber) {
-      throw new Error(`Invalid mobile number format: ${mobileNumber}. Expected ${config.mobileNumberLength} digits, optionally prefixed with ${config.countryCode}.`);
-    }
+    if (!cleanMobileNumber)
+        throw new ValidationError(`Invalid mobile number format: ${mobileNumber}. Expected ${config.mobileNumberLength} digits, optionally prefixed with ${config.countryCode}.`);
 
     let requestBody = {
       RequestInfo: {
@@ -205,10 +205,10 @@ async authenticateCreatedUser(createResult, mobileNumber, tenantId) {
       let response = await fetch(url, options);
       let responseBody = await response.json();
 
-      if (response.status === 200) {
+      if (response.status === StatusCodes.OK) {
         return responseBody;
       } else {
-        throw new Error(`User creation failed with status ${response.status}`);
+        throw new ExternalServiceError(`User creation failed with status ${response.status}`);
       }
     } catch (error) {
       throw error;

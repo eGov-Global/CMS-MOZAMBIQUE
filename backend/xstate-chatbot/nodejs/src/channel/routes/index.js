@@ -5,7 +5,9 @@ const express = require("express"),
   channelProvider = require("../"),
   remindersService = require("../../machine/service/reminders-service"),
   InboundRequestParser = require("../../session/inbound-message-parser"),
-  { resolveUploadTenantId } = require("../../session/upload-tenant");
+  { resolveUploadTenantId } = require("../../session/upload-tenant"),
+  { handleError } = require("../../session/error-handler");
+
 
 // Entry point for inbound messages from the channel provider
 router.post("/message", async (req, res) => {
@@ -27,7 +29,7 @@ router.post("/message", async (req, res) => {
       const inboundRequestModel = await inboundRequestParser.getRequestModel();
       sessionManager
         .authenticateAndDispatch(inboundRequestModel)
-        .catch((error) => console.error("authenticateAndDispatch failed:", error));
+        .catch((error) => handleError(error, inboundRequestModel));
     }      
 
   } catch (e) {
@@ -71,7 +73,7 @@ router.all("/status", async (req, res) => {
     if (reformattedMessage != null) {
       sessionManager
         .authenticateAndDispatch(reformattedMessage)
-        .catch((error) => console.error("authenticateAndDispatch failed:", error));
+        .catch((error) => handleError(error, reformattedMessage));
     }
     
     res.status(200).send("OK");
