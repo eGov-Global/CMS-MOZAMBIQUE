@@ -21,53 +21,72 @@ class UserService {
 
   async loginOrCreateUser(mobileNumber, tenantId) {
     try {
-      // Validate inputs
-      if (!mobileNumber || !tenantId) {
-        throw new Error('Mobile number and tenant ID are required');
-      }
+      this.validateInputs(mobileNumber, tenantId);
 
       let user = await this.loginUser(mobileNumber, tenantId);
       if (!user) {
-        // User doesn't exist, try to create
-        try {
-          let createResult = await this.createUser(mobileNumber, tenantId);
-          if (!createResult) {
-            throw new Error(`Failed to create user for ${mobileNumber}`);
-          }
-          
-          // The create response already includes the auth token and user info!
-          // No need to login again - just use the create response directly
-          if (createResult.access_token && createResult.UserRequest) {
-            user = {
-              authToken: createResult.access_token,
-              refreshToken: createResult.refresh_token,
-              userInfo: createResult.UserRequest
-            };
-          } else {
-            // Fallback: try to login after creation if no token in create response
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            user = await this.loginUser(mobileNumber, tenantId);
-          }
-        } catch (createError) {
-          // If creation fails with duplicate user, try login once more
-          // This handles race conditions where user was created between login attempts
-          if (createError.message && createError.message.includes('Duplicate')) {
-            console.log('User already exists, attempting login again...');
-            user = await this.loginUser(mobileNumber, tenantId);
-          } else {
-            throw createError;
-          }
-        }
+        const result = await this.createNewUser(mobileNumber, tenantId);
+        user = await this.authenticateCreatedUser(result, mobileNumber, tenantId);
       }
       
-      if (!user) {
+      if (!user) 
         throw new Error(`Unable to authenticate user ${mobileNumber} for tenant ${tenantId}`);
-      }
 
       user = await this.enrichuserDetails(user);
       return user;
     } catch (error) {
       throw error;
+    }
+  }
+
+  validateInputs(mobileNumber, tenantId) {
+    if (!mobileNumber || !tenantId) 
+      throw new Error('Mobile number and tenant ID are required');
+  }
+
+  async createNewUser(mobileNumber, tenantId) {
+    try {
+      const createResult = await this.createUser(mobileNumber, tenantId);
+      if (!createResult) 
+        throw new Error(`Failed to create user for ${mobileNumber}`);
+      
+      return createResult;
+       
+    } catch (createError) {
+      return this.handleCreationError(createError, mobileNumber, tenantId);
+    }
+  }
+
+async authenticateCreatedUser(createResult, mobileNumber, tenantId) {
+    if (createResult.authToken) {
+      return createResult;
+    }
+
+    if (createResult.access_token && createResult.UserRequest) {
+      return {
+        authToken: createResult.access_token,
+        refreshToken: createResult.refresh_token,
+        userInfo: createResult.UserRequest
+      };
+    }
+
+    return await this.loginAfterCreation(mobileNumber, tenantId);
+  } 
+
+
+
+
+  async loginAfterCreation(mobileNumber, tenantId) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return await this.loginUser(mobileNumber, tenantId);
+  }
+
+  async handleCreationError(createError, mobileNumber, tenantId) {
+    if (createError.message && createError.message.includes('Duplicate')) {
+      console.log('User already exists, attempting login again...');
+      return await this.loginUser(mobileNumber, tenantId);
+    } else {
+      throw createError;
     }
   }
 
@@ -88,12 +107,10 @@ class UserService {
 
     try {
       let response = await fetch(url, options);
-      if (response.status === 200) {
+      if (response.status === HttpStatus.OK) {
         let body = await response.json();
         user.userInfo.name = body.name;
         user.userInfo.locale = body.locale;
-      } else if (response.status === 401) {
-      } else {
       }
       return user;
     } catch (error) {
