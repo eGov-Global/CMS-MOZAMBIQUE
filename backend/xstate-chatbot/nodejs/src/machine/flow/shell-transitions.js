@@ -1,4 +1,4 @@
-// The shape of onboarding and of the chassis that surrounds every journey.
+// The shape of onboarding and of the shell that surrounds every journey.
 
 // The one edge in either journey that carries a write: saying Yes to the name we
 // read back is what commits it. It cannot be a step-level write, because that
@@ -14,14 +14,14 @@ const gaveName = (context) => context.onboarding.name;
 module.exports = {
   // where each group begins
   entry: {
-    mseva: 'start',
+    citizenService: 'start',
     onboarding: 'onboardingLocale',
     welcome: 'preCondition'
   },
 
   // where each step goes
   exits: {
-    // chassis: every session enters at start and returns to it
+    // shell: every session enters at start and returns to it
     start:        [['welcome', isOnboarded], ['onboarding']],
     preCondition: [['invoke', isOnboarded], ['onboarding']],
     invoke:       'pgr',

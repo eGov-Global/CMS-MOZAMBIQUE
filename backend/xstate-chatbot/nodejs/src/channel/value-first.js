@@ -37,7 +37,7 @@ class ValueFirstWhatsAppProvider {
     let reformattedMessage = {};
 
     reformattedMessage.message = {
-      input: "mseva",
+      input: "missed_call",
       type: "text",
     };
 

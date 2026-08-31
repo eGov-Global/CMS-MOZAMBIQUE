@@ -1,5 +1,5 @@
-// What each onboarding and chassis step IS. Where each step GOES lives in
-// seva-transitions.js.
+// What each onboarding and shell step IS. Where each step GOES lives in
+// shell-transitions.js.
 
 const dialog = require('../util/dialog');
 
@@ -102,7 +102,7 @@ module.exports = ({ messages, userProfileService, offeredLocales }) => [
     prompt: messages.onboarding.onboardingThankYou
   },
 
-  // --- chassis --------------------------------------------------------------
+  // --- shell --------------------------------------------------------------
 
   {
     key: 'start',

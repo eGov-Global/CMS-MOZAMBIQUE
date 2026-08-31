@@ -13,7 +13,7 @@ function stub(request, from, exports) {
 // One bundle deliberately lacks pt_PT: the old check looked only at
 // onboardingWelcome, so it would have offered pt_PT anyway and left this
 // message in English.
-stub("./messages-seva", flowDir, {
+stub("./shell-messages", flowDir, {
   onboarding: {
     localeMenu: { code: "x", en_IN: "menu", pt_PT: "menu pt" },
     onboardingWelcome: { code: "y", en_IN: "welcome", pt_PT: "bem-vindo" },

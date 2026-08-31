@@ -4,23 +4,23 @@ const userProfileService = require("./service/egov-user-profile");
 const emailTenantService = require("./service/email-tenant-service");
 
 const legacyOrganizationStates = require("./flow/legacy-organization");
-const buildStates = require("./flow/seva-states");
-const transitions = require("./flow/seva-transitions");
+const buildStates = require("./flow/shell-states");
+const transitions = require("./flow/shell-transitions");
 const layout = require("./flow/layout");
 const { generate, mergeStates, assertTargets } = require("./flow/generate");
 const { join } = require("./flow/join");
-const messages = require("./flow/messages-seva");
+const messages = require("./flow/shell-messages");
 const { offeredLocales } = require("./flow/offered-locales");
 
 const flow = join(
   buildStates({ messages, userProfileService, offeredLocales }),
   transitions,
-  layout.seva
+  layout.shell
 );
 
-const sevaConfig = {
-  id: "mseva",
-  initial: flow.layout.initial[layout.seva.root],
+const stateMachineConfig = {
+  id: "citizenService",
+  initial: flow.layout.initial[layout.shell.root],
   on: {
     USER_RESET: {
       target: "#welcome"
@@ -30,16 +30,16 @@ const sevaConfig = {
     // the filing journey, assembled in pgr.js and spliced in whole
     pgr: pgr
   }, // states
-}; // sevaConfig
+}; // stateMachineConfig
 
-mergeStates(sevaConfig.states, generate(flow.steps, flow.layout));
+mergeStates(stateMachineConfig.states, generate(flow.steps, flow.layout));
 Object.assign(
-  sevaConfig.states.onboarding.states,
+  stateMachineConfig.states.onboarding.states,
   legacyOrganizationStates({ emailTenantService })
 );
 
-assertTargets(sevaConfig);
+assertTargets(stateMachineConfig);
 
-const sevaMachine = Machine(sevaConfig);
+const stateMachine = Machine(stateMachineConfig);
 
-module.exports = sevaMachine;
+module.exports = stateMachine;

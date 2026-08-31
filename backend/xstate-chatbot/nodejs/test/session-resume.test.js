@@ -12,7 +12,7 @@ function stub(request, from, exports) {
   return filename;
 }
 
-// Machine-side collaborators first, so requiring seva.js does no I/O.
+// Machine-side collaborators first, so requiring state-machine.js does no I/O.
 stub("../env-variables", sessionDir, {
   pgrUseCase: {},
   supportedLocales: "en_IN",
@@ -54,7 +54,7 @@ stub("./user-service", sessionDir, {});
 const sessionManager = require(path.join(sessionDir, "session-manager.js"));
 const ChatService = require(path.join(sessionDir, "chat-service.js"));
 const ChatState = require(path.join(sessionDir, "chat-state.js"));
-const sevaStateMachine = require(path.join(machineDir, "seva.js"));
+const stateMachine = require(path.join(machineDir, "state-machine.js"));
 const { interpret, State } = require("xstate");
 
 const chatService = new ChatService(sessionManager);
@@ -69,7 +69,7 @@ function reformattedMessage() {
 
 function persistedState(mutate) {
   const service = interpret(
-    sevaStateMachine.withContext({
+    stateMachine.withContext({
       chatInterface: sessionManager,
       user: { userId: "u1", mobileNumber: "258840000000", locale: "en_IN" },
       extraInfo: { tenantId: "mz.ige" },
@@ -99,7 +99,7 @@ test("a persisted state naming a state the machine no longer has falls back to s
   // assertion below is not vacuous.
   assert.throws(
     () =>
-      sevaStateMachine
+      stateMachine
         .withContext(chatState.context)
         .resolveState(State.create(chatState.raw)),
     /does not exist/

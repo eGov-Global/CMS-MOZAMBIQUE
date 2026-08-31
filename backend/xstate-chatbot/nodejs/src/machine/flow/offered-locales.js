@@ -1,4 +1,4 @@
-const messages = require('./messages-seva');
+const messages = require('./shell-messages');
 const localisationService = require('../util/localisation-service');
 
 const LOCALE_KEY = /^[a-z]{2}_[A-Z]{2}$/;

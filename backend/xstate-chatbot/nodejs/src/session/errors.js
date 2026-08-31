@@ -29,10 +29,4 @@ class ExternalServiceError extends ChatbotError {
   }
 }
 
-class InvalidChatState extends ChatbotError {
-  constructor(message) {
-    super(message, 'Sorry, we could not resume your session. Please try again.');
-  }
-}
-
-module.exports = { ChatbotError, ValidationError, AuthenticationError, ExternalServiceError, InvalidChatState };
+module.exports = { ChatbotError, ValidationError, AuthenticationError, ExternalServiceError };

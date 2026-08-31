@@ -489,7 +489,7 @@ function assertTargets(config, allowed = []) {
 
 // Deep-merges `source` into `target`'s state tree, in place, and returns
 // `target`. Used to splice a generated flow (from generate()) into a
-// hand-authored machine config (seva.js, pgr.js). When both sides define the
+// hand-authored machine config (state-machine.js, pgr.js). When both sides define the
 // same compound state (both have `states`), their other fields and children
 // are merged recursively; otherwise `source`'s definition fully replaces
 // `target`'s for that key, so the generated flow always wins on conflicts.

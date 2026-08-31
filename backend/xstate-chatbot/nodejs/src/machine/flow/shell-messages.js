@@ -1,4 +1,4 @@
-// Every citizen-facing string in the onboarding journey and the chassis.
+// Every citizen-facing string in the onboarding journey and the shell.
 //
 // `code` is a localisation key looked up live at send time; the locale entries
 // below are the fallback used when the platform has no translation. Codes are

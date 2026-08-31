@@ -1,11 +1,11 @@
 const dialog = require("./dialog.js");
 
-const GREETING_WORDS = ['hi', 'hello', 'hey', 'start', 'help', 'seva', 'egov', 'सेवा'];
+const GREETING_WORDS = ['hi', 'hello', 'hey', 'start', 'help', 'egov'];
 const MESSAGE_TYPES = ['text', 'image', 'document', 'location'];
 const RESET_GRAMMAR = [
   {
     intention: "reset",
-    recognize: ["Hello", "hello", "Hi", "hi", "egov", "seva", "सेवा", "start", "Start", "help", "Help"],
+    recognize: ["Hello", "hello", "Hi", "hi", "egov", "start", "Start", "help", "Help"],
   },
 ];
 

@@ -1,11 +1,10 @@
-const sevaStateMachine = require("../machine/seva");
+const stateMachine = require("../machine/state-machine");
 const { State, interpret } = require("xstate");
 const chatStateRepository = require("./repo");
 const ChatState = require("./chat-state");
 const telemetry = require("./telemetry");
 const uuid = require("uuid");
 const config = require("../env-variables");
-const { InvalidChatState } = require("./errors");
 
 class ChatService {
   constructor(sessionManager) {
@@ -66,7 +65,7 @@ class ChatService {
   }
 
   startService(resolvedState, context) {
-    return interpret(sevaStateMachine).start(resolvedState)
+    return interpret(stateMachine).start(resolvedState)
   }
 
   // On every state change, persist the sanitized state and log the transition.
@@ -131,18 +130,26 @@ class ChatService {
   // Discard the position (and the stale scratch context that described it)
   // and start over at `start`, which routes the incoming message to #welcome.
   resolvePersistedState(chatState, context) {
-      try {
-        return sevaStateMachine
-          .withContext(context)
-          .resolveState(State.create(chatState.raw));
-      } catch (error) {
-        throw new InvalidChatState(error.message);
-      }
+    try {
+      return stateMachine
+        .withContext(context)
+        .resolveState(State.create(chatState.raw));
+    } catch (error) {
+      console.error(
+        `Discarding unresolvable chat state for user ${context.user.userId}: ${error.message}`
+      );
+      return stateMachine.withContext({
+        chatInterface: this.sessionManager,
+        user: context.user,
+        extraInfo: context.extraInfo,
+        slots: { pgr: {} },
+      }).initialState;
+    }
   }
 
   createChatStateFor(user) {
     let stateMachineService = interpret(
-      sevaStateMachine.withContext({
+      stateMachine.withContext({
         chatInterface: this.sessionManager,
         user: user,
         slots: { pgr: {} },

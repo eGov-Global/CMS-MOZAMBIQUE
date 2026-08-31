@@ -11,8 +11,8 @@
 // `place`    — step key -> the group path it belongs in. Absent means top level.
 // `root`     — the journey's own node name, so the entry map can name it.
 // `external` — names that resolve to themselves because they are declared
-//              outside the generator (hand-written shells and chassis states).
-//              This list shrinks to nothing as the chassis becomes steps.
+//              outside the generator (hand-written shells and shell states).
+//              This list shrinks to nothing as the shell becomes steps.
 
 const { assign } = require('xstate');
 
@@ -38,8 +38,8 @@ module.exports = {
     external: ['fileComplaint', 'endstate', 'system_error']
   },
 
-  seva: {
-    root: 'mseva',
+  shell: {
+    root: 'citizenService',
     wrappers: {
       onboarding: {
         id: 'onboarding',
