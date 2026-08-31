@@ -168,6 +168,22 @@ const SelectRating = ({ parentRoute }) => {
     // Sticking to the same payload: csv of localised picks.
     const selections = FEEDBACK_OPTIONS.filter((o) => picks[o.key]).map((o) => tr(t, o.key, o.fallback));
 
+    // Same stale-cache exposure as the reopen flow (see
+    // ReopenComplaint/AddtionalDetails.js): the hook's copy can be up to 15
+    // minutes old, and round-tripping a pre-ASSIGN additionalDetail lets the
+    // backend re-derive department to "NA", hiding the complaint from
+    // department-scoped roles. Merge into the CURRENT stored object instead;
+    // fall back to the cached copy on failure (no worse than before).
+    try {
+      const rateTenant = complaintDetails?.service?.tenantId || Digit.ULBService.getStateId();
+      const rateBusinessId = complaintDetails?.service?.serviceRequestId || id;
+      const fresh = await Digit.PGRService.search(rateTenant, { serviceRequestId: rateBusinessId });
+      const freshService = fresh?.ServiceWrappers?.[0]?.service;
+      if (freshService) complaintDetails.service = freshService;
+    } catch (e) {
+      /* network hiccup — proceed with the cached copy */
+    }
+
     complaintDetails.service.rating = rating;
     // CCSD-2012 (sibling of the reopen clobber): this used to REPLACE the
     // whole additionalDetail object with the bare CSV string. The backend
