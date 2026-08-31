@@ -8,6 +8,7 @@ const SandboxOrgTracker = require("./sandbox-org-tracker");
 const SandboxLoginFlow = require("./sandbox-login-flow");
 const StandardLoginFlow = require("./standard-login-flow");
 const ChatService = require("./chat-service");
+const channelProvider = require("../channel");
 
 // Simple in-memory store for tracking email validation requests in sandbox mode
 // Format: { mobileNumber: { timestamp: Date, waitingForEmail: boolean } }
@@ -73,16 +74,24 @@ class SessionManager {
   }
 
   async authenticateAndDispatch(rawRequestModel) {
+    
     const inboundRequestModel = InboundRequestModel.create(rawRequestModel);
-
     const loginFlow = config.isSandboxMode
       ? new SandboxLoginFlow(inboundRequestModel, sandboxOrgTracker, getAuthenticatedSandboxUser)
       : new StandardLoginFlow(inboundRequestModel);
 
-    const session = await loginFlow.resolveSession();
-    if (!session) return; // login flow already responded to the user
-
-    await this.chatService.dispatch(session, inboundRequestModel);
+    try {
+      const session = await loginFlow.resolveSession();
+      await this.chatService.dispatch(session, inboundRequestModel);
+    } catch (error) {
+        const mobileNumber = inboundRequestModel.user?.mobileNumber;
+        channelProvider.sendMessageToUser(
+              { mobileNumber },
+              [`Sorry, there was an error processing your request. Please check your mobile number format (should be 10 digits) and try again. Error: ${error.message}`],
+              inboundRequestModel.extraInfo
+            );
+        console.error(`Error processing request for mobile number ${mobileNumber}:`, error);
+    }
   }
 
   async toUser(user, outputMessages, extraInfo) {

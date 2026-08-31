@@ -10,19 +10,10 @@ class StandardLoginFlow {
   }
 
   async resolveSession() {
-    try {
       const user = await userService.getUserForMobileNumber(this.mobileNumber, config.rootTenantId);
       this.inboundRequestModel.user = user;
       this.inboundRequestModel.extraInfo.tenantId = config.rootTenantId;
       return Session.create(user);
-    } catch (error) {
-      channelProvider.sendMessageToUser(
-        { mobileNumber: this.mobileNumber },
-        [`Sorry, there was an error processing your request. Please check your mobile number format (should be 10 digits) and try again. Error: ${error.message}`],
-        this.inboundRequestModel.extraInfo
-      );
-      return null;
-    }
   }
 }
 
