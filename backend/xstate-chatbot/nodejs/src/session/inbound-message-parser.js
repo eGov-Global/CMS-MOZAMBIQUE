@@ -9,6 +9,9 @@
  * error — it means the payload was not a user message, a delivery receipt for
  * instance.
  */
+const config = require('../env-variables');
+
+
 const InboundMessage = require("../machine/util/inbound-message.js");
 
 class InboundRequestParser {
@@ -19,26 +22,40 @@ class InboundRequestParser {
     this.inboundMessageModel = null;
   }
 
-  static create(req, provider, tenantId = null) {
+  static create(req, provider) {
     if (!provider) {
       throw new Error("InboundRequestParser: a channel provider is required.");
     }
-    return new InboundRequestParser(req, provider, tenantId);
+
+    const instance = new InboundRequestParser(req, provider);
+    instance.parseRequestBody();
+    instance.resolveTenantId();
+
+    return instance;
   }
 
-  async parseMessage() {
-    this.inboundMessageModel = await this.provider.processMessageFromUser(
-      this.req,
+  async hasValidMessage() { 
+    return await this.provider.isValid(this.requestBody);
+  }
+
+  async getRequestModel() { 
+    return await this.provider.getFormattedMessageFromUser(
+      this.requestBody,
       this.tenantId
     );
-
-    // A null result is a normal outcome, not an error - it means the payload
-    // was not a user message (a delivery receipt, for instance). The caller
-    // decides whether to act on it.
-    return this.inboundMessageModel;
   }
 
-  getInboundMessage() { 
+  resolveTenantId() {
+    // Use provided tenant ID, or fall back to query parameter, or use default
+    const tenantId = this.tenantId || this.req.query.tenantId || config.rootTenantId;
+    this.tenantId = tenantId;
+  }
+  
+  parseRequestBody() {
+    this.requestBody = this.provider.extractRawMessage(this.req) || {};
+  }
+
+  getInboundMessage() {
     return InboundMessage.create(this.inboundMessageModel.message);
   }
 
@@ -48,6 +65,10 @@ class InboundRequestParser {
 
   getExtraInfo() {
     return this.inboundMessageModel.extraInfo;
+  }
+
+  setTenatId(tenantId) { 
+    this.tenantId = tenantId;
   }
 
 }

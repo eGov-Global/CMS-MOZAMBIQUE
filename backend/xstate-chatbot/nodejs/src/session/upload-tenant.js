@@ -11,22 +11,42 @@ const userService = require("./user-service");
  */
 function resolveUploadTenantId(req, config) {
   const body = (req && req.body) || {};
-  const isUpload = !!(body.NumMedia && parseInt(body.NumMedia, 10) > 0);
+  const isUpload = isMediaUpload(body);
 
-  if (!config.isSandboxMode || !isUpload) {
-    return null;
+  if (isUpload) {
+    return resolveTenantForUpload(body);
   }
 
-  // The tracker is keyed by the same normalisation userService applies, so both
-  // must agree — see sanitizeMobileNumber.
-  const mobileNumber = userService.sanitizeMobileNumber(body.From);
-  if (!mobileNumber) {
-    return null;
-  }
+  return null;
+}
 
-  const tenantId = sessionManager.getTenantForMobileNumber(mobileNumber);
-  console.log(`Image upload detected for ${mobileNumber}, using tenant: ${tenantId || 'default'}`);
+function isMediaUpload(body) {
+  return !!(body.NumMedia && parseInt(body.NumMedia, 10) > 0);
+}
+
+function resolveTenantForUpload(body) {
+  const mobileNumber = extractAndValidateMobileNumber(body);
+  const tenantId = sessionManager.getSandboxTenantForMobileNumber(mobileNumber);
+
+  logUploadTenantResolution(mobileNumber, tenantId);
   return tenantId;
+}
+
+function extractAndValidateMobileNumber(body) {
+  const mobileNumber = userService.sanitizeMobileNumber(body.From);
+
+  if (!mobileNumber) {
+    throw new Error("Unable to resolve mobile number from upload request");
+  }
+
+  return mobileNumber;
+}
+
+function logUploadTenantResolution(mobileNumber, tenantId) {
+  if (!tenantId) {
+    console.warn(`No sandbox tenant found for mobile number ${mobileNumber}, defaulting to root tenant`);
+  }
+  console.log(`Image upload detected for ${mobileNumber}, using tenant: ${tenantId || 'default'}`);
 }
 
 module.exports = { resolveUploadTenantId };

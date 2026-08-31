@@ -7,21 +7,28 @@ const express = require("express"),
   InboundRequestParser = require("../../session/inbound-message-parser"),
   { resolveUploadTenantId } = require("../../session/upload-tenant");
 
+// Entry point for inbound messages from the channel provider
 router.post("/message", async (req, res) => {
   console.log("Request URL: " + req.originalUrl);
   console.log('Request Body Object: ' + JSON.stringify(req.body));
   
   try {
     
-    const tenantId = resolveUploadTenantId(req, config);
-    const inboundRequestParser = InboundRequestParser.create(req, channelProvider, tenantId);
-    const inboundRequestModel = await inboundRequestParser.parseMessage();
+    const inboundRequestParser = InboundRequestParser.create(req, channelProvider);
+    
+    if (config.isSandboxMode) {
+      const tenantId = resolveUploadTenantId(req, config);
+      inboundRequestParser.setTenatId(tenantId);
+    }
 
-    if (inboundRequestModel) {
+    // only valid messages go through
+    const isValidMessage = await inboundRequestParser.hasValidMessage();
+    if (isValidMessage) {
+      const inboundRequestModel = await inboundRequestParser.getRequestModel();
       sessionManager
         .authenticateAndDispatch(inboundRequestModel)
         .catch((error) => console.error("authenticateAndDispatch failed:", error));
-    }
+    }      
 
   } catch (e) {
     console.log(e);
@@ -59,7 +66,8 @@ router.all("/status", async (req, res) => {
     }
     
     // Handle actual user status messages (if any)
-    let reformattedMessage = await channelProvider.processMessageFromUser(req);
+    let reformattedMessage = await channelProvider.getFormattedMessageFromUser(req.body);
+
     if (reformattedMessage != null) {
       sessionManager
         .authenticateAndDispatch(reformattedMessage)

@@ -202,6 +202,9 @@ class UserService {
   // Accepts the national number, or the same number prefixed with the country
   // code, and always returns the national form — that is what DIGIT stores as
   // the citizen's identity.
+  // Example: 
+  //   sanitizeMobileNumber('919876543210') => '9876543210'
+  //   sanitizeMobileNumber('9876543210') => '9876543210'
   sanitizeMobileNumber(mobileNumber) {
     if (!mobileNumber) return null;
 

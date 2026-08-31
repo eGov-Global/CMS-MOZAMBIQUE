@@ -147,6 +147,18 @@ class TwilioWhatsAppProvider {
         }
     }
 
+    extractRawMessage(req) {
+        let requestBody = req.body;
+        if (Object.keys(requestBody).length === 0) {
+            requestBody = req.query;
+            console.debug("Twilio - Extracted raw message from query:", JSON.stringify(requestBody, null, 2));
+        }
+        
+        console.debug("Twilio - Extracted raw message:", JSON.stringify(requestBody, null, 2));
+        return requestBody;
+    }
+
+    // Validates if the incoming request is a valid Twilio message (text, media, or location)
     async isValid(requestBody) {
         try {
             // Twilio webhook validation
@@ -258,25 +270,8 @@ class TwilioWhatsAppProvider {
         return reformattedMessage;
     }
 
-    async processMessageFromUser(req, providedTenantId = null) {
-        let reformattedMessage = {};
-        let requestBody = req.body;
-
-        // Twilio sends POST with form-urlencoded data
-        if (Object.keys(requestBody).length === 0) {
-            requestBody = req.query;
-        }
-
-        if (!await this.isValid(requestBody)) {
-            console.log("Twilio - Invalid message received");
-            return null;
-        }
-
-        // Use provided tenant ID, or fall back to query parameter, or use default
-        let tenantId = providedTenantId || req.query.tenantId || config.rootTenantId;
-        
-        reformattedMessage = await this.getUserMessage(requestBody, tenantId);
-        return reformattedMessage;
+    async getFormattedMessageFromUser(rawMessage, tenantId) {
+        return await this.getUserMessage(rawMessage, tenantId);
     }
 
     // Twilio wants E.164. `to` may arrive national (849904390) or already

@@ -95,7 +95,7 @@ class SessionManager {
   }
 
   // Method to get tenant ID for a mobile number from tracker (for image uploads)
-  getTenantForMobileNumber(mobileNumber) {
+  getSandboxTenantForMobileNumber(mobileNumber) {
     if (config.isSandboxMode && sandboxOrgCodeTracker[mobileNumber]) {
       return sandboxOrgCodeTracker[mobileNumber].orgTenantId || null;
     }
