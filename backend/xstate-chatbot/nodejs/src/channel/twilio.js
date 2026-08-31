@@ -3,6 +3,15 @@ const fetch = require("node-fetch");
 const axios = require('axios');
 var FormData = require("form-data");
 const mediaTypes = require('../media-types');
+const INPUT_TYPES = {
+    LOCATION: 'location',
+    BUTTON: 'button',
+    IMAGE: 'image',
+    DOCUMENT: 'document',
+    TEXT: 'text',
+    UNKNOWN: 'unknown',
+}
+
 
 class TwilioWhatsAppProvider {
 
@@ -190,81 +199,119 @@ class TwilioWhatsAppProvider {
         return number;
     }
 
-    async getUserMessage(requestBody, tenantId = null) {
-        console.log("Twilio - Received requestBody:", JSON.stringify(requestBody, null, 2));
-
-        let reformattedMessage = {};
-        let type;
-        let input;
-
-        // Check for button response (Twilio interactive messages)
-        if (requestBody.ButtonPayload || requestBody.ListId) {
-            type = 'button';
-            input = requestBody.ButtonPayload || requestBody.ListId;
+    getInputType(requestBody) {
+        if (requestBody.ButtonPayload || requestBody.ListId)
+            return INPUT_TYPES.BUTTON;
+        
+        if (requestBody.Latitude && requestBody.Longitude) 
+            return INPUT_TYPES.LOCATION;
+        
+        if (requestBody.NumMedia && parseInt(requestBody.NumMedia) > 0)
+            return this.getMediaType(requestBody);
+        
+        if (requestBody.Body) {
+            return INPUT_TYPES.TEXT;
         }
-        // Check for location
-        else if (requestBody.Latitude && requestBody.Longitude) {
-            type = 'location';
-            input = '(' + requestBody.Latitude + ',' + requestBody.Longitude + ')';
+        return INPUT_TYPES.UNKNOWN;
+    }
+
+    async getInputFromType(requestBody, inputType, tenantId = null) {
+        switch (inputType) {
+            case INPUT_TYPES.BUTTON:
+                return requestBody.ButtonPayload || requestBody.ListId;
+            case INPUT_TYPES.LOCATION:
+                return '(' + requestBody.Latitude + ',' + requestBody.Longitude + ')';
+            case INPUT_TYPES.IMAGE:
+            case INPUT_TYPES.DOCUMENT:
+                return await this.processMediaInput(requestBody, tenantId);
+            case INPUT_TYPES.TEXT:
+                return requestBody.Body || '';
+            default:
+                // unsupported/unknown media, or no recognizable input at all
+                return ' ';
         }
-        // Check for media (image, document, etc.)
-        else if (requestBody.NumMedia && parseInt(requestBody.NumMedia) > 0) {
-            const mediaType = requestBody.MediaContentType0 || '';
-            const fileExtension = this.getExtensionForMimeType(mediaType);
+    }
 
-            if (mediaType && !mediaTypes.isSupportedMimeType(mediaType)) {
-                type = 'unsupported';
-                input = ' ';
-            } else if (mediaType.startsWith('image/')) {
-                type = 'image';
-            } else if (mediaType) {
-                type = 'document';
-            } else {
-                type = 'unknown';
-                input = ' ';
-            }
+    getMediaType(requestBody) {
+        const mediaType = requestBody.MediaContentType0 || '';
+        if (mediaType && !mediaTypes.isSupportedMimeType(mediaType)) {
+            return 'unsupported';
+        } else if (mediaType.startsWith('image/')) {
+            return 'image';
+        } else if (mediaType) {
+            return 'document';
+        }
+        return 'unknown';
+    }
 
-            if (type === 'image' || type === 'document') {
-                try {
-                    const mediaUrl = requestBody.MediaUrl0;
-                    const response = await axios.get(mediaUrl, {
-                        responseType: 'arraybuffer',
-                        auth: {
-                            username: this.accountSid,
-                            password: this.authToken
-                        }
-                    });
-                    const fileBuffer = Buffer.from(response.data);
-                    const tempName = 'pgr-whatsapp-' + Date.now() + fileExtension;
-                    input = await this.fileStoreAPICall(tempName, fileBuffer, mediaType || response.headers['content-type'], tenantId);
-                } catch (error) {
-                    console.error("Error downloading/storing media:", error);
-                    input = ' ';
+    async downloadMediaFromUrl(mediaUrl) {
+        return await axios.get(
+            mediaUrl, 
+            {
+                responseType: 'arraybuffer',
+                auth: {
+                    username: this.accountSid,
+                    password: this.authToken
                 }
             }
-        }
-        // Text message
-        else if (requestBody.Body) {
-            type = 'text';
-            input = requestBody.Body;
-        }
-        else {
-            type = 'unknown';
-            input = ' ';
-        }
+        );
+    }
 
-        reformattedMessage.message = {
-            input: input,
-            type: type
-        };
+    async uploadMediaToFileStore(fileName, fileBuffer, contentType, tenantId = null) {
+        return await this.fileStoreAPICall(
+            fileName,
+            fileBuffer,
+            contentType,
+            tenantId
+        );
+    }
 
-        reformattedMessage.user = {
-            mobileNumber: this.extractPhoneNumber(requestBody.From)
-        };
+    getMediaContentType(requestBody) {
+        return requestBody.MediaContentType0 || '';
+    }
 
-        reformattedMessage.extraInfo = {
-            whatsAppBusinessNumber: this.extractPhoneNumber(requestBody.To),
-            tenantId: config.rootTenantId
+    async processMediaInput(requestBody, tenantId = null) {
+        const mediaUrl = requestBody.MediaUrl0;
+        if (!mediaUrl) 
+            return ' ';
+        
+        try {
+            const response = await this.downloadMediaFromUrl(mediaUrl);
+            const contentType = this.getMediaContentType(requestBody) || response.headers['content-type'] || '';
+            const fileExtension = this.getExtensionForMimeType(contentType);
+            const fileBuffer = Buffer.from(response.data);
+
+            return await this.uploadMediaToFileStore(
+                `pgr-whatsapp-${Date.now()}${fileExtension}`,
+                fileBuffer,
+                contentType,
+                tenantId
+            );
+
+        } catch (error) {
+            console.error('Error processing media input:', error);
+            return ' ';
+        }
+    }
+
+
+    async getUserMessage(requestBody, tenantId = null) {
+        console.log("Twilio - Received requestBody:", JSON.stringify(requestBody, null, 2));
+        const inputType = this.getInputType(requestBody);
+        const inputFromType = await this.getInputFromType(requestBody, inputType, tenantId);
+
+        const reformattedMessage = {
+            message: {
+                input: inputFromType,
+                type: inputType
+            },
+            user: {
+                mobileNumber: this.extractPhoneNumber(requestBody.From)
+            },
+            extraInfo: {
+                whatsAppBusinessNumber: this.extractPhoneNumber(requestBody.To),
+                tenantId: config.rootTenantId
+            }
         };
 
         return reformattedMessage;
