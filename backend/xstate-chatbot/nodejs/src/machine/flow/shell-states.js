@@ -1,13 +1,27 @@
 // What each onboarding and shell step IS. Where each step GOES lives in
 // shell-transitions.js.
+//
+// Fields a step may declare:
+// `key`     — the step's name, referenced by shell-transitions.js.
+// `kind`    — step type (say/ask/choose/call/gate/goto); picks the behavior generate.js builds.
+// `prompt`  — the message(s) sent to the citizen.
+// `accept`  — expected reply type (e.g. 'text').
+// `options` — choices offered (list or a function).
+// `recognize` — extra strings that match an option, beyond its literal label (kind: 'choose').
+// `set`     — writes the reply into context.
+// `fill`    — values injected into the prompt template.
+// `src`     — async function to run (kind: 'call').
+// `onDone` / `onUnknown` — outcome routing after the step runs.
+// `effect`  — side effect run without changing the prompt flow.
 
+const config = require('../../env-variables');
 const dialog = require('../util/dialog');
 
 const stripDiacritics = (text) =>
   String(text).toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 
 module.exports = ({ messages, userProfileService, offeredLocales }) => [
-  {
+{
     key: 'onboardingLocale',
     kind: 'choose',
     accept: 'text',
@@ -18,15 +32,14 @@ module.exports = ({ messages, userProfileService, offeredLocales }) => [
       context.user.locale = locale;
       context.onboarding.locale = locale;
     },
-    // an unrecognised reply silently selects English and moves on; this step has
-    // never had a retry loop. The fallback branch gets no step-level write, so
-    // it has to record the locale itself.
+    // onUnknown it uses the default locale from the configuration.
     onUnknown: {
       set: (context) => {
-        context.user.locale = 'en_IN';
-        context.onboarding.locale = 'en_IN';
+        context.user.locale = config.defaultLocale;
+        context.onboarding.locale = config.defaultLocale;
       }
     }
+
   },
 
   {

@@ -1,21 +1,23 @@
+const { StatusCodes } = require('http-status-codes');
 const config = require('../../env-variables');
 const fetch = require('node-fetch');
+const { ExternalServiceError } = require('../../session/errors');
+const BASE_URL = config.egovServices.egovServicesHost + config.egovServices.userServiceUpdateProfilePath;
 
 class UserProfileService {
-  async updateUser(user, slots, tenantId) {
-    user.userInfo.locale = slots.locale;
-    if(slots.name)
-      user.userInfo.name = slots.name;
 
-    let requestBody = {
+  async updateUser(user, userSlots, tenantId) {
+    user.userInfo.locale = userSlots.locale;
+    user.userInfo.name = userSlots.name || user.userInfo.name;
+
+    const url = `${BASE_URL}?tenantId=${tenantId}`;
+    const requestBody = {
       RequestInfo: {
         authToken: user.authToken
       },
       user: user.userInfo
     };
-    let url = config.egovServices.egovServicesHost + config.egovServices.userServiceUpdateProfilePath + '?tenantId=' + tenantId;
-
-    let options = {
+    const options = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -23,15 +25,14 @@ class UserProfileService {
       body: JSON.stringify(requestBody)
     }
 
-    let response = await fetch(url, options);
-    if(response.status === 200) {
-      let responseBody = await response.json();
-      return responseBody;
+    const response = await fetch(url, options);
+
+    if(response.status === StatusCodes.OK) {
+      return await response.json();
     } else {
       console.error('Error Updating the user profile');
-      let responseBody = await response.json();
-      console.error(JSON.stringify(responseBody));
-      return undefined;
+      console.error(JSON.stringify(await response.json()));
+      throw new ExternalServiceError('Error updating the user profile');
     }
   }
 }

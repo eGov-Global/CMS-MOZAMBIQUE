@@ -18,6 +18,9 @@ const envVariables = {
     rootTenantId: process.env.ROOT_TENANTID || 'pg',
 
     supportedLocales: process.env.SUPPORTED_LOCALES || 'en_IN',
+    
+    defaultLocale: (process.env.SUPPORTED_LOCALES || 'en_IN').split(',')[0].trim(),
+
 
     // Phone identity is per-country CONFIG, not code. countryCode is the dialling
     // prefix without '+'; mobileNumberLength is the national number length.
