@@ -23,6 +23,14 @@ class QuestionState extends State {
     return this;
   }
 
+  // sets the state (and write) to use when the reply is unrecognized, instead
+  // of retrying — e.g. defaulting a locale rather than re-asking
+  setOnUnknown(state, set) {
+    this.onUnknown = { state, set };
+    return this;
+  }
+
+
   get optionsSlot() { return this.key + 'Options'; }
 
   resolveOptions(context) {
@@ -65,7 +73,12 @@ class QuestionState extends State {
             context.intention = this.matchReply(context, event);
           }),
           always: [
-            { target: 'retry', cond: (context) => context.intention === null },
+            { target: 'retry', cond: (context) => context.intention === null && !this.onUnknown },
+            ...(this.onUnknown ? [{
+              target: '#' + this.onUnknown.state.key,
+              cond: (context) => context.intention === null,
+              ...(this.onUnknown.set ? { actions: assign(this.onUnknown.set) } : {})
+            }] : []),
             ...this.resolveBranches()
           ]
         },
@@ -76,6 +89,7 @@ class QuestionState extends State {
           },
           always: 'question'
         }
+
       }
     };
   }

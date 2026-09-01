@@ -37,26 +37,44 @@ class State {
     return this;
   }
 
+  // sets a side effect run on entry, alongside the prompt (doesn't affect branching)
+  setEffect(fn) {
+    this.effect = fn;
+    return this;
+  }
+
+
   
-  // sends the prompt's localized text to the citizen, with template tokens filled
-  // in (own fill plus any extraFill passed by a subclass, e.g. a rendered options list)
+  // sends the prompt's localized text to the citizen. this.prompt may be a
+  // single bundle, or an array of {bundle, delay, immediate} for multiple
+  // staggered messages. Template tokens filled from this.fill plus extraFill.
   enter(context, extraFill) {
     if (!this.prompt) return;
 
-    let text = dialog.get_message(this.prompt, context.user.locale);
-    const fill = { ...this.fill, ...extraFill };
-    
-    for (const token of Object.keys(fill)) {
-      const marker = `{{${token}}}`;
-      if (!text.includes(marker)) continue;
+    const items = Array.isArray(this.prompt) ? this.prompt : [{ bundle: this.prompt }];
 
-      const value = typeof fill[token] === 'function' ? fill[token](context) : fill[token];
+    for (const item of items) {
+      const send = () => {
+        let text = dialog.get_message(item.bundle, context.user.locale);
+        const fill = { ...this.fill, ...extraFill };
 
-      text = text.split(marker).join(String(value ?? ''));
+        for (const token of Object.keys(fill)) {
+          const marker = `{{${token}}}`;
+          if (!text.includes(marker)) continue;
+          
+          const value = typeof fill[token] === 'function' ? fill[token](context) : fill[token];
+          text = text.split(marker).join(String(value ?? ''));
+        }
+
+        dialog.sendMessage(context, text, item.immediate !== false);
+      };
+      
+      if (item.delay) 
+        setTimeout(send, item.delay);
+      else 
+        send();
     }
-    dialog.sendMessage(context, text);
   }
-
 
 
   // builds the guarded transitions array for this state's branches, targeting by
@@ -70,13 +88,17 @@ class State {
   }
 
   // compiles this state into its XState node shape
-  compileNode() {
+    compileNode() {
     return {
       id: this.key,
-      entry: (context) => this.enter(context),
+      entry: (context, event) => {
+        this.enter(context);
+        if (this.effect) this.effect(context, event);
+      },
       always: this.resolveBranches()
     };
   }
+
 }
 
 module.exports = State;

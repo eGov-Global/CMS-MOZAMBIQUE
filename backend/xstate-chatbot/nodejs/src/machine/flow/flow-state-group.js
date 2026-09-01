@@ -3,15 +3,21 @@
 // A named group of states, compiled into a compound XState node — lets steps
 // nest under a shared parent (e.g. onboarding) without changing the steps
 // themselves. Plays the role layout.js's wrappers/place mapping plays today.
+const { assign } = require('xstate');
+
 class Group {
-  constructor(key, states, initialKey) {
+  // onEntry (optional): a context-mutating function run when the group is
+  // entered, e.g. clearing a scratch answer bag
+  constructor(key, states, initialKey, onEntry) {
     this.key = key;
     this.states = states;
     this.initialKey = initialKey;
+    this.onEntry = onEntry;
   }
 
   compileNode() {
     const config = { id: this.key, initial: this.initialKey, states: {} };
+    if (this.onEntry) config.entry = assign(this.onEntry);
     for (const state of this.states) {
       config.states[state.key] = state.compileNode();
     }
