@@ -1,6 +1,8 @@
 // Dev tool: interactive terminal chat against the real session/chat-service
 // stack (same code the HTTP /message route calls), skipping the HTTP layer.
 // Usage: WHATSAPP_PROVIDER=Console node console-repl.js [mobileNumber]
+// If the configured *_HOST points at a remote server missing an intermediate
+// cert (e.g. uat.falacidadao.gov.mz), add: NODE_EXTRA_CA_CERTS=./certs/ThawteTLSRSACAG1.pem
 const readline = require('readline');
 const sessionManager = require('./src/session/session-manager');
 
