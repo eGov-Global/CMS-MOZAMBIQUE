@@ -31,20 +31,33 @@ class State {
     return this;
   }
 
-  // walks the branches in order, returns the first whose cond passes (or has none)
-  resolveNextState(context) {
-    for (const branch of this.branches) {
-      if (!branch.cond || branch.cond(context)) return branch.state;
-    }
-    return null;
+  // sets template values injected into the prompt (e.g. {{name}} -> fill.name)
+  setFill(fill) {
+    this.fill = fill;
+    return this;
   }
 
-  // sends the prompt's localized text to the citizen
-  enter(context) {
+  
+  // sends the prompt's localized text to the citizen, with template tokens filled
+  // in (own fill plus any extraFill passed by a subclass, e.g. a rendered options list)
+  enter(context, extraFill) {
     if (!this.prompt) return;
-    const text = dialog.get_message(this.prompt, context.user.locale);
+
+    let text = dialog.get_message(this.prompt, context.user.locale);
+    const fill = { ...this.fill, ...extraFill };
+    
+    for (const token of Object.keys(fill)) {
+      const marker = `{{${token}}}`;
+      if (!text.includes(marker)) continue;
+
+      const value = typeof fill[token] === 'function' ? fill[token](context) : fill[token];
+
+      text = text.split(marker).join(String(value ?? ''));
+    }
     dialog.sendMessage(context, text);
   }
+
+
 
   // builds the guarded transitions array for this state's branches, targeting by
   // absolute id so nested (question/process) states can reach top-level siblings

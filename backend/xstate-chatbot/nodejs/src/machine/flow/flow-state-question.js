@@ -1,12 +1,17 @@
 // A State that asks the citizen something and waits for their reply before
 // branching: sends the prompt, waits for USER_MESSAGE, matches the reply
 // against its options, then resolves the next state via the base class's branches.
+// Options may be a static array or a function (called with context) for a
+// runtime-computed list (e.g. offeredLocales()) — either way the resolved list
+// is stored in context so a persisted/resumed session sees the same list it
+// was shown, not a freshly recomputed one.
 const { assign } = require('xstate');
 const dialog = require('../util/dialog');
 const State = require('./flow-state');
 
 class QuestionState extends State {
-  // stores the choices this state offers (plain strings, e.g. ['Yes', 'No'])
+  // stores the choices this state offers: a static array (plain strings or
+  // {value, label} objects), or a function(context) returning either
   setOptions(options) {
     this.options = options;
     return this;
@@ -18,19 +23,29 @@ class QuestionState extends State {
     return this;
   }
 
-  // matches the user's reply against options (by number or case-insensitive text)
-  matchReply(event) {
-    const input = String(event.message.input).trim().toLowerCase();
-    const index = parseInt(input, 10);
-    return (this.options || []).find((option, i) =>
-      i + 1 === index || String(option).toLowerCase() === input
-    ) || null;
+  get optionsSlot() { return this.key + 'Options'; }
+
+  resolveOptions(context) {
+    return typeof this.options === 'function' ? this.options(context) : (this.options || []);
   }
 
-  // records the match as context.intention, then resolves the next state
-  getNextStateFromReply(context, event) {
-    context.intention = this.matchReply(event);
-    return this.resolveNextState(context);
+  renderOptionsList(options) {
+    return options.map((option, i) => `*${i + 1}.*  ${typeof option === 'object' ? option.label : option}`).join('\n');
+  }
+
+  // matches the reply against the resolved options stored in context (by number
+  // or case-insensitive text), returning the plain value (unwrapped from
+  // {value, label} if needed) so context.intention is always a plain value
+  matchReply(context, event) {
+    const options = context[this.optionsSlot] || [];
+    const input = String(event.message.input).trim().toLowerCase();
+    const index = parseInt(input, 10);
+    const match = options.find((option, i) => {
+      const value = typeof option === 'object' ? option.value : option;
+      return i + 1 === index || String(value).toLowerCase() === input;
+    });
+    if (!match) return null;
+    return typeof match === 'object' ? match.value : match;
   }
 
   compileNode() {
@@ -39,12 +54,15 @@ class QuestionState extends State {
       initial: 'question',
       states: {
         question: {
-          entry: (context) => this.enter(context),
+          entry: [
+            assign((context) => { context[this.optionsSlot] = this.resolveOptions(context); }),
+            (context) => this.enter(context, { options: () => this.renderOptionsList(context[this.optionsSlot] || []) })
+          ],
           on: { USER_MESSAGE: 'process' }
         },
         process: {
           entry: assign((context, event) => {
-            context.intention = this.matchReply(event);
+            context.intention = this.matchReply(context, event);
           }),
           always: [
             { target: 'retry', cond: (context) => context.intention === null },

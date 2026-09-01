@@ -1,5 +1,6 @@
-// A State that captures free-text input: sends the prompt, waits for a reply,
-// validates it, writes it into context if valid, retries otherwise.
+// A State that captures free-text or media input: sends the prompt, waits for
+// a reply, checks it matches the expected type (accept), validates it, writes
+// it into context if valid, retries otherwise.
 const { assign } = require('xstate');
 const dialog = require('../util/dialog');
 const State = require('./flow-state');
@@ -24,6 +25,19 @@ class AskState extends State {
     return this;
   }
 
+  // sets the expected reply type(s), e.g. 'text' (default) or ['image', 'document']
+  setAccept(accept) {
+    this.accept = accept;
+    return this;
+  }
+
+  // if true, a literal "1" reply counts as valid even when accept doesn't
+  // match — lets a media prompt be explicitly skipped
+  setOptional(optional) {
+    this.optional = optional;
+    return this;
+  }
+
   get validSlot() { return this.key + 'Valid'; }
   get retryMessageSlot() { return this.key + 'RetryMessage'; }
 
@@ -38,7 +52,13 @@ class AskState extends State {
         },
         process: {
           entry: assign((context, event) => {
-            const input = String(event.message.input).trim();
+            if (!dialog.validateInputType(event, this.accept || 'text')) {
+              context[this.validSlot] = !!(this.optional && String(event.message?.input ?? '') === '1');
+              context[this.retryMessageSlot] = undefined;
+              return;
+            }
+            const isMedia = Array.isArray(this.accept);
+            const input = isMedia ? event.message.input : String(event.message.input).trim();
             const verdict = this.validate ? this.validate(input) : true;
             context[this.validSlot] = verdict === true;
             context[this.retryMessageSlot] = verdict === true ? undefined : verdict;

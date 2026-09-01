@@ -1,55 +1,72 @@
 // A State that drills into a fetched hierarchy one level at a time: fetch the
-// current level's options, show them, and on reply either descend (fetch the
-// next level), go back (pop to the previous level), or land on a leaf.
+// current level's options, show them (with an optional breadcrumb trail), and
+// on reply either descend, go back, or land on a leaf. Reuses the real
+// dialog.constructListPromptAndGrammer/get_intention so numbering and grammar
+// match the production walk kind exactly.
 const { assign } = require('xstate');
+const dialog = require('../util/dialog');
 const State = require('./flow-state');
 
 class WalkState extends State {
-  // async fn(context, path) -> {options, isLeafLevel}, fetching the current level
-  // the function that fetches the current level's options
+  // async fn(context, path) -> {options, messageBundle, trailBundle, levelLabel, isLeafLevel}
   setFetch(fn) {
     this.fetch = fn;
     return this;
   }
 
-  // sets where to go if the fetch's promise rejects
   setOnError(state) {
     this.onError = state;
     return this;
   }
 
-  // sets the state (and optional context write) to use when a fetch returns no options
   setOnEmpty(state, set) {
     this.onEmpty = { state, set };
     return this;
   }
 
-  // sets the state (and optional context write) to use once a leaf option is picked
   setOnLeaf(state, set) {
     this.onLeaf = { state, set };
     return this;
   }
 
-  // where this instance's walked path / fetched level live in context — derived
-  // from the state's own key, so no separate slot names need declaring
+  // the breadcrumb-line template shown above the list (may contain a {{level}} token)
+  setPreamble(bundle) {
+    this.preamble = bundle;
+    return this;
+  }
+
+  // if true, prepends the walked path as a breadcrumb trail above the preamble
+  setTrail(trail) {
+    this.trail = trail;
+    return this;
+  }
+
+  // overrides the default "invalid option" message sent on an unrecognized reply
+  setRetryMessage(prompt) {
+    this.retryPrompt = prompt;
+    return this;
+  }
+
   get pathSlot() { return this.key + 'Path'; }
   get stepSlot() { return this.key + 'Step'; }
-  get matchSlot() { return this.key + 'Match'; }
+  get grammerSlot() { return this.key + 'Grammer'; }
 
   getPath(context) {
     return context[this.pathSlot] || [];
   }
 
-  // matches a reply against the currently fetched level's options
-  matchOption(context, event) {
-    const options = (context[this.stepSlot] || {}).options || [];
-    const input = String(event.message.input).trim().toLowerCase();
-    if (input === 'back') return 'BACK';
-
-    const index = parseInt(input, 10);
-    return options.find((option, i) =>
-      i + 1 === index || String(option).toLowerCase() === input
-    ) || null;
+  renderPreamble(context) {
+    const { levelLabel, trailBundle } = context[this.stepSlot] || {};
+    let text = this.preamble ? dialog.get_message(this.preamble, context.user.locale) : '';
+    text = text.replace('{{level}}', levelLabel || '');
+    
+    if (this.trail) {
+      const trail = this.getPath(context)
+        .map((code) => (trailBundle && trailBundle[code] ? dialog.get_message(trailBundle[code], context.user.locale) : code))
+        .join(' › ');
+      if (trail) text = `*${trail}*\n${text}`;
+    }
+    return text;
   }
 
   compileNode() {
@@ -78,34 +95,47 @@ class WalkState extends State {
           ]
         },
         question: {
-          entry: (context) => this.enter(context),
+          entry: assign((context) => {
+            const { options, messageBundle } = context[this.stepSlot] || {};
+            const goback = this.getPath(context).length > 0;
+            const list = dialog.constructListPromptAndGrammer(options || [], messageBundle || {}, context.user.locale, false, goback);
+            context[this.grammerSlot] = list.grammer;
+            dialog.sendMessage(context, this.renderPreamble(context) + list.prompt);
+          }),
           on: { USER_MESSAGE: 'process' }
         },
         process: {
           entry: assign((context, event) => {
-            context[this.matchSlot] = this.matchOption(context, event);
+            context.intention = dialog.get_intention(context[this.grammerSlot] || [], event, true);
           }),
           always: [
             {
               target: 'fetch',
-              cond: (context) => context[this.matchSlot] === 'BACK',
+              cond: (context) => context.intention === dialog.INTENTION_GOBACK,
               actions: assign((context) => { context[this.pathSlot] = this.getPath(context).slice(0, -1); })
             },
             {
               target: '#' + this.onLeaf.state.key,
-              cond: (context) => context[this.matchSlot] && context[this.matchSlot] !== 'BACK' && (context[this.stepSlot] || {}).isLeafLevel,
+              cond: (context) => context.intention !== dialog.INTENTION_UNKOWN && (context[this.stepSlot] || {}).isLeafLevel,
               actions: assign((context) => {
-                context[this.pathSlot] = [...this.getPath(context), context[this.matchSlot]];
+                context[this.pathSlot] = [...this.getPath(context), context.intention];
                 if (this.onLeaf.set) this.onLeaf.set(context);
               })
             },
             {
               target: 'fetch',
-              cond: (context) => context[this.matchSlot] && context[this.matchSlot] !== 'BACK',
-              actions: assign((context) => { context[this.pathSlot] = [...this.getPath(context), context[this.matchSlot]]; })
+              cond: (context) => context.intention !== dialog.INTENTION_UNKOWN,
+              actions: assign((context) => { context[this.pathSlot] = [...this.getPath(context), context.intention]; })
             },
-            { target: 'question' }
+            { target: 'retry' }
           ]
+        },
+        retry: {
+          entry: (context) => {
+            const text = dialog.get_message(this.retryPrompt || dialog.global_messages.error.retry, context.user.locale);
+            dialog.sendMessage(context, text);
+          },
+          always: 'question'
         }
       }
     };
