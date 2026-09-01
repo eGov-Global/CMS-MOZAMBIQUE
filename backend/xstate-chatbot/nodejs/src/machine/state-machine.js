@@ -1,47 +1,14 @@
 const { Machine } = require("xstate");
-const pgr = require("./pgr");
-const userProfileService = require("./service/egov-user-profile");
-const emailTenantService = require("./service/email-tenant-service");
+const { config } = require("./citizen-service-machine");
 
-const legacyOrganizationStates = require("./flow/legacy-organization");
-const buildStates = require("./flow/shell-states");
-const machineTransitions = require("./flow/shell-transitions");
-const layout = require("./flow/layout");
-const { generate, mergeStates, assertTargets } = require("./flow/generate");
-const { join } = require("./flow/join");
-const messages = require("./flow/shell-messages");
-const { offeredLocales } = require("./flow/offered-locales");
-
-const machineStates = buildStates({ messages, userProfileService, offeredLocales });
-
-const machineFlow = join(
-  machineStates,
-  machineTransitions,
-  layout.shell
-);
-
-const stateMachineConfig = {
-  id: "citizenService",
-  initial: machineFlow.layout.initial[layout.shell.root],
-  on: {
-    USER_RESET: {
-      target: "#welcome"
-    },
-  },
-  states: {
-    // the filing journey, assembled in pgr.js and spliced in whole
-    pgr: pgr
-  }, // states
-}; // stateMachineConfig
-
-mergeStates(stateMachineConfig.states, generate(machineFlow.steps, machineFlow.layout));
-Object.assign(
-  stateMachineConfig.states.onboarding.states,
-  legacyOrganizationStates({ emailTenantService })
-);
-
-assertTargets(stateMachineConfig);
-
-const stateMachine = Machine(stateMachineConfig);
+// Cutover from the states-table + generate.js authoring (still available in
+// shell-states.js/pgr-states.js and pgr.js) to the class-based flow-state*
+// authoring in citizen-service-machine.js. Export shape is unchanged - a
+// Machine instance - so chat-service.js needs no changes.
+//
+// legacyOrganizationStates (email/multi-tenant onboarding) is not carried
+// over: it was already unreachable dead code before this cutover (see
+// flow/legacy-organization.js's own header comment).
+const stateMachine = Machine(config);
 
 module.exports = stateMachine;

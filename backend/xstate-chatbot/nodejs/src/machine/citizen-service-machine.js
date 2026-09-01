@@ -8,6 +8,7 @@ const pgr = require('./pgr-machine');
 
 const config = {
   id: 'citizenService',
+  on: { USER_RESET: { target: '#welcome' } },
   ...shell.config,
   states: { ...shell.config.states, pgr: pgr.config }
 };
