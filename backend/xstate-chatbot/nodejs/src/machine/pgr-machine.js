@@ -35,35 +35,21 @@ const receiptCategory = (context) => {
   return (bundle && dialog.get_message(bundle, context.user.locale)) || code || '-';
 };
 
-const complaintList = (context, event) => {
-  const locale = context.user.locale;
-  let message = dialog.get_message(messages.trackComplaint.results.preamble, locale);
-  for (const complaint of event.data) {
-    message += '\n\n' + dialog.get_message(messages.trackComplaint.results.complaintTemplate, locale)
-      .replace('{{complaintType}}', complaint.complaintType || 'Complaint')
-      .replace('{{complaintNumber}}', complaint.complaintNumber || 'N/A')
-      .replace('{{filedDate}}', complaint.filedDate || 'N/A')
-      .replace('{{complaintStatus}}', complaint.complaintStatus || 'N/A');
-  }
-  return message + dialog.get_message(messages.trackComplaint.results.closingStatement, locale);
-};
-
 // the boundary walk records which city the complaint belongs to, whichever way it finishes
 const recordCity = (context) => { context.slots.pgr.city = context.extraInfo.tenantId; };
 
 // -- steps ----------------------------------------------------------------
 
 const menu = new QuestionState('menu');
-const complaintType2Step = new WalkState('complaintType2Step');
-const boundary = new WalkState('boundary');
-const institution = new AskState('institution');
-const description = new AskState('description');
-const imageUpload = new AskState('imageUpload');
-const consent = new QuestionState('consent');
+const walkComplaintTypes = new WalkState('complaintType2Step');
+const walkBoundaries = new WalkState('boundary');
+const askIntitution = new AskState('institution');
+const askDescription = new AskState('description');
+const askForAttachments = new AskState('imageUpload');
+const askConsent = new QuestionState('consent');
 const consentDeclined = new State('consentDeclined');
-const confidentiality = new QuestionState('confidentiality');
+const askConfidentiality = new QuestionState('confidentiality');
 const persistComplaint = new ProcessingState('persistComplaint');
-const trackComplaint = new ProcessingState('trackComplaint');
 
 // chassis placeholders - real states live in shell-machine.js
 const endstate = new State('endstate');
@@ -71,39 +57,36 @@ const system_error = new State('system_error');
 
 // -- groups (fileComplaint.type/location/other, matching layout.js) -------
 
-const typeGroup = new Group('type', [complaintType2Step], 'complaintType2Step');
-const locationGroup = new Group('location', [boundary], 'boundary');
-const otherGroup = new Group('other', [institution, description, imageUpload], 'institution');
+const typeGroup = new Group('type').setStates([walkComplaintTypes]).setStart('complaintType2Step');
+const locationGroup = new Group('location').setStates([walkBoundaries]).setStart('boundary');
+const otherGroup = new Group('other').setStates([askIntitution, askDescription, askForAttachments]).setStart('institution');
 
-const fileComplaintGroup = new Group(
-  'fileComplaint',
-  [typeGroup, locationGroup, otherGroup, consent, consentDeclined, confidentiality, persistComplaint],
-  'type'
-);
+const fileComplaintGroup = new Group('fileComplaint')
+  .setStates([typeGroup, locationGroup, otherGroup, askConsent, consentDeclined, askConfidentiality, persistComplaint])
+  .setStart('type');
 
 // -- wiring -----------------------------------------------------------
 
 menu
   .setPrompt(messages.menu.question)
-  .setOptions(['fileComplaint', 'trackComplaint'])
-  .setConditionalNext(fileComplaintGroup, (context) => context.intention === 'fileComplaint')
-  .setNext(trackComplaint);
+  .setOptions(['fileComplaint'])
+  .setConditionalNext(fileComplaintGroup, (context) => context.intention === 'fileComplaint');
 
-complaintType2Step
+walkComplaintTypes
   .setPreamble(messages.fileComplaint.complaintType2Step.level.question.preamble)
   .setTrail(true)
   .setFetch((context, path) => pgrService.fetchComplaintHierarchyStep(context.extraInfo.tenantId, path))
   .setOnError(system_error)
   .setOnLeaf(otherGroup, { slot: 'complaint' });
 
-boundary
+walkBoundaries
   .setPreamble(messages.fileComplaint.boundary.question.preamble)
   .setFetch((context, path) => pgrService.fetchBoundaryStep(context.extraInfo.tenantId, path))
   .setOnError(system_error)
-  .setOnLeaf(consent, { slot: 'locality', set: recordCity })
-  .setOnEmpty(consent, { slot: 'locality', set: recordCity });
+  .setOnLeaf(askConsent, { slot: 'locality', set: recordCity })
+  .setOnEmpty(askConsent, { slot: 'locality', set: recordCity });
 
-institution
+askIntitution
   .setPrompt(messages.fileComplaint.institution.question)
   .setFill({ maxLength: config.instituteNameMaxLength })
   .setValidate((name) =>
@@ -113,34 +96,34 @@ institution
         ? messages.fileComplaint.institution.tooLong
         : true)
   .setOnValid((context, name) => { context.slots.pgr.instituteName = name; })
-  .setNext(description);
+  .setNext(askDescription);
 
-description
+askDescription
   .setPrompt(messages.fileComplaint.description.question)
   .setFill({ minLength: config.descriptionMinLength })
   .setValidate((text) => text.length >= config.descriptionMinLength ? true : messages.fileComplaint.description.tooShort)
   .setOnValid((context, text) => { context.slots.pgr.description = text; })
-  .setNext(imageUpload);
+  .setNext(askForAttachments);
 
-imageUpload
+askForAttachments
   .setPrompt(messages.fileComplaint.imageUpload.question)
   .setAccept(['image', 'document'])
   .setOptional(true)
   .setOnValid((context, input) => { context.slots.pgr.image = input; })
   .setNext(locationGroup);
 
-consent
+askConsent
   .setPrompt(messages.fileComplaint.consent.question)
   .setFill({ statements: consentStatements })
   .setOptions(['Yes', 'No'])
-  .setConditionalNext(confidentiality, (context) => context.intention === 'Yes')
+  .setConditionalNext(askConfidentiality, (context) => context.intention === 'Yes')
   .setNext(consentDeclined);
 
 consentDeclined
   .setPrompt(messages.fileComplaint.consent.declined)
   .setNext(endstate);
 
-confidentiality
+askConfidentiality
   .setPrompt(messages.fileComplaint.confidentiality.question)
   .setFill({ label: messages.fileComplaint.confidentiality.label, hint: messages.fileComplaint.confidentiality.hint })
   .setOptions(['Yes', 'No'])
@@ -156,22 +139,15 @@ persistComplaint
     3: () => moment().tz(config.timeZone).format(config.dateFormat)
   });
 
-trackComplaint
-  .setProcessing((context) => pgrService.fetchOpenComplaints(context.user, context.extraInfo))
-  .setConditionalNext(endstate, (context, event) => Array.isArray(event.data) && event.data.length > 0)
-  .setOutcomeMessage(complaintList)
-  .setNext(endstate)
-  .setOutcomeMessage(messages.trackComplaint.noRecords);
-
 const pgrConfig = {
   id: 'pgr',
   entry: assign((context) => { context.slots.pgr = {}; context.pgr = { slots: {} }; }),
-  ...compile([menu, fileComplaintGroup, trackComplaint, endstate, system_error], 'menu')
+  ...compile([menu, fileComplaintGroup, endstate, system_error], 'menu')
 };
 
 module.exports = {
   config: pgrConfig,
-  states: { menu, complaintType2Step, boundary, institution, description, imageUpload,
-    consent, consentDeclined, confidentiality, persistComplaint, trackComplaint,
+  states: { menu, complaintType2Step: walkComplaintTypes, boundary: walkBoundaries, institution: askIntitution, description: askDescription, imageUpload: askForAttachments,
+    consent: askConsent, consentDeclined, confidentiality: askConfidentiality, persistComplaint,
     endstate, system_error, fileComplaintGroup, typeGroup, locationGroup, otherGroup }
 };
