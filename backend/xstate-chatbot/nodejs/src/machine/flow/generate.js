@@ -326,6 +326,26 @@ function callMessage(branch, context, event) {
     : render(branch.message, branch.fill, context, event);
 }
 
+// Field contract per `kind` — what a step of that kind reads, and what each
+// field does. Common to nearly all kinds: `key` (name), `id` (xstate id
+// override), `next`/`onDone`/`onError` (routing target(s), declared in
+// shell-transitions.js / pgr-transitions.js, not here), `fill` (template values).
+//
+// goto   — nothing beyond `next`. Branches immediately, sends nothing.
+// gate   — nothing beyond `next`. Waits for one USER_MESSAGE, sends nothing, then branches.
+// say    — `prompt`, `effect` (side effect on entry). Sends the prompt(s), then branches.
+// ask    — `prompt`, `accept` (expected reply type/media), `optional`, `validate`
+//          (reply -> true | retry message), `slot`/`set` (write the reply into
+//          context), `retry` (fallback error message). Retries on invalid input.
+// choose — `options` (list or fn), `recognize` (extra match strings per option),
+//          `accept`, `slot`/`set`, `onUnknown` (fallback instead of a retry).
+//          Options double as the outcome keys `next`/`onDone` route by.
+// walk   — `fetch` (async fn returning the next level's options), `pathSlot`/
+//          `stepSlot` (where the walked path / fetched options live in
+//          context), `preamble`, `trail`, `onLeaf`/`onEmpty` (escape routes),
+//          `onError`. Drills into a hierarchy one fetch per level.
+// call   — `src` (async fn to run), `invokeId`, `onDone` (array of named
+//          outcomes: `to`, `when`, `message`, `set`), `onError`.
 const emitters = {
   // Branch immediately, send nothing. `say` with `prompt: []` would also emit
   // no message, but this states the intent and skips the no-op assign.

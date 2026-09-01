@@ -1,18 +1,6 @@
 // What each onboarding and shell step IS. Where each step GOES lives in
-// shell-transitions.js.
-//
-// Fields a step may declare:
-// `key`     — the step's name, referenced by shell-transitions.js.
-// `kind`    — step type (say/ask/choose/call/gate/goto); picks the behavior generate.js builds.
-// `prompt`  — the message(s) sent to the citizen.
-// `accept`  — expected reply type (e.g. 'text').
-// `options` — choices offered (list or a function).
-// `recognize` — extra strings that match an option, beyond its literal label (kind: 'choose').
-// `set`     — writes the reply into context.
-// `fill`    — values injected into the prompt template.
-// `src`     — async function to run (kind: 'call').
-// `onDone` / `onUnknown` — outcome routing after the step runs.
-// `effect`  — side effect run without changing the prompt flow.
+// shell-transitions.js. For the field contract per `kind`, see the comment
+// above `emitters` in generate.js.
 
 const config = require('../../env-variables');
 const dialog = require('../util/dialog');

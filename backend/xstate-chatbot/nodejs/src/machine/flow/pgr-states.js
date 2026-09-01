@@ -1,6 +1,7 @@
 // What each step of the grievance journey IS: its kind, its prompt, what it
 // validates, which slot it fills, which service it calls. Where each step GOES
-// lives in pgr-transitions.js.
+// lives in pgr-transitions.js. For the field contract per `kind`, see the
+// comment above `emitters` in generate.js.
 
 const dialog = require('../util/dialog');
 const moment = require('moment-timezone');
