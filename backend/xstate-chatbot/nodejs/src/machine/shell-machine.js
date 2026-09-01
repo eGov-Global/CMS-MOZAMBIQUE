@@ -23,14 +23,14 @@ const commitName = (context) => { context.user.name = context.onboarding.name; }
 
 // -- onboarding group ---------------------------------------------------
 
-const onboardingLocale = new QuestionState('onboardingLocale');
-const onboardingWelcome = new State('onboardingWelcome');
-const onboardingName = new AskState('onboardingName');
-const onBoardingUserProfileConfirmation = new QuestionState('onBoardingUserProfileConfirmation');
-const changeName = new AskState('changeName');
-const onboardingNameConfirmation = new QuestionState('onboardingNameConfirmation');
-const onboardingUpdateUserProfile = new ProcessingState('onboardingUpdateUserProfile');
-const onboardingThankYou = new State('onboardingThankYou');
+const askLocale = new QuestionState('onboardingLocale');
+const sayWelcome = new State('onboardingWelcome');
+const askForName = new AskState('onboardingName');
+const askToConfirmProfile = new QuestionState('onBoardingUserProfileConfirmation');
+const askToChangeName = new AskState('changeName');
+const askToConfirmName = new QuestionState('onboardingNameConfirmation');
+const updateUserProfile = new ProcessingState('onboardingUpdateUserProfile');
+const sayThankYou = new State('onboardingThankYou');
 
 // -- welcome group --------------------------------------------------------
 
@@ -39,88 +39,89 @@ const invoke = new State('invoke');
 
 // -- chassis (top level) --------------------------------------------------
 
-const start = new GateState('start');
-const endstate = new State('endstate');
-const system_error = new State('system_error');
-const pgr = new State('pgr'); // placeholder until pgr.js is ported
+const startNode = new GateState('start');
+const endNode = new State('endstate');
+const systemErrorNode = new State('system_error');
+const pgrNode = new State('pgr'); // placeholder until pgr.js is ported
 
-const onboardingGroup = new Group(
-  'onboarding',
-  [onboardingLocale, onboardingWelcome, onboardingName, onBoardingUserProfileConfirmation,
-    changeName, onboardingNameConfirmation, onboardingUpdateUserProfile, onboardingThankYou],
-  'onboardingLocale',
-  (context) => { context.onboarding = {}; }
-);
+const onboardingGroup = new Group('onboarding');
+onboardingGroup
+  .setStates([askLocale, sayWelcome, askForName, askToConfirmProfile,
+    askToChangeName, askToConfirmName, updateUserProfile, sayThankYou])
+  .setStart('onboardingLocale')
+  .setOnEntry((context) => { context.onboarding = {}; });
 
-const welcomeGroup = new Group('welcome', [preCondition, invoke], 'preCondition');
+const welcomeGroup = new Group('welcome')
+  .setStates([preCondition, invoke])
+  .setStart('preCondition');
 
 // -- wiring -----------------------------------------------------------
 
-start
+startNode
   .setConditionalNext(welcomeGroup, isOnboarded)
   .setNext(onboardingGroup);
 
-onboardingLocale
+askLocale
   .setPrompt(messages.onboarding.localeMenu)
   .setOptions(() => offeredLocales())
-  .setOnUnknown(onboardingWelcome, (context) => {
+  .setOnUnknown(sayWelcome, (context) => {
     context.user.locale = config.defaultLocale;
     context.onboarding.locale = config.defaultLocale;
   })
-  .setNext(onboardingWelcome, (context) => {
+  .setNext(sayWelcome, (context) => {
     context.user.locale = context.intention;
     context.onboarding.locale = context.intention;
   });
 
-onboardingWelcome
+sayWelcome
   .setPrompt(messages.onboarding.onboardingWelcome)
-  .setConditionalNext(onBoardingUserProfileConfirmation, hasProfileName)
-  .setNext(onboardingName);
+  .setConditionalNext(askToConfirmProfile, hasProfileName)
+  .setNext(askForName);
 
-onboardingName
+askForName
   .setPrompt([
     { bundle: messages.onboarding.nameInformation, delay: 3000 },
     { bundle: messages.onboarding.onboardingName.question, delay: 4000 }
   ])
   .setOnValid((context, name) => { context.onboarding.name = name; })
-  .setConditionalNext(onboardingNameConfirmation, gaveName)
-  .setNext(onboardingUpdateUserProfile);
+  .setConditionalNext(askToConfirmName, gaveName)
+  .setNext(updateUserProfile);
 
-onBoardingUserProfileConfirmation
+askToConfirmProfile
   .setPrompt([
     { bundle: messages.onboarding.nameInformation, delay: 3000, immediate: false },
     { bundle: messages.onboarding.onBoardingUserProfileConfirmation.question, delay: 4000 }
   ])
   .setFill({ name: (context) => context.user.name })
   .setOptions(['Yes', 'No'])
-  .setConditionalNext(onboardingUpdateUserProfile, (context) => context.intention === 'Yes')
-  .setNext(changeName);
+  .setConditionalNext(updateUserProfile, (context) => context.intention === 'Yes')
+  .setNext(askToChangeName);
 
-changeName
+askToChangeName
   .setPrompt(messages.onboarding.changeName.question)
   .setOnValid((context, name) => { context.onboarding.name = name; })
-  .setConditionalNext(onboardingNameConfirmation, gaveName);
+  .setConditionalNext(askToConfirmName, gaveName);
 
-onboardingNameConfirmation
+askToConfirmName
   .setPrompt([{ bundle: messages.onboarding.onboardingNameConfirmation, delay: 1000 }])
   .setFill({ name: (context) => context.onboarding.name })
   .setOptions(['Yes', 'No'])
-  .setConditionalNext(onboardingUpdateUserProfile, (context) => context.intention === 'Yes', commitName)
-  .setNext(changeName);
+  .setConditionalNext(updateUserProfile, (context) => context.intention === 'Yes', commitName)
+  .setNext(askToChangeName);
 
-onboardingUpdateUserProfile
+updateUserProfile
   .setProcessing((context) => userProfileService.updateUser(context.user, context.onboarding, context.extraInfo.tenantId))
   .setOnError(welcomeGroup)
-  .setConditionalNext(onboardingThankYou, (context) => context.onboarding && context.onboarding.name, (context) => {
+  .setConditionalNext(sayThankYou, (context) => context.onboarding && context.onboarding.name, (context) => {
     context.user.name = context.onboarding.name;
     context.user.locale = context.onboarding.locale;
     context.onboarding = undefined;
   })
-  .setNext(onboardingThankYou);
+  .setNext(sayThankYou);
 
-onboardingThankYou
+sayThankYou
   .setPrompt(messages.onboarding.onboardingThankYou)
-  .setNext(pgr);
+  .setNext(pgrNode);
 
 preCondition
   .setConditionalNext(invoke, isOnboarded)
@@ -129,22 +130,22 @@ preCondition
 invoke
   .setPrompt(messages.welcome)
   .setFill({ name: (context) => context.user.name || 'Citizen' })
-  .setNext(pgr);
+  .setNext(pgrNode);
 
-endstate
-  .setNext(start);
+endNode
+  .setNext(startNode);
 
-system_error
+systemErrorNode
   .setPrompt(dialog.global_messages.system_error)
   .setEffect((context, event) => context.chatInterface.system_error(event.data))
   .setNext(welcomeGroup);
 
-const config_ = compile([start, onboardingGroup, welcomeGroup, endstate, system_error, pgr], 'start');
+const config_ = compile([startNode, onboardingGroup, welcomeGroup, endNode, systemErrorNode, pgrNode], 'start');
 
 module.exports = {
   config: config_,
-  states: { start, onboardingGroup, welcomeGroup, endstate, system_error, pgr,
-    onboardingLocale, onboardingWelcome, onboardingName, onBoardingUserProfileConfirmation,
-    changeName, onboardingNameConfirmation, onboardingUpdateUserProfile, onboardingThankYou,
+  states: { start: startNode, onboardingGroup, welcomeGroup, endstate: endNode, system_error: systemErrorNode, pgr: pgrNode,
+    onboardingLocale: askLocale, onboardingWelcome: sayWelcome, onboardingName: askForName, onBoardingUserProfileConfirmation: askToConfirmProfile,
+    changeName: askToChangeName, onboardingNameConfirmation: askToConfirmName, onboardingUpdateUserProfile: updateUserProfile, onboardingThankYou: sayThankYou,
     preCondition, invoke }
 };

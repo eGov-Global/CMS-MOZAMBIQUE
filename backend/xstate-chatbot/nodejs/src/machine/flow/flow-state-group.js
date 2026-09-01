@@ -8,11 +8,26 @@ const { assign } = require('xstate');
 class Group {
   // onEntry (optional): a context-mutating function run when the group is
   // entered, e.g. clearing a scratch answer bag
-  constructor(key, states, initialKey, onEntry) {
+  constructor(key) {
     this.key = key;
+    this.states = [];
+    this.initialKey = undefined;
+    this.onEntry = undefined;
+}
+
+  setStart(key) {
+    this.initialKey = key;
+    return this;
+  }
+
+  setStates(states) {
     this.states = states;
-    this.initialKey = initialKey;
+    return this;
+  }
+
+  setOnEntry(onEntry) {
     this.onEntry = onEntry;
+    return this;
   }
 
   compileNode() {
