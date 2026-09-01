@@ -68,7 +68,7 @@ const fileComplaintGroup = new Group('fileComplaint')
 // -- wiring -----------------------------------------------------------
 
 menu
-  .setPrompt(messages.menu.question)
+  .setPrompt(messages.menu.singleOptionQuestion)
   .setOptions(['fileComplaint'])
   .setConditionalNext(fileComplaintGroup, (context) => context.intention === 'fileComplaint');
 
@@ -77,14 +77,14 @@ walkComplaintTypes
   .setTrail(true)
   .setFetch((context, path) => pgrService.fetchComplaintHierarchyStep(context.extraInfo.tenantId, path))
   .setOnError(system_error)
-  .setOnLeaf(otherGroup, { slot: 'complaint' });
+  .setOnLeaf(locationGroup, { slot: 'complaint' });
 
 walkBoundaries
   .setPreamble(messages.fileComplaint.boundary.question.preamble)
   .setFetch((context, path) => pgrService.fetchBoundaryStep(context.extraInfo.tenantId, path))
   .setOnError(system_error)
-  .setOnLeaf(askConsent, { slot: 'locality', set: recordCity })
-  .setOnEmpty(askConsent, { slot: 'locality', set: recordCity });
+  .setOnLeaf(otherGroup, { slot: 'locality', set: recordCity })
+  .setOnEmpty(otherGroup, { slot: 'locality', set: recordCity });
 
 askIntitution
   .setPrompt(messages.fileComplaint.institution.question)
@@ -110,7 +110,7 @@ askForAttachments
   .setAccept(['image', 'document'])
   .setOptional(true)
   .setOnValid((context, input) => { context.slots.pgr.image = input; })
-  .setNext(locationGroup);
+  .setNext(askConsent);
 
 askConsent
   .setPrompt(messages.fileComplaint.consent.question)
