@@ -7,6 +7,13 @@ const { assign } = require('xstate');
 const dialog = require('../util/dialog');
 const State = require('./flow-state');
 
+// A bare function is shorthand for { set: fn }; a step may have neither.
+function normalizeOutcome(state, options) {
+  if (!state) return undefined;
+  if (typeof options === 'function') return { state, set: options };
+  return { state, ...(options || {}) };
+}
+
 class WalkState extends State {
   // async fn(context, path) -> {options, messageBundle, trailBundle, levelLabel, isLeafLevel}
   setFetch(fn) {
@@ -14,18 +21,26 @@ class WalkState extends State {
     return this;
   }
 
+  // sets where to go if the fetch's promise rejects. Defaults to
+  // #system_error, matching the real walk kind's default.
   setOnError(state) {
     this.onError = state;
     return this;
   }
 
-  setOnEmpty(state, set) {
-    this.onEmpty = { state, set };
+  // state (and optional {slot, set}) to use when a fetch returns no options.
+  // slot, if given, is written with the parent level's code (the last path
+  // element) — there was no reply to record, this is an automatic escape.
+  // onEmpty is optional; some walks (e.g. complaintType2Step) don't have one.
+  setOnEmpty(state, options) {
+    this.onEmpty = normalizeOutcome(state, options);
     return this;
   }
 
-  setOnLeaf(state, set) {
-    this.onLeaf = { state, set };
+  // state (and optional {slot, set}) to use once a leaf option is picked.
+  // slot, if given, is written with the matched leaf code.
+  setOnLeaf(state, options) {
+    this.onLeaf = normalizeOutcome(state, options);
     return this;
   }
 
@@ -59,7 +74,6 @@ class WalkState extends State {
     const { levelLabel, trailBundle } = context[this.stepSlot] || {};
     let text = this.preamble ? dialog.get_message(this.preamble, context.user.locale) : '';
     text = text.replace('{{level}}', levelLabel || '');
-    
     if (this.trail) {
       const trail = this.getPath(context)
         .map((code) => (trailBundle && trailBundle[code] ? dialog.get_message(trailBundle[code], context.user.locale) : code))
@@ -81,18 +95,21 @@ class WalkState extends State {
               target: 'evaluate',
               actions: assign((context, event) => { context[this.stepSlot] = event.data; })
             },
-            onError: { target: '#' + this.onError.key }
+            onError: { target: this.onError ? '#' + this.onError.key : '#system_error' }
           }
         },
         evaluate: {
-          always: [
+          always: this.onEmpty ? [
             {
               target: '#' + this.onEmpty.state.key,
               cond: (context) => ((context[this.stepSlot] || {}).options || []).length === 0,
-              ...(this.onEmpty.set ? { actions: assign(this.onEmpty.set) } : {})
+              actions: assign((context) => {
+                if (this.onEmpty.slot) context.slots.pgr[this.onEmpty.slot] = this.getPath(context)[this.getPath(context).length - 1];
+                if (this.onEmpty.set) this.onEmpty.set(context);
+              })
             },
             { target: 'question' }
-          ]
+          ] : [{ target: 'question' }]
         },
         question: {
           entry: assign((context) => {
@@ -118,6 +135,7 @@ class WalkState extends State {
               target: '#' + this.onLeaf.state.key,
               cond: (context) => context.intention !== dialog.INTENTION_UNKOWN && (context[this.stepSlot] || {}).isLeafLevel,
               actions: assign((context) => {
+                if (this.onLeaf.slot) context.slots.pgr[this.onLeaf.slot] = context.intention;
                 context[this.pathSlot] = [...this.getPath(context), context.intention];
                 if (this.onLeaf.set) this.onLeaf.set(context);
               })

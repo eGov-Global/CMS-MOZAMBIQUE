@@ -1,0 +1,192 @@
+module.exports = {
+  menu: {
+    question: {
+      code: 'chatbot.pgr.menu.question',
+      en_IN: 'Please type and send the number for your option 👇\n\n*1.* File a new complaint\n*2.* Track existing complaints\n\n👉 To go back to the main menu, type and send *egov*.',
+      pt_PT: 'Escreva e envie o número da sua opção 👇\n\n*1.* Apresentar uma nova reclamação\n*2.* Consultar reclamações existentes\n\n👉 Para voltar ao menu principal, escreva e envie *egov*.'
+    }
+  },
+  fileComplaint: {
+    complaintType2Step: {
+      level: {
+        question: {
+          preamble: {
+            code: 'chatbot.pgr.hierarchy.preamble',
+            en_IN : 'Please type and send the number to select a {{level}} from the list below 👇\n',
+            pt_PT : '*{{level}}*\nEscreva e envie o número da opção desejada 👇\n'
+          }
+        }
+      },
+    }, // complaintType2Step
+    boundary: {
+      question: {
+        preamble: {
+          code: 'chatbot.pgr.boundary.preamble',
+          en_IN: 'Please type and send the number to select the {{level}} for your grievance 👇\n',
+          pt_PT: '*{{level}}*\nEscreva e envie o número correspondente ao local da sua reclamação 👇\n'
+        }
+      }
+    },
+    geoLocation: {
+      question: {
+        en_IN :'Please share your location if you are at the grievance site.\n\n👉  Refer the image below to understand steps for sharing the location.\n\n👉  To continue without sharing the location, type and send  *1*.',
+        hi_IN : 'यदि आप शिकायत स्थल पर हैं तो कृपया अपना स्थान साझा करें।\n\n👉 स्थान साझा करने के चरणों को समझने के लिए नीचे दी गई छवि देखें।\n\n👉 स्थान साझा किए बिना जारी रखने के लिए, टाइप करें और 1 भेजें।',
+        pa_IN : 'ਜੇ ਤੁਸੀਂ ਸ਼ਿਕਾਇਤ ਵਾਲੀ ਥਾਂ ਤੇ ਹੋ ਤਾਂ ਕਿਰਪਾ ਕਰਕੇ ਆਪਣਾ ਸਥਾਨ ਸਾਂਝਾ ਕਰੋ.\n\n👉 ਸਥਾਨ ਨੂੰ ਸਾਂਝਾ ਕਰਨ ਦੇ ਕਦਮਾਂ ਨੂੰ ਸਮਝਣ ਲਈ ਹੇਠ ਦਿੱਤੇ ਚਿੱਤਰ ਨੂੰ ਵੇਖੋ.\n\n👉 ਨਿਰਧਾਰਤ ਸਥਾਨ ਸਾਂਝਾ ਕੀਤੇ ਬਗੈਰ ਜਾਰੀ ਰੱਖਣ ਲਈ, 1 ਲਿਖੋ ਅਤੇ ਭੇਜੋ.'
+      }
+    }, // geoLocation
+    confirmLocation: {
+      confirmCityAndLocality: {
+        en_IN: 'Is this the correct location of the complaint?\nCity: {{city}}\nLocality: {{locality}}\n\nType and send *1* if it is incorrect\nElse, type and send *2* to confirm and proceed',
+        hi_IN: 'क्या यह शिकायत का सही स्थान है?\शहर: {{city}}\स्थान: {{locality}}\n\nटाइप करें और 1 भेजें यदि यह गलत है\nअन्यथा, पुष्टि करने और आगे बढ़ने के लिए 2 टाइप करें और भेजें',
+        pa_IN: 'ਕੀ ਇਹ ਸ਼ਿਕਾਇਤ ਦਾ ਸਹੀ ਸਥਾਨ ਹੈ?\ਸ਼ਹਿਰ: {{city}}\ਸਥਾਨ: {{locality}}\n\nਟਾਈਪ ਕਰੋ ਅਤੇ 1 ਭੇਜੋ ਜੇ ਇਹ ਗਲਤ ਹੈ\nਹੋਰ, ਪੁਸ਼ਟੀ ਕਰਨ ਅਤੇ ਅੱਗੇ ਵਧਣ ਲਈ ਟਾਈਪ ਕਰੋ ਅਤੇ 2 ਭੇਜੋ'
+      },
+      confirmCity: {
+        en_IN: 'Is this the correct location of the complaint?\nCity: {{city}}\n\nType and send *1* if it is incorrect\nElse, type and send *2* to confirm and proceed',
+        hi_IN: 'क्या यह शिकायत का सही स्थान है? \nशहर: {{city}}\n अगर यह गलत है तो कृपया "No" भेजें।\nअन्यथा किसी भी चरित्र को टाइप करें और आगे बढ़ने के लिए भेजें।'
+      }
+    },
+    city: {
+      question: {
+        preamble: {
+          en_IN: 'Please type and send the number to select your city from the list below 👇\n',
+          hi_IN: 'नीचे दी गई सूची से अपने शहर का चयन करने के लिए विकल्प संख्या टाइप करें और भेजें 👇\n'
+        }
+      }
+    }, // city
+    locality: {
+      question: {
+        preamble: {
+          en_IN: 'Please type and send the number to select your locality from the list below 👇\n',
+          hi_IN: 'नीचे दी गई सूची से अपने इलाके का चयन करने के लिए विकल्प संख्या टाइप करें और भेजें 👇\n'
+        }
+      }
+    }, // locality
+    consent: {
+      dataProcessing: {
+        code: 'PGR_CONSENT_DATA_PROCESSING_LABEL',
+        en_IN: 'I consent to my data being processed to handle this complaint.',
+        pt_PT: 'Autorizo o tratamento dos meus dados pessoais para a tramitação desta manifestação.'
+      },
+      truthfulness: {
+        code: 'PGR_CONSENT_TRUTHFULNESS_LABEL',
+        en_IN: 'I declare that the information provided is true and accurate.',
+        pt_PT: 'Declaro que as informações prestadas são verdadeiras e exactas.'
+      },
+      question: {
+        code: 'chatbot.pgr.consent.question',
+        en_IN: 'Before your grievance is filed, please confirm the following:\n\n{{statements}}\n\n👉 Type and send *1* to accept.\n👉 Type and send *2* to decline.',
+        pt_PT: 'Antes de registarmos a sua reclamação, confirme o seguinte:\n\n{{statements}}\n\n👉 Escreva e envie *1* para aceitar.\n👉 Escreva e envie *2* para não aceitar.'
+      },
+      declined: {
+        code: 'chatbot.pgr.consent.declined',
+        en_IN: 'Your grievance has not been filed, as consent is required to process it.\n\nType *egov* whenever you would like to start again.',
+        pt_PT: 'A sua reclamação não foi registada, pois o consentimento é necessário para o seu tratamento.\n\nEscreva *egov* quando quiser começar de novo.'
+      }
+    },
+    confidentiality: {
+      label: {
+        code: 'PGR_EXT_IS_CONFIDENTIAL_LABEL',
+        en_IN: 'Keep details confidential.',
+        pt_PT: 'Mantenha os detalhes confidenciais.'
+      },
+      hint: {
+        code: 'PGR_EXT_IS_CONFIDENTIAL_HINT',
+        en_IN: 'Visibility is enforced once secure handling is enabled; for now this flags the complaint for staff awareness.',
+        pt_PT: 'A visibilidade é garantida assim que o processamento seguro é ativado; por enquanto, isso sinaliza a reclamação para que a equipe esteja ciente.'
+      },
+      question: {
+        code: 'chatbot.pgr.confidentiality.question',
+        en_IN: '{{label}}\n\n{{hint}}\n\n👉 Type and send *1* to keep your details confidential.\n👉 Type and send *2* to continue without confidentiality.',
+        pt_PT: '{{label}}\n\n{{hint}}\n\n👉 Escreva e envie *1* para manter os seus dados confidenciais.\n👉 Escreva e envie *2* para continuar sem confidencialidade.'
+      }
+    },
+    institution: {
+      question: {
+        code: 'chatbot.pgr.institution.question',
+        en_IN: 'Which institution is your grievance about?\n\nPlease type and send its name.',
+        pt_PT: 'A que instituição se refere a sua reclamação?\n\nEscreva e envie o nome da instituição.'
+      },
+      tooLong: {
+        code: 'chatbot.pgr.institution.tooLong',
+        en_IN: 'That name is too long. Please send the institution name using at most {{maxLength}} characters.',
+        pt_PT: 'Esse nome é demasiado longo. Envie o nome da instituição com um máximo de {{maxLength}} caracteres.'
+      }
+    },
+    description: {
+      question: {
+        code: 'chatbot.pgr.description.question',
+        en_IN: 'Please describe your grievance in one message, using at least {{minLength}} characters.',
+        pt_PT: 'Descreva a sua reclamação numa única mensagem, com pelo menos {{minLength}} caracteres.'
+      },
+      tooShort: {
+        code: 'chatbot.pgr.description.tooShort',
+        en_IN: 'That description is too short. Please describe your grievance in at least {{minLength}} characters, in a single message.',
+        pt_PT: 'Essa descrição é demasiado curta. Descreva a sua reclamação com pelo menos {{minLength}} caracteres, numa única mensagem.'
+      }
+    },
+    imageUpload: {
+      question: {
+        code: 'chatbot.pgr.attachment.question',
+        en_IN: 'If possible, attach a photo or document of your grievance.\n\nTo continue without attaching, type and send *1*',
+        pt_PT: 'Se possível, anexe uma fotografia ou um documento relativo à sua reclamação.\n\n👉 Para continuar sem anexar, escreva e envie *1*.'
+      }
+    },
+    persistComplaint: {
+      code: 'chatbot.pgr.confirmation',
+      en_IN: 'Your complaint has been registered successfully.\n\nCategory: {{1}}\nReference: {{2}}\nDate: {{3}}\n\nYour complaint will be reviewed by the responsible institution.\nYou can follow its progress on the *Fala Cidadão Portal* or in the mobile app.\nThank you for helping improve public services.\n\nFala Cidadão\nhttps://www.falacidadao.co.mz',
+      pt_PT: 'Reclamação registada com sucesso.\n\nCategoria: {{1}}\nReferência: {{2}}\nData: {{3}}\n\nA sua reclamação será analisada pela instituição responsável.\nPode acompanhar o estado no *Portal Fala Cidadão* ou na aplicação móvel.\nObrigado por contribuir para a melhoria dos serviços públicos.\n\nFala Cidadão\nhttps://www.falacidadao.co.mz'
+    },
+    cityFuzzySearch: {
+      question: {
+        en_IN: "Enter the name of your city.\n\n(For example - CityA)",
+        hi_IN: "अपने शहर का नाम दर्ज करें। (उदाहरण के लिए - CityA)",
+        pa_IN: "ਆਪਣੇ ਸ਼ਹਿਰ ਦਾ ਨਾਮ ਦਰਜ ਕਰੋ. (ਉਦਾਹਰਣ ਵਜੋਂ - CityA)"
+      },
+      confirmation: {
+        en_IN: "Did you mean *“{{city}}”* ?\n\n👉  Type and send *1* to confirm.\n\n👉  Type and send *2* to write again.",
+        hi_IN: "क्या आपका मतलब *“{{city}}”* से था ?\n\n👉 टाइप करें और पुष्टि करने के लिए 1 भेजें।\n\n👉 टाइप करें और फिर से लिखने के लिए 2 भेजें।",
+        pa_IN: "ਕੀ ਤੁਹਾਡਾ ਮਤਲਬ *“{{city}}”* ਹੈ ?\n\n👉 ਪੁਸ਼ਟੀ ਕਰਨ ਲਈ 1 ਲਿਖੋ ਅਤੇ ਭੇਜੋ.\n\n👉 ਟਾਈਪ ਕਰੋ ਅਤੇ ਦੁਬਾਰਾ ਲਿਖਣ ਲਈ 2 ਭੇਜੋ."
+      },
+      noRecord:{
+        en_IN: 'Provided city is miss-spelled or not present in our system record.\nPlease enter the details again.',
+        hi_IN: 'आपके द्वारा दर्ज किया गया शहर गलत वर्तनी वाला है या हमारे सिस्टम रिकॉर्ड में मौजूद नहीं है।\nकृपया फिर से विवरण दर्ज करें।'
+      }
+    },
+    localityFuzzySearch: {
+      question: {
+        en_IN: "Enter the name of your locality.\n\n(For example - Evergreen Park)",
+        hi_IN: "अपने इलाके का नाम दर्ज करें। (उदाहरण के लिए - Evergreen Park)",
+        pa_IN: "ਆਪਣੇ ਸਥਾਨ ਦਾ ਨਾਮ ਦਰਜ ਕਰੋ. (ਉਦਾਹਰਣ ਵਜੋਂ - Evergreen Park)"
+      },
+      confirmation: {
+        en_IN: "Did you mean *“{{locality}}”* ?\n\n👉  Type and send *1* to confirm.\n\n👉  Type and send *2* to write again.",
+        hi_IN: "क्या आपका मतलब *“{{locality}}”* से था ?\n\n👉 टाइप करें और पुष्टि करने के लिए 1 भेजें।\n\n👉 टाइप करें और फिर से लिखने के लिए 2 भेजें।",
+        pa_IN: "ਕੀ ਤੁਹਾਡਾ ਮਤਲਬ *“{{locality}}”* ਹੈ ?\n\n👉 ਪੁਸ਼ਟੀ ਕਰਨ ਲਈ 1 ਲਿਖੋ ਅਤੇ ਭੇਜੋ.\n\n👉 ਟਾਈਪ ਕਰੋ ਅਤੇ ਦੁਬਾਰਾ ਲਿਖਣ ਲਈ 2 ਭੇਜੋ."
+      },
+      noRecord:{
+        en_IN: 'Provided locality is miss-spelled or not present in our system record.\nPlease enter the details again.',
+        hi_IN: 'आपके द्वारा दर्ज किया गया स्थान गलत वर्तनी वाला है या हमारे सिस्टम रिकॉर्ड में मौजूद नहीं है।\nकृपया फिर से विवरण दर्ज करें।'
+      }
+    }
+  },
+  trackComplaint: {
+    results: {
+      preamble: {
+        en_IN: 'Here are your recent complaints 👇',
+        hi_IN: 'यहां आपकी हाल की शिकायतें हैं 👇'
+      },
+      complaintTemplate: {
+        en_IN: '*{{complaintType}}*\n\nComplaint No: {{complaintNumber}}\nFiled Date: {{filedDate}}\nStatus: *{{complaintStatus}}*',
+        hi_IN: '*{{complaintType}}*\n\nशिकायत संख्या: {{complaintNumber}}\nदायर तिथि: {{filedDate}}\nस्थिति: *{{complaintStatus}}*'
+      },
+      closingStatement: {
+        en_IN: '\n\n👉 To go back to the main menu, type and send *egov*.',
+        hi_IN: '\n\n👉 मुख्य मेनू पर वापस जाने के लिए, टाइप करें और भेजें *egov*।'
+      }
+    },
+    noRecords: {
+      en_IN: 'No complaint records were found for your account.\n\n👉 To go back to the main menu, type and send *egov*.',
+      hi_IN: 'आपके खाते के लिए कोई शिकायत रिकॉर्ड नहीं मिला।\n\n👉 मुख्य मेनू पर वापस जाने के लिए, टाइप करें और भेजें *egov*।'
+    }
+  }
+};

@@ -45,33 +45,42 @@ class State {
 
 
   
+  // renders a bundle's localized text with template tokens filled in. Each
+  // fill value may be a function(context, event), a locale bundle object
+  // (resolved via get_message), or a plain value.
+  renderText(bundle, fill, context, event) {
+    let text = dialog.get_message(bundle, context.user.locale);
+    for (const token of Object.keys(fill || {})) {
+      const marker = `{{${token}}}`;
+      if (!text.includes(marker)) continue;
+
+      const raw = fill[token];
+      const value = typeof raw === 'function'
+        ? raw(context, event)
+        : (raw && typeof raw === 'object' ? dialog.get_message(raw, context.user.locale) : raw);
+      text = text.split(marker).join(String(value ?? ''));
+    }
+    return text;
+  }
+
   // sends the prompt's localized text to the citizen. this.prompt may be a
   // single bundle, or an array of {bundle, delay, immediate} for multiple
   // staggered messages. Template tokens filled from this.fill plus extraFill.
-  enter(context, extraFill) {
+  enter(context, extraFill, event) {
     if (!this.prompt) return;
 
     const items = Array.isArray(this.prompt) ? this.prompt : [{ bundle: this.prompt }];
 
     for (const item of items) {
       const send = () => {
-        let text = dialog.get_message(item.bundle, context.user.locale);
         const fill = { ...this.fill, ...extraFill };
-
-        for (const token of Object.keys(fill)) {
-          const marker = `{{${token}}}`;
-          if (!text.includes(marker)) continue;
-          
-          const value = typeof fill[token] === 'function' ? fill[token](context) : fill[token];
-          text = text.split(marker).join(String(value ?? ''));
-        }
-
+        const text = this.renderText(item.bundle, fill, context, event);
         dialog.sendMessage(context, text, item.immediate !== false);
       };
-      
-      if (item.delay) 
+
+      if (item.delay)
         setTimeout(send, item.delay);
-      else 
+      else
         send();
     }
   }
