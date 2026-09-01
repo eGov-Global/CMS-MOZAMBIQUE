@@ -919,15 +919,16 @@ class PGRService {
 
     let response = await fetch(url, options);
 
-    let results;
     if (response.status === 200) {
+      // the create endpoint returns a single service object, not the
+      // {ServiceWrappers: [...]} shape preparePGRResult expects (that's for
+      // search results) - read the created complaint's reference directly
       let responseBody = await response.json();
-      results = await this.preparePGRResult(responseBody, user.locale);
+      return { complaintNumber: responseBody.service && responseBody.service.serviceRequestId };
     } else {
       const errorText = await response.text();
-      return undefined;
+      throw new Error(`Failed to create complaint: ${response.status} ${errorText}`);
     }
-    return results[0];
   }
 
   async fetchOpenComplaints(user, extraInfo) {

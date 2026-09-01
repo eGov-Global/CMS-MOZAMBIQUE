@@ -3,15 +3,15 @@ module.exports = {
     // used by the original pgr.js (still has both fileComplaint/trackComplaint)
     question: {
       code: 'chatbot.pgr.menu.question',
-      en_IN: 'Please type and send the number for your option 👇\n\n*1.* File a new complaint\n*2.* Track existing complaints\n\n👉 To go back to the main menu, type and send *egov*.',
-      pt_PT: 'Escreva e envie o número da sua opção 👇\n\n*1.* Apresentar uma nova reclamação\n*2.* Consultar reclamações existentes\n\n👉 Para voltar ao menu principal, escreva e envie *egov*.'
+      en_IN: 'Please type and send the number for your option 👇\n\n*1.* File a new complaint\n*2.* Track existing complaints\n\n👉 To go back to the main menu, type and send *voltar*.',
+      pt_PT: 'Escreva e envie o número da sua opção 👇\n\n*1.* Apresentar uma nova reclamação\n*2.* Consultar reclamações existentes\n\n👉 Para voltar ao menu principal, escreva e envie *voltar*.'
     },
     // used by pgr-machine.js, which dropped trackComplaint - no `code`, since
     // the real localization service still has an old translation stored
     // under chatbot.pgr.menu.question (get_message would check that first)
     singleOptionQuestion: {
-      en_IN: 'Please type and send *1* to file a new complaint 👇\n\n👉 To go back to the main menu, type and send *egov*.',
-      pt_PT: 'Escreva e envie *1* para apresentar uma nova reclamação 👇\n\n👉 Para voltar ao menu principal, escreva e envie *egov*.'
+      en_IN: 'Please type and send *1* to file a new complaint 👇\n\n👉 To go back to the main menu, type and send *voltar*.',
+      pt_PT: 'Escreva e envie *1* para apresentar uma nova reclamação 👇\n\n👉 Para voltar ao menu principal, escreva e envie *voltar*.'
     }
   },
   fileComplaint: {
@@ -87,8 +87,8 @@ module.exports = {
       },
       declined: {
         code: 'chatbot.pgr.consent.declined',
-        en_IN: 'Your grievance has not been filed, as consent is required to process it.\n\nType *egov* whenever you would like to start again.',
-        pt_PT: 'A sua reclamação não foi registada, pois o consentimento é necessário para o seu tratamento.\n\nEscreva *egov* quando quiser começar de novo.'
+        en_IN: 'Your grievance has not been filed, as consent is required to process it.\n\nType *voltar* whenever you would like to start again.',
+        pt_PT: 'A sua reclamação não foi registada, pois o consentimento é necessário para o seu tratamento.\n\nEscreva *voltar* quando quiser começar de novo.'
       }
     },
     confidentiality: {
@@ -188,13 +188,13 @@ module.exports = {
         hi_IN: '*{{complaintType}}*\n\nशिकायत संख्या: {{complaintNumber}}\nदायर तिथि: {{filedDate}}\nस्थिति: *{{complaintStatus}}*'
       },
       closingStatement: {
-        en_IN: '\n\n👉 To go back to the main menu, type and send *egov*.',
-        hi_IN: '\n\n👉 मुख्य मेनू पर वापस जाने के लिए, टाइप करें और भेजें *egov*।'
+        en_IN: '\n\n👉 To go back to the main menu, type and send *voltar*.',
+        hi_IN: '\n\n👉 मुख्य मेनू पर वापस जाने के लिए, टाइप करें और भेजें *voltar*।'
       }
     },
     noRecords: {
-      en_IN: 'No complaint records were found for your account.\n\n👉 To go back to the main menu, type and send *egov*.',
-      hi_IN: 'आपके खाते के लिए कोई शिकायत रिकॉर्ड नहीं मिला।\n\n👉 मुख्य मेनू पर वापस जाने के लिए, टाइप करें और भेजें *egov*।'
+      en_IN: 'No complaint records were found for your account.\n\n👉 To go back to the main menu, type and send *voltar*.',
+      hi_IN: 'आपके खाते के लिए कोई शिकायत रिकॉर्ड नहीं मिला।\n\n👉 मुख्य मेनू पर वापस जाने के लिए, टाइप करें और भेजें *voltar*।'
     }
   }
 };

@@ -18,9 +18,9 @@ module.exports = {
     onboardingWelcome: {
       code: 'chatbot.pgr.onboarding.welcome',
       en_IN:
-        "Dear Citizen,\n\nWelcome to the eGov Whatsapp Chatbot experience 🙏\n\nNow you can file your complaint via WhatsApp.",
+        "Dear Citizen,\n\nWelcome to the Fala Cidadao Whatsapp Chatbot experience 🙏\n\nNow you can file your complaint via WhatsApp.",
       pt_PT:
-        "Estimado(a) Cidadão(ã),\n\nBem-vindo(a) ao chatbot eGov no WhatsApp 🙏\n\nJá pode apresentar a sua reclamação através do WhatsApp.",
+        "Estimado(a) Cidadão(ã),\n\nBem-vindo(a) ao chatbot do Fala Cidadão no WhatsApp 🙏\n\nJá pode apresentar a sua reclamação através do WhatsApp.",
     },
     onboardingName: {
       question: {
@@ -72,8 +72,8 @@ module.exports = {
   welcome: {
     code: 'chatbot.pgr.welcome',
     en_IN:
-      "Dear {{name}},\n\nWelcome to eGov WhatsApp chatbot 🙏.\n\nYou can now file your complaint via WhatsApp.\n",
+      "Dear {{name}},\n\nWelcome to Fala Cidadao WhatsApp chatbot 🙏.\n\nYou can now file your complaint via WhatsApp.\n",
     pt_PT:
-      "Estimado(a) {{name}},\n\nBem-vindo(a) ao chatbot eGov no WhatsApp 🙏.\n\nJá pode apresentar a sua reclamação através do WhatsApp.\n",
+      "Estimado(a) {{name}},\n\nBem-vindo(a) ao chatbot Fala Cidadão no WhatsApp 🙏.\n\nJá pode apresentar a sua reclamação através do WhatsApp.\n",
   },
 };
