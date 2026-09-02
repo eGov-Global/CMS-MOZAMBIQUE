@@ -162,7 +162,22 @@ for p in compose_files():
 
 # ---------------------------------------------------------------------------
 # CMS-SEC-08  Unauthenticated admin / API surface exposed via nginx
+#   The /mcp admin-tools block is wrapped in `{% if nginx_features.mcp %}` and that
+#   feature defaults to OFF (group_vars). On a default production deploy the block is
+#   never rendered, so the exposure is CONDITIONAL (only when a tenant opts in) - flag it
+#   as a lower-severity conditional finding rather than an active High/critical exposure.
 # ---------------------------------------------------------------------------
+def _mcp_default_off():
+    """True if the mcp nginx feature defaults to false in the inventory group_vars."""
+    for gv in glob.glob(os.path.join(ANSIBLE, "inventory", "group_vars", "*.y*ml")):
+        for ln in readlines(gv):
+            m = re.match(r"\s*mcp:\s*(true|false)\b", ln, re.I)
+            if m:
+                return m.group(1).lower() == "false"
+    return False
+
+MCP_OFF = _mcp_default_off()
+
 for p in glob.glob(os.path.join(ANSIBLE, "templates", "*nginx*.j2")):
     lines = readlines(p)
     for i, ln in enumerate(lines, 1):
@@ -171,7 +186,17 @@ for p in glob.glob(os.path.join(ANSIBLE, "templates", "*nginx*.j2")):
             continue
         # look ahead in the block for an auth directive
         block = "\n".join(lines[i - 1:i + 25])
-        if not re.search(r"auth_basic|auth_request|auth_jwt|satisfy", block, re.I):
+        if re.search(r"auth_basic|auth_request|auth_jwt|satisfy", block, re.I):
+            continue
+        # is this location gated by a jinja `{% if ... mcp ... %}` above it (still open)?
+        preceding = "\n".join(lines[max(0, i - 20):i - 1])
+        gated = bool(re.search(r"\{%-?\s*if[^%]*\bmcp\b", preceding, re.I)) and \
+            "endif" not in preceding.split("mcp", 1)[-1]
+        if gated and MCP_OFF:
+            add("CMS-SEC-08",
+                "Unauthenticated /mcp admin tools exposed only when nginx_features.mcp is enabled (default: off)",
+                "MEDIUM", "ansible", p, i)
+        else:
             add("CMS-SEC-08", "Unauthenticated admin/API surface exposed via nginx", "HIGH", "ansible", p, i)
 
 
