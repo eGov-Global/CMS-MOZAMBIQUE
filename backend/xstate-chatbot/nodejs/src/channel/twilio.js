@@ -194,14 +194,14 @@ class TwilioWhatsAppProvider {
     }
 
     extractPhoneNumber(twilioNumber) {
-        // Twilio format: whatsapp:+919876543210
-        // Extract just the number without country code prefix
-        let number = twilioNumber.replace('whatsapp:', '').replace('+', '');
-        // Remove country code (assuming 91 for India)
-        if (number.startsWith('91') && number.length > 10) {
-            number = number.slice(2);
-        }
-        return number;
+        // Twilio format: whatsapp:+258849904390 - strip to the bare national
+        // number, mirroring toWhatsAppNumber's own use of config.countryCode
+        // (this used to hardcode stripping '91' for India, which never matched
+        // a +258 number, so context.user.mobileNumber kept its country code
+        // and never matched entries in ALLOWED_MOBILE_NUMBERS).
+        const digits = String(twilioNumber).replace(/\D/g, '');
+        const countryCode = String(config.countryCode).replace(/\D/g, '');
+        return countryCode && digits.startsWith(countryCode) ? digits.slice(countryCode.length) : digits;
     }
 
     getInputType(requestBody) {
