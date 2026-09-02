@@ -6,7 +6,16 @@ const pgr = require('./pgr-machine');
 
 const config = {
   id: 'citizenService',
-  on: { USER_RESET: { target: '#welcome' } },
+  // Mirrors start's own whitelist guard: USER_RESET (a greeting/reset keyword
+  // like "hi" or "voltar") is handled at the root, before any child state's
+  // own guards run, so without this a non-whitelisted number could bypass
+  // start's gate entirely just by sending a greeting.
+  on: {
+    USER_RESET: [
+      { target: '#notAuthorized', cond: (context) => !shell.isWhitelisted(context) },
+      { target: '#welcome' }
+    ]
+  },
   ...shell.config,
   states: { ...shell.config.states, pgr: pgr.config }
 };

@@ -155,6 +155,7 @@ const config_ = compile([startNode, onboardingGroup, welcomeGroup, endNode, syst
 
 module.exports = {
   config: config_,
+  isWhitelisted,
   states: { start: startNode, onboardingGroup, welcomeGroup, endstate: endNode, system_error: systemErrorNode, pgr: pgrNode, notAuthorized,
     onboardingLocale: askLocale, onboardingWelcome: sayWelcome, onboardingName: askForName, onBoardingUserProfileConfirmation: askToConfirmProfile,
     changeName: askToChangeName, onboardingNameConfirmation: askToConfirmName, onboardingUpdateUserProfile: updateUserProfile, onboardingThankYou: sayThankYou,
