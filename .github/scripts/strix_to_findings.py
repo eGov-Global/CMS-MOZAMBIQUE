@@ -18,10 +18,13 @@ import os, re, json, glob
 
 OUT = os.environ.get("OUT", "custom.json")
 PREFIX = os.environ.get("STRIX_PREFIX", "local-setup").strip("/")
+BASE = os.environ.get("BASE", ".")   # repo root, to VALIDATE that reported paths are real
 SARIF = os.environ.get("SARIF", "")
 if not SARIF:
     cands = sorted(glob.glob("strix_runs/*/findings.sarif"), key=os.path.getmtime, reverse=True)
     SARIF = cands[0] if cands else "findings.sarif"
+
+_PATH_RE = re.compile(r"[\w][\w./-]+\.(?:json|ya?ml|md|sh|j2|py|js|ts|lock|env|toml|xml|properties|sql|conf|cfg|ini)")
 
 
 def sev_from_cvss(c):
@@ -60,6 +63,39 @@ def clean(text, title):
     return " ".join(t.split())  # collapse whitespace/newlines for a compact cell
 
 
+def _exists(relpath):
+    return bool(relpath) and os.path.exists(os.path.join(BASE, relpath))
+
+
+def resolve_location(raw_uri, title, why):
+    """Deliberative location check. Strix's reported uri is often wrong/hallucinated
+    (e.g. `SECURITY.md` for a handlebars CVE that's really in tests/package-lock.json).
+    1) if the reported path exists in the repo, trust it;
+    2) else recover a real path mentioned in the title/description;
+    3) else give up (None) so the caller drops the finding - we never emit a broken link.
+    Returns (repo_relative_path | None, recovered: bool)."""
+    p = rel(raw_uri)
+    if _exists(p):
+        return p, False
+    for tok in _PATH_RE.findall(f"{title}\n{why}"):
+        cand = rel(tok)
+        if _exists(cand):
+            return cand, True
+    return None, True
+
+
+def fix_title_path(title, resolved):
+    """If the title names a `path` that differs from the validated location, replace it
+    with the real file so the title never claims the wrong file (Strix reused one title
+    for several distinct files)."""
+    target = resolved[len(PREFIX) + 1:] if resolved.startswith(PREFIX + "/") else resolved
+    toks = re.findall(r"`([^`]+)`", title)
+    pathish = [t for t in toks if "/" in t or _PATH_RE.fullmatch(t)]
+    if pathish and target not in pathish and os.path.basename(target) not in [os.path.basename(t) for t in pathish]:
+        return title.replace(f"`{pathish[-1]}`", f"`{target}`")
+    return title
+
+
 def main():
     try:
         sar = json.load(open(SARIF))
@@ -69,6 +105,7 @@ def main():
     run = (sar.get("runs") or [{}])[0]
     rules = run.get("tool", {}).get("driver", {}).get("rules", [])
     out = []
+    dropped = []
     for r in run.get("results", []):
         rid = r.get("ruleId") or ""
         rule = {}
@@ -79,20 +116,27 @@ def main():
         rp = rule.get("properties", {}) or {}
         props = r.get("properties", {}) or {}
         cvss = props.get("security-severity") or rp.get("security-severity")
-        title = rule.get("name") or (r.get("message", {}) or {}).get("text", "").split("\n")[0]
-        title = title.strip()[:120]
+        title = (rule.get("name") or (r.get("message", {}) or {}).get("text", "").split("\n")[0]).strip()[:140]
         loc = ((r.get("locations") or [{}])[0].get("physicalLocation") or {})
-        uri = rel((loc.get("artifactLocation") or {}).get("uri"))
+        raw_uri = (loc.get("artifactLocation") or {}).get("uri")
         line = (loc.get("region") or {}).get("startLine")
         why = clean((r.get("message", {}) or {}).get("text", ""), title)
         fixes = r.get("fixes") or []
         fix = clean((fixes[0].get("description", {}) or {}).get("text", ""), "") if fixes else ""
         cwe = cwe_of(rid, rp.get("tags"))
         guide = f"https://cwe.mitre.org/data/definitions/{cwe.split('-')[1]}.html" if cwe else ""
-        if not uri:
+
+        # DELIBERATIVE location validation - never emit a finding we cannot pin to a real file.
+        resolved, recovered = resolve_location(raw_uri, title, why)
+        if not resolved:
+            dropped.append(f"{rid} (uri={raw_uri!r} - no real repo file found)")
             continue
-        out.append({"source": "Strix", "area": area_of(uri), "severity": sev_from_cvss(cvss),
-                    "id": rid or "STRIX", "title": title, "file": uri, "line": line,
+        if recovered:
+            line = None                       # Strix's line was for its wrong uri; don't trust it
+        title = fix_title_path(title, resolved)   # always: the title must name the validated file
+
+        out.append({"source": "Strix", "area": area_of(resolved), "severity": sev_from_cvss(cvss),
+                    "id": rid or "STRIX", "title": title[:140], "file": resolved, "line": line,
                     "desc": "", "guide": guide,
                     "why": why, "fix": fix or "See the Strix-generated patch for the concrete change.",
                     "cvss": round(float(cvss), 1) if cvss else None, "cwe": cwe})
@@ -102,7 +146,10 @@ def main():
         try: existing = json.load(open(OUT))
         except Exception: existing = []
     json.dump(existing + out, open(OUT, "w"), indent=1)
-    print(f"Strix: added {len(out)} finding(s) from {SARIF} -> {OUT} (total {len(existing) + len(out)}).")
+    msg = f"Strix: added {len(out)} finding(s) from {SARIF} -> {OUT} (total {len(existing) + len(out)})."
+    if dropped:
+        msg += f" Dropped {len(dropped)} with unverifiable location: " + "; ".join(dropped)
+    print(msg)
 
 
 if __name__ == "__main__":
