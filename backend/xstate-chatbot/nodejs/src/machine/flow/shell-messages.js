@@ -13,14 +13,14 @@ module.exports = {
     localeMenu: {
       code: 'chatbot.pgr.locale.question',
       en_IN: "To select the language simply type and send the number of the preferred option  👇\n\n{{options}}",
-      pt_PT: "Para escolher o idioma, escreva e envie o número da opção pretendida 👇\n\n{{options}}",
+      pt_PT: "Para escolher o idioma, envie o número da opção pretendida: \n\n{{options}}",
     },
     onboardingWelcome: {
       code: 'chatbot.pgr.onboarding.welcome',
       en_IN:
         "Dear Citizen,\n\nWelcome to the Fala Cidadao Whatsapp Chatbot experience 🙏\n\nNow you can file your complaint via WhatsApp.",
       pt_PT:
-        "Estimado(a) Cidadão(ã),\n\nBem-vindo(a) ao chatbot do Fala Cidadão no WhatsApp 🙏\n\nJá pode apresentar a sua reclamação através do WhatsApp.",
+        "Estimado(a) Cidadão(ã),\n\nBem-vindo(a) ao chatbot do Fala Cidadão no WhatsApp \n\nJá pode apresentar a sua reclamação através do WhatsApp.",
     },
     onboardingName: {
       question: {
@@ -28,7 +28,7 @@ module.exports = {
         en_IN:
           "As per our records, we have not found any name linked to this mobile number.\n\n👉  Please provide your name to continue.",
         pt_PT:
-          "Nos nossos registos não encontrámos nenhum nome associado a este número.\n\n👉  Indique o seu nome para continuar.",
+          "Nos nossos registos não encontrámos nenhum nome associado a este número.\n\n  Escreva o seu nome para continuar:",
       },
     },
     onBoardingUserProfileConfirmation: {
@@ -37,7 +37,7 @@ module.exports = {
         en_IN:
           "As per our records, we have found the name  *“{{name}}”* linked with this mobile number.\n\n👉  Type and send *1* to confirm the name.\n\n👉  Type and send *2* to change the name.",
         pt_PT:
-          "Nos nossos registos, este número está associado ao nome  *“{{name}}”*.\n\n👉  Escreva e envie *1* para confirmar o nome.\n\n👉  Escreva e envie *2* para alterar o nome.",
+          "Nos nossos registos, este número está associado ao nome  *“{{name}}”*.\n\n  Envie *1* para confirmar o nome.\n\n  Envie *2* para alterar o nome.",
       },
     },
     changeName: {
@@ -52,7 +52,7 @@ module.exports = {
       en_IN:
         "Confirm Name : {{name}}?\n\n👉  Type and send *1* to confirm the name.\n\n👉  Type and send *2* to change the name.",
       pt_PT:
-        "Confirmar o nome: {{name}}?\n\n👉  Escreva e envie *1* para confirmar o nome.\n\n👉  Escreva e envie *2* para alterar o nome.",
+        "Confirmar o nome: {{name}}?\n\n  Envie *1* para confirmar o nome.\n\n  Envie *2* para alterar o nome.",
     },
     onboardingThankYou: {
       code: 'chatbot.pgr.onboarding.thankYou',

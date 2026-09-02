@@ -4,14 +4,14 @@ module.exports = {
     question: {
       code: 'chatbot.pgr.menu.question',
       en_IN: 'Please type and send the number for your option 👇\n\n*1.* File a new complaint\n*2.* Track existing complaints\n\n👉 To go back to the main menu, type and send *voltar*.',
-      pt_PT: 'Escreva e envie o número da sua opção 👇\n\n*1.* Apresentar uma nova reclamação\n*2.* Consultar reclamações existentes\n\n👉 Para voltar ao menu principal, escreva e envie *voltar*.'
+      pt_PT: 'Envie o número da sua opção: \n\n*1.* Apresentar uma nova reclamação\n*2.* Consultar reclamações existentes\n\n  Para voltar ao menu principal, escreva e envie *voltar*.'
     },
     // used by pgr-machine.js, which dropped trackComplaint - no `code`, since
     // the real localization service still has an old translation stored
     // under chatbot.pgr.menu.question (get_message would check that first)
     singleOptionQuestion: {
-      en_IN: 'Please type and send *1* to file a new complaint 👇\n\n👉 To go back to the main menu, type and send *voltar*.',
-      pt_PT: 'Escreva e envie *1* para apresentar uma nova reclamação 👇\n\n👉 Para voltar ao menu principal, escreva e envie *voltar*.'
+      en_IN: 'Please type and send *1* to file a new complaint.',
+      pt_PT: 'Envie *1* para apresentar uma nova reclamação.'
     }
   },
   fileComplaint: {
@@ -21,7 +21,7 @@ module.exports = {
           preamble: {
             code: 'chatbot.pgr.hierarchy.preamble',
             en_IN : 'Please type and send the number to select a {{level}} from the list below 👇\n',
-            pt_PT : '*{{level}}*\nEscreva e envie o número da opção desejada 👇\n'
+            pt_PT : '*{{level}}*\nEnvie o número da opção desejada: \n'
           }
         }
       },
@@ -31,7 +31,7 @@ module.exports = {
         preamble: {
           code: 'chatbot.pgr.boundary.preamble',
           en_IN: 'Please type and send the number to select the {{level}} for your grievance 👇\n',
-          pt_PT: '*{{level}}*\nEscreva e envie o número correspondente ao local da sua reclamação 👇\n'
+          pt_PT: '*{{level}}*\nEnvie o número correspondente ao local da sua reclamação: \n'
         }
       }
     },
@@ -83,7 +83,7 @@ module.exports = {
       question: {
         code: 'chatbot.pgr.consent.question',
         en_IN: 'Before your grievance is filed, please confirm the following:\n\n{{statements}}\n\n👉 Type and send *1* to accept.\n👉 Type and send *2* to decline.',
-        pt_PT: 'Antes de registarmos a sua reclamação, confirme o seguinte:\n\n{{statements}}\n\n👉 Escreva e envie *1* para aceitar.\n👉 Escreva e envie *2* para não aceitar.'
+        pt_PT: 'Antes de registarmos a sua reclamação, confirme o seguinte:\n\n{{statements}}\n\n👉 *1* Aceitar.\n👉 *2* Rejeitar'
       },
       declined: {
         code: 'chatbot.pgr.consent.declined',
@@ -105,7 +105,7 @@ module.exports = {
       question: {
         code: 'chatbot.pgr.confidentiality.question',
         en_IN: '{{label}}\n\n{{hint}}\n\n👉 Type and send *1* to keep your details confidential.\n👉 Type and send *2* to continue without confidentiality.',
-        pt_PT: '{{label}}\n\n{{hint}}\n\n👉 Escreva e envie *1* para manter os seus dados confidenciais.\n👉 Escreva e envie *2* para continuar sem confidencialidade.'
+        pt_PT: '{{label}}\n\n{{hint}}\n\n*1* - Manter os meus dados confidenciais.\n*2* - Continuar sem confidencialidade.'
       }
     },
     institution: {
@@ -136,7 +136,7 @@ module.exports = {
       question: {
         code: 'chatbot.pgr.attachment.question',
         en_IN: 'If possible, attach a photo or document of your grievance.\n\nTo continue without attaching, type and send *1*',
-        pt_PT: 'Se possível, anexe uma fotografia ou um documento relativo à sua reclamação.\n\n👉 Para continuar sem anexar, escreva e envie *1*.'
+        pt_PT: 'Se possível, anexe uma fotografia ou um documento relativo à sua reclamação.\n\n*1* - Continuar sem anexar.'
       },
       failed: {
         en_IN: "Sorry, we couldn't process your attachment. Continuing without it.",
