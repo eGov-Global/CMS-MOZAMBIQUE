@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22lg%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%237c3aed%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22lh%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%22.18%22%2F%3E%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%220%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Cpath%20d%3D%22M24%203.2%20C24%203.2%2032.5%208%2039.6%208.6%20C40.2%208.65%2040.6%209.1%2040.6%209.7%20V22%20C40.6%2032.6%2033.8%2039.9%2024.7%2043.6%20C24.25%2043.8%2023.75%2043.8%2023.3%2043.6%20C14.2%2039.9%207.4%2032.6%207.4%2022%20V9.7%20C7.4%209.1%207.8%208.65%208.4%208.6%20C15.5%208%2024%203.2%2024%203.2%20Z%22%20fill%3D%22url%28%23lg%29%22%2F%3E%3Cpath%20d%3D%22M24%203.2%20C24%203.2%2032.5%208%2039.6%208.6%20C40.2%208.65%2040.6%209.1%2040.6%209.7%20V22%20C40.6%2032.6%2033.8%2039.9%2024.7%2043.6%20C24.25%2043.8%2023.75%2043.8%2023.3%2043.6%20C14.2%2039.9%207.4%2032.6%207.4%2022%20V9.7%20C7.4%209.1%207.8%208.65%208.4%208.6%20C15.5%208%2024%203.2%2024%203.2%20Z%22%20fill%3D%22url%28%23lh%29%22%2F%3E%3Cpath%20d%3D%22M24%206.4%20C24%206.4%2031.6%2010.6%2037.9%2011.2%20V22%20C37.9%2031%2032%2037.5%2024%2040.9%20C16%2037.5%2010.1%2031%2010.1%2022%20V11.2%20C16.4%2010.6%2024%206.4%2024%206.4%20Z%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-opacity%3D%22.22%22%20stroke-width%3D%221.1%22%2F%3E%3Ccircle%20cx%3D%2218.7%22%20cy%3D%2216.2%22%20r%3D%222.35%22%20fill%3D%22%23F2A23C%22%2F%3E%3Crect%20x%3D%2223.5%22%20y%3D%2213.85%22%20width%3D%228.7%22%20height%3D%224.8%22%20rx%3D%222.4%22%20fill%3D%22%23F2A23C%22%2F%3E%3Ccircle%20cx%3D%2218.5%22%20cy%3D%2223.7%22%20r%3D%222.95%22%20fill%3D%22%233B7DD8%22%2F%3E%3Ccircle%20cx%3D%2226%22%20cy%3D%2223.7%22%20r%3D%222.95%22%20fill%3D%22%233B7DD8%22%2F%3E%3Ccircle%20cx%3D%2222.25%22%20cy%3D%2230.9%22%20r%3D%222.95%22%20fill%3D%22%2354AE5A%22%2F%3E%3C%2Fsvg%3E">
 <title>Security Dashboard — Ansible Remote Server Deployment</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
@@ -40,12 +41,59 @@ body{margin:0;background:var(--bg);color:var(--ink);transition:background .15s e
 a{color:var(--link);text-decoration:none}a:hover{color:var(--link-hover);text-decoration:underline}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 
+/* ---------- app shell + module sidebar ---------- */
+.app{display:flex;align-items:stretch;min-height:100vh}
+.sidebar{width:216px;flex:none;background:var(--surface);border-right:1px solid var(--line);
+ padding:22px 14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh}
+.sb-brand{display:flex;align-items:center;gap:10px;padding:2px 8px 18px;font-weight:800;color:var(--brand);
+ font-size:14px;letter-spacing:-.01em;line-height:1.12}
+.sb-brand .sb-logo{width:30px;height:30px;flex:none;filter:drop-shadow(0 2px 5px rgba(76,29,149,.28))}
+.sb-brand .sb-logo svg{width:30px;height:30px}
+.sb-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);
+ font-weight:700;padding:6px 10px 6px}
+.modnav{display:flex;flex-direction:column;gap:4px}
+.mod{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid transparent;
+ background:none;color:var(--ink-2);font:inherit;font-weight:600;font-size:13.5px;padding:9px 11px;
+ border-radius:10px;cursor:pointer;transition:.13s}
+.mod svg{width:17px;height:17px;flex:none;opacity:.8}
+.mod:hover{background:var(--surface-3)}
+.mod.active{background:var(--surface-3);color:var(--brand);border-color:var(--line-2);box-shadow:var(--sh-sm)}
+.mod.active svg{opacity:1;color:#7c3aed}
+.mod.disabled{color:var(--faint)}
+.mod.disabled svg{opacity:.6}
+.mod .soon{margin-left:auto;font-size:9px;text-transform:uppercase;letter-spacing:.04em;font-weight:800;
+ color:#7c3aed;background:rgba(124,58,237,.13);border-radius:6px;padding:2px 6px}
+.sb-foot{margin-top:auto;font-size:11px;color:var(--faint);padding:10px;line-height:1.4}
+.main{flex:1;min-width:0}
+@media(max-width:820px){
+ .app{flex-direction:column}
+ .sidebar{width:auto;height:auto;position:static;flex-direction:row;align-items:center;gap:8px;
+  border-right:none;border-bottom:1px solid var(--line);padding:11px 16px;overflow-x:auto}
+ .sb-brand{padding:0 6px 0 0}
+ .sb-label,.sb-foot{display:none}
+ .modnav{flex-direction:row;gap:6px}
+}
+@media print{.sidebar{display:none}}
+
+/* ---------- coming soon (placeholder module) ---------- */
+.comingsoon{display:grid;place-items:center;padding:56px 20px}
+.cs-card{max-width:470px;text-align:center;background:var(--surface);border:1px solid var(--line);
+ border-radius:var(--r);box-shadow:var(--sh);padding:44px 34px}
+.cs-ico{width:72px;height:72px;margin:0 auto 18px;border-radius:18px;display:grid;place-items:center;
+ background:linear-gradient(135deg,#ede9fe,#ddd6fe);color:#7c3aed}
+body.dark .cs-ico{background:linear-gradient(135deg,#2a2350,#3b2f6b)}
+.cs-ico svg{width:38px;height:38px}
+.cs-card h2{margin:0 0 12px;font-size:19px;color:var(--brand);font-weight:800}
+.cs-badge{display:inline-block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:800;
+ color:#7c3aed;background:rgba(124,58,237,.12);border-radius:999px;padding:4px 13px;margin:0 0 16px}
+.cs-desc{margin:0;color:var(--muted);font-size:13.5px;line-height:1.6}
+
 /* ---------- header ---------- */
 header.top{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;padding:4px 2px 18px}
 .brand{display:flex;align-items:center;gap:13px}
-.brand .logo{width:42px;height:42px;border-radius:12px;flex:none;display:grid;place-items:center;
- background:linear-gradient(135deg,#1e3a5f,#2563eb);box-shadow:var(--sh-sm)}
-.brand .logo svg{width:23px;height:23px;color:#fff}
+.brand .logo{width:42px;height:42px;flex:none;display:grid;place-items:center;
+ filter:drop-shadow(0 2px 5px rgba(76,29,149,.28))}
+.brand .logo svg{width:42px;height:42px}
 h1{font-size:20px;margin:0;color:var(--brand);letter-spacing:-.01em;font-weight:800}
 .scope{color:var(--muted);font-size:12.5px;margin-top:1px}
 .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
@@ -163,6 +211,8 @@ table.area td.r{text-align:right;font-variant-numeric:tabular-nums;font-weight:6
 .rtag{font-size:10.5px;color:var(--muted);background:var(--surface-3);border:1px solid var(--line);border-radius:6px;padding:1px 7px}
 .aitag{color:#7c3aed;font-weight:700;font-size:11.5px}
 .strix{color:#0f766e;font-weight:700;font-size:11.5px}
+.valtag{color:#4338ca;font-weight:700;font-size:11.5px;cursor:help}
+.valtag.adj{color:#b45309}
 .wf{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:13px}
 @media(max-width:640px){.wf{grid-template-columns:1fr}}
 .wf .b{background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;font-size:13px;line-height:1.55;color:var(--ink-2)}
@@ -196,10 +246,30 @@ details.grp>summary .cx{margin-left:auto;color:var(--faint);font-size:12px;font-
 </style>
 </head>
 <body>
+<div class="app">
+ <aside class="sidebar">
+  <div class="sb-brand">
+   <span class="sb-logo"><svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="slg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4c1d95"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs><path d="M24 3.2 C24 3.2 32.5 8 39.6 8.6 C40.2 8.65 40.6 9.1 40.6 9.7 V22 C40.6 32.6 33.8 39.9 24.7 43.6 C24.25 43.8 23.75 43.8 23.3 43.6 C14.2 39.9 7.4 32.6 7.4 22 V9.7 C7.4 9.1 7.8 8.65 8.4 8.6 C15.5 8 24 3.2 24 3.2 Z" fill="url(#slg)"/><path d="M24 6.4 C24 6.4 31.6 10.6 37.9 11.2 V22 C37.9 31 32 37.5 24 40.9 C16 37.5 10.1 31 10.1 22 V11.2 C16.4 10.6 24 6.4 24 6.4 Z" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="1.1"/><circle cx="18.7" cy="16.2" r="2.35" fill="#F2A23C"/><rect x="23.5" y="13.85" width="8.7" height="4.8" rx="2.4" fill="#F2A23C"/><circle cx="18.5" cy="23.7" r="2.95" fill="#3B7DD8"/><circle cx="26" cy="23.7" r="2.95" fill="#3B7DD8"/><circle cx="22.25" cy="30.9" r="2.95" fill="#54AE5A"/></svg></span>
+   <span>Security<br>Scans</span>
+  </div>
+  <div class="sb-label">Modules</div>
+  <nav class="modnav" role="tablist" aria-label="Scan modules">
+   <button class="mod active" id="modAnsible" data-mod="ansible" type="button" onclick="selectModule('ansible')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    Ansible
+   </button>
+   <button class="mod disabled" id="modK8s" data-mod="k8s" type="button" onclick="selectModule('k8s')" title="Coming soon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l8 4.6v9.8l-8 4.6-8-4.6V7.1l8-4.6z"/><circle cx="12" cy="12" r="3"/></svg>
+    Kubernetes<span class="soon">Soon</span>
+   </button>
+  </nav>
+  <div class="sb-foot">More scan modules on the way.</div>
+ </aside>
+ <div class="main">
 <div class="wrap stack">
  <header class="top">
   <div class="brand">
-   <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+   <span class="logo"><svg viewBox="0 0 48 48" width="42" height="42" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4c1d95"/><stop offset="1" stop-color="#7c3aed"/></linearGradient><linearGradient id="lh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".18"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><path d="M24 3.2 C24 3.2 32.5 8 39.6 8.6 C40.2 8.65 40.6 9.1 40.6 9.7 V22 C40.6 32.6 33.8 39.9 24.7 43.6 C24.25 43.8 23.75 43.8 23.3 43.6 C14.2 39.9 7.4 32.6 7.4 22 V9.7 C7.4 9.1 7.8 8.65 8.4 8.6 C15.5 8 24 3.2 24 3.2 Z" fill="url(#lg)"/><path d="M24 3.2 C24 3.2 32.5 8 39.6 8.6 C40.2 8.65 40.6 9.1 40.6 9.7 V22 C40.6 32.6 33.8 39.9 24.7 43.6 C24.25 43.8 23.75 43.8 23.3 43.6 C14.2 39.9 7.4 32.6 7.4 22 V9.7 C7.4 9.1 7.8 8.65 8.4 8.6 C15.5 8 24 3.2 24 3.2 Z" fill="url(#lh)"/><path d="M24 6.4 C24 6.4 31.6 10.6 37.9 11.2 V22 C37.9 31 32 37.5 24 40.9 C16 37.5 10.1 31 10.1 22 V11.2 C16.4 10.6 24 6.4 24 6.4 Z" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="1.1"/><circle cx="18.7" cy="16.2" r="2.35" fill="#F2A23C"/><rect x="23.5" y="13.85" width="8.7" height="4.8" rx="2.4" fill="#F2A23C"/><circle cx="18.5" cy="23.7" r="2.95" fill="#3B7DD8"/><circle cx="26" cy="23.7" r="2.95" fill="#3B7DD8"/><circle cx="22.25" cy="30.9" r="2.95" fill="#54AE5A"/></svg></span>
    <div>
     <h1>Security Dashboard</h1>
     <div class="scope" id="scope">Ansible Deployment — Remote Server</div>
@@ -230,6 +300,17 @@ details.grp>summary .cx{margin-left:auto;color:var(--faint);font-size:12px;font-
    <button class="pill" id="pillVulns" type="button" onclick="showPage('vulns')">Vulnerabilities</button>
   </div>
  </div>
+
+ <div id="comingSoon" class="comingsoon" style="display:none">
+  <div class="cs-card">
+   <div class="cs-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l8 4.6v9.8l-8 4.6-8-4.6V7.1l8-4.6z"/><circle cx="12" cy="12" r="3.4"/></svg></div>
+   <h2 id="csTitle">Kubernetes scanning</h2>
+   <div class="cs-badge">Coming soon</div>
+   <p class="cs-desc">Security scanning for the Kubernetes / Helm deployment path is on the way. It will get its own Overview and Vulnerabilities pages, in the same format as Ansible.</p>
+  </div>
+ </div>
+
+ <div id="emptyState" class="empty" style="display:none">No reports published yet. Run the security scan workflow to publish the first report.</div>
 
  <div id="pageOverview" class="stack">
   <section id="execWrap" style="display:none">
@@ -272,6 +353,8 @@ details.grp>summary .cx{margin-left:auto;color:var(--faint);font-size:12px;font-
 
  <div class="foot" id="foot"></div>
 </div>
+ </div>
+</div>
 
 <button class="themebtn" id="themeBtn" type="button" onclick="toggleTheme()" title="Toggle light / dark" aria-label="Toggle light / dark"></button>
 
@@ -289,13 +372,36 @@ const PRICOL ={P0:"#5B21B6",P1:"#C0267E",P2:"#047857",P3:"#5F6673"};  // solid: 
 const PRISOFT={P0:"#EEE8FB",P1:"#FAE7F2",P2:"#E2F3EC",P3:"#ECEEF1"};  // soft: badge bg
 const statusOf=f=>(f.triage||{}).status||"action_required";
 const prioOf=f=>(f.triage||{}).priority||(statusOf(f)==="action_required"?"P2":"");
+// ---- module + page state ----
+let MODULE="ansible", CURPAGE="overview", HASDATA=false;
+function selectModule(mod){
+  MODULE=mod;
+  document.querySelectorAll(".mod").forEach(b=>b.classList.toggle("active", b.dataset.mod===mod));
+  $("scope").textContent = mod==="k8s"
+    ? "Kubernetes Deployment — Coming soon"
+    : ((CUR&&CUR.meta&&CUR.meta.scope)||"Ansible Deployment — Remote Server");
+  renderModulePage();
+}
+// Single source of truth for what the content area shows. Placeholder modules (k8s)
+// show "Coming soon" on BOTH tabs; the Ansible module shows real data, or the empty
+// state before the first report is published.
+function renderModulePage(){
+  const k8s=MODULE==="k8s", real=!k8s&&HASDATA, ov=CURPAGE==="overview";
+  $("comingSoon").style.display = k8s ? "" : "none";
+  $("emptyState").style.display = (!k8s&&!HASDATA) ? "" : "none";
+  const pb=document.querySelector(".pillbar"); if(pb) pb.style.display = (k8s||real) ? "" : "none";
+  $("metabar").style.display = real ? "" : "none";
+  const ctrls=document.querySelector(".controls"); if(ctrls) ctrls.style.display = real ? "" : "none";
+  $("foot").style.display = real ? "" : "none";
+  $("pageOverview").style.display = real&&ov ? "" : "none";
+  $("pageVulns").style.display = real&&!ov ? "" : "none";
+  if(real&&ov){try{donutChart&&donutChart.resize();trendChart&&trendChart.resize();}catch(e){}}
+}
 function showPage(p){
-  const ov=p==="overview";
-  document.getElementById("pageOverview").style.display=ov?"":"none";
-  document.getElementById("pageVulns").style.display=ov?"none":"";
-  document.getElementById("pillOverview").classList.toggle("active",ov);
-  document.getElementById("pillVulns").classList.toggle("active",!ov);
-  if(ov){try{donutChart&&donutChart.resize();trendChart&&trendChart.resize();}catch(e){}}
+  CURPAGE=p;
+  $("pillOverview").classList.toggle("active",p==="overview");
+  $("pillVulns").classList.toggle("active",p!=="overview");
+  renderModulePage();
 }
 let donutChart,trendChart,CUR=null,RUNS=[],RUNI=0;
 // theme-aware chart chrome (reads the active CSS tokens)
@@ -319,9 +425,9 @@ async function boot(){
   setTheme(saved==="dark");   // default light
   let manifest;
   try{ manifest=await (await fetch("manifest.json",{cache:"no-store"})).json(); }
-  catch(e){ document.querySelector(".wrap").innerHTML='<p class="empty">No reports published yet.</p>'; return; }
+  catch(e){ HASDATA=false; renderModulePage(); return; }
   RUNS=manifest.runs||[];
-  if(!RUNS.length){ $("prio").innerHTML='<p class="empty">No reports published yet.</p>'; return; }
+  if(!RUNS.length){ HASDATA=false; renderModulePage(); return; }
   buildSelector();
   drawTrend(RUNS);
   selectRun(0);
@@ -366,7 +472,7 @@ async function loadRun(file){
   if(s.occurrences===0){pt.textContent="No issues";p.style.background="#16a34a";}
   else if(highOcc){pt.textContent="Action required";p.style.background="#b91c1c";}
   else{pt.textContent="Review recommended";p.style.background="#b45309";}
-  $("scope").textContent=m.scope||"Ansible Deployment — Remote Server";
+  if(MODULE!=="k8s") $("scope").textContent=m.scope||"Ansible Deployment — Remote Server";
   const commit=`<a href="https://github.com/${m.repo}/commit/${m.sha}" target="_blank" rel="noopener"><b>${esc(m.shaShort)}</b></a>`;
   const prLink=m.pr?`<span class="chip"><span class="k">PR</span><a href="${m.pr.url}" target="_blank" rel="noopener"><b>#${m.pr.number}</b></a></span>`:"";
   $("metabar").innerHTML=
@@ -402,7 +508,8 @@ async function loadRun(file){
   if(xlsx&&xlsx!==file){xb.href=xlsx;xb.style.display="";}else xb.style.display="none";
 
   CUR=d; renderFindings();
-  const eng=m.engine?`triage, remediation & priority are ${esc(m.engine)}-generated, fail-safe dual-pass verified`:`remediation is curated`;
+  HASDATA=true; renderModulePage();   // real data present -> show the Ansible module content
+  const eng=m.engine?`labels, severity, priority & remediation are ${esc(m.engine)}-validated (independent assertion pass + fail-safe dual review)`:`remediation is curated`;
   $("foot").innerHTML=`Report-only mode · Count = times each rule matched · file links open the exact line on commit ${esc(m.shaShort)} · ${eng} · “Action required” is tracked in the Excel audit; acceptable &amp; false positives are documented but not tracked · per-location detail in Security → Code scanning.`;
 }
 
@@ -443,11 +550,23 @@ function card(f,isAction){
   const aitag = f.enriched?`<span class="sep">·</span><span class="aitag" title="AI-generated remediation">✨ AI</span>`:'';
   const sx = f.strix || (f.source==="Strix" ? {validated:true,cvss:f.cvss,cwe:f.cwe} : null);
   const strixTag = sx ? `<span class="sep">·</span><span class="strix" title="Independently validated by Strix AI pentest">🛡 Strix${sx.cvss?` · CVSS ${sx.cvss}`:''}${sx.cwe?` · ${esc(sx.cwe)}`:''}</span>` : "";
+  // LLM validation/assertion pass: show a chip; if the validator re-graded severity, say so.
+  const vv = f.validation;
+  let valTag = "";
+  if (vv){
+    if (vv.adjusted && vv.scanner_severity){
+      valTag = `<span class="sep">·</span><span class="valtag adj" title="${esc(vv.note||'')}">⚖ AI-assessed ${cap(vv.severity||f.severity)} (scanner: ${cap(vv.scanner_severity)})</span>`;
+    } else if (vv.severity && vv.scanner_severity && vv.severity!==vv.scanner_severity){
+      valTag = `<span class="sep">·</span><span class="valtag" title="${esc(vv.note||'')}">⚖ AI reads ${cap(vv.severity)}; kept scanner ${cap(vv.scanner_severity)}</span>`;
+    } else {
+      valTag = `<span class="sep">·</span><span class="valtag" title="${esc(vv.note||'Label, severity & priority independently validated')}">⚖ validated</span>`;
+    }
+  }
   const edge = isAction ? `border-left:3px solid ${PRICOL[prioOf(f)]||'#cbd5e1'}` : "";
   return `<div class="finding${isAction?' fa':''}" style="${edge}">
    <div class="h"><span class="sev" style="background:${SOFT[f.severity]};color:${COL[f.severity]}">${cap(f.severity)}</span>${pri}
     <span class="t">${esc(f.title)}</span>${stat}<span class="cnt">×${f.count}</span></div>
-   <div class="rule"><code>${esc(f.id)}</code><span class="sep">·</span>${esc(f.source)}<span class="sep">·</span>${esc(f.area)} ${catT}${expo}${guide}${aitag}${strixTag}</div>
+   <div class="rule"><code>${esc(f.id)}</code><span class="sep">·</span>${esc(f.source)}<span class="sep">·</span>${esc(f.area)} ${catT}${expo}${guide}${aitag}${strixTag}${valTag}</div>
    <div class="wf"><div class="b"><div class="k">Why it matters</div>${esc(f.why)}</div>
     <div class="b"><div class="k">How to fix ${vmark}</div>${esc(f.fix)}</div></div>
    <div class="loc1">First location: ${firstLink}</div>${det}
@@ -464,7 +583,7 @@ function drawDonut(occ){
   if(donutChart)donutChart.destroy();
   donutChart=new Chart($("donut"),{type:"doughnut",
     data:{labels:labels.map(cap),datasets:[{data:arc,backgroundColor:cols,borderColor:surfCol(),borderWidth:3,hoverOffset:6}]},
-    options:{cutout:"64%",plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.label}: ${real[c.dataIndex]}`}}}}});
+    options:{responsive:true,maintainAspectRatio:false,cutout:"64%",plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.label}: ${real[c.dataIndex]}`}}}}});
 }
 
 function drawTrend(runs){
