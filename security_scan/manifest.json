@@ -1,1 +1,21 @@
-{"runs":[]}
+{
+ "runs": [
+  {
+   "file": "data/33670066220.json",
+   "runId": "33670066220",
+   "date": "2026-09-02 18:56 UTC",
+   "ts": "2026-09-02T18:56:04.195144+00:00",
+   "branch": "master",
+   "shaShort": "57e2890",
+   "pr": null,
+   "occurrences": 573,
+   "types": 26,
+   "occBySeverity": {
+    "CRITICAL": 0,
+    "HIGH": 51,
+    "MEDIUM": 472,
+    "LOW": 50
+   }
+  }
+ ]
+}
