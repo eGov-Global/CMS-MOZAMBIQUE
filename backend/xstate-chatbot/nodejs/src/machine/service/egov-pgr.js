@@ -188,7 +188,12 @@ class PGRService {
       }),
     });
     const data = await response.json();
-    const definition = (data.BoundaryHierarchy ?? [])[0] ?? {};
+    // a tenant can have several unrelated hierarchy types registered (other
+    // modules, QA fixtures) - pick the one PGR is configured to use, not just
+    // whichever the search happens to return first.
+    const definition = (data.BoundaryHierarchy ?? []).find(
+      (d) => d.hierarchyType === config.boundaryHierarchyType
+    ) ?? {};
     const levels = (definition.boundaryHierarchy ?? []).filter(
       (level) => level.active !== false
     );
@@ -255,9 +260,7 @@ class PGRService {
   boundaryMessageBundle(codes) {
     const messageBundle = {};
     for (const code of codes) {
-      messageBundle[code] = localisationService.getMessageBundleForCode(
-        String(code).toUpperCase()
-      );
+      messageBundle[code] = localisationService.getMessageBundleForCode(code);
     }
     return messageBundle;
   }
@@ -920,11 +923,11 @@ class PGRService {
     let response = await fetch(url, options);
 
     if (response.status === 200) {
-      // the create endpoint returns a single service object, not the
-      // {ServiceWrappers: [...]} shape preparePGRResult expects (that's for
-      // search results) - read the created complaint's reference directly
+      // the create endpoint wraps its result the same way search does:
+      // {ServiceWrappers: [{service: {...}}]}
       let responseBody = await response.json();
-      return { complaintNumber: responseBody.service && responseBody.service.serviceRequestId };
+      let serviceWrapper = (responseBody.ServiceWrappers || [])[0];
+      return { complaintNumber: serviceWrapper && serviceWrapper.service && serviceWrapper.service.serviceRequestId };
     } else {
       const errorText = await response.text();
       throw new Error(`Failed to create complaint: ${response.status} ${errorText}`);

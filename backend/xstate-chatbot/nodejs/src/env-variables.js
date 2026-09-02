@@ -6,6 +6,7 @@ const envVariables = {
     ver: process.env.VERSION || '0.0.1',
 
     port: process.env.SERVICE_PORT || 8082,
+
     contextPath: process.env.CONTEXT_PATH || '/xstate-chatbot',
 
     whatsAppProvider: process.env.WHATSAPP_PROVIDER || 'Twilio',
@@ -33,6 +34,10 @@ const envVariables = {
 
     caseRelatedTo: process.env.CASE_RELATED_TO || 'IGE',
     instituteNameMaxLength: parseInt(process.env.INSTITUTE_NAME_MAX_LENGTH || '300', 10),
+
+    // boundary-service registers many unrelated hierarchy types per tenant
+    // (other modules, QA fixtures); this picks out the one PGR actually uses.
+    boundaryHierarchyType: process.env.BOUNDARY_HIERARCHY_TYPE || 'divisao_administrativa',
 
     // Sandbox mode configuration
     isSandboxMode: process.env.ENABLE_SANDBOX_MODE === 'true',
