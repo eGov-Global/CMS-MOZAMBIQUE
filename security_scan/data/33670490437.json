@@ -1,0 +1,3895 @@
+{
+ "meta": {
+  "repo": "eGov-Global/CMS-MOZAMBIQUE",
+  "branch": "master",
+  "sha": "57e28906bd1d42baae08bf4cd5640899b843c037",
+  "shaShort": "57e2890",
+  "runId": "33670490437",
+  "runUrl": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/actions/runs/33670490437",
+  "pr": null,
+  "scope": "Ansible Deployment - Remote Server",
+  "scanners": [
+   "Checkov",
+   "KICS",
+   "Custom rules",
+   "Strix (AI pentest)"
+  ],
+  "date": "2026-09-02 19:29 UTC",
+  "ts": "2026-09-02T19:29:44.830364+00:00",
+  "executive_summary": "The current deployment of the DIGIT/CMS platform presents critical security vulnerabilities that expose sensitive citizen grievance data to potential compromise. The primary systemic failures stem from a complete lack of defense-in-depth, relying entirely on perimeter cloud security groups while 16 datastore and admin ports are unsafely bound to 0.0.0.0 without an active host firewall. Additionally, unmitigated container escape vectors via Docker socket mounts and insecure remote execution practices during deployment significantly weaken the overall infrastructure posture. Management must immediately prioritize network containment, host-level firewall enforcement, and the removal of privileged container bindings before handling further public-sector traffic.",
+  "priority_actions": [
+   "Immediately reconfigure Docker compose to bind all internal datastores (PostgreSQL, Redis, Kafka, MinIO) and admin UIs to 127.0.0.1 instead of 0.0.0.0.",
+   "Enable and configure a host-based firewall (UFW or iptables) on the remote server as a mandatory defense-in-depth layer independent of cloud security groups.",
+   "Remove Docker socket mounts from application containers to eliminate immediate container escape and host takeover vectors.",
+   "Eliminate remote script piping (curl | sh) from the Ansible deployment path (C: ./deploy.sh) and enforce local script verification with checksum validation.",
+   "Re-enable strict SSH host-key verification in the deployment configuration to prevent potential man-in-the-middle attacks during remote server provisioning."
+  ],
+  "enriched": true,
+  "engine": "Gemini (gemini-flash-lite-latest)"
+ },
+ "summary": {
+  "types": 47,
+  "occurrences": 594,
+  "typesBySeverity": {
+   "CRITICAL": 2,
+   "HIGH": 20,
+   "MEDIUM": 23,
+   "LOW": 2
+  },
+  "occBySeverity": {
+   "CRITICAL": 2,
+   "HIGH": 64,
+   "MEDIUM": 477,
+   "LOW": 51
+  }
+ },
+ "findings": [
+  {
+   "severity": "CRITICAL",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-33937",
+   "title": "CVE-2026-33937 in handlebars 4.7.8 (AST-based RCE)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 9.8,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `handlebars@4.7.8`, which is affected by published advisory `CVE-2026-33937`. The vulnerable package is introduced through `ts-jest@29.4.6`, and the first fixed release is `4.7.9`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "CRITICAL",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CWE-1392",
+   "title": "Default fallback API key permits unauthenticated access to privileged kubectl database API",
+   "guide": "https://cwe.mitre.org/data/definitions/1392.html",
+   "locations": [
+    {
+     "path": "local-setup/jupyter/dataloader/kubectl_api.py",
+     "line": 36,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/jupyter/dataloader/kubectl_api.py#L36"
+    }
+   ],
+   "cvss": 9.4,
+   "cwe": "CWE-1392",
+   "why": "The Flask kubectl API authorizes privileged database operations with a shared `X-API-Key` value that falls back to the guessable default `dev-only-key` when `KUBECTL_API_KEY` is unset. Any network-reachable caller who knows that default can invoke sensitive database endpoints without any user or session authentication.",
+   "fix": "1. Remove the fallback credential and require `KUBECTL_API_KEY` to be explicitly configured before the Flask service starts. 2. Fail closed when the key is absent, and rotate any environment that may already have exposed or relied on `dev-only-key`. 3. Replace the shared default in notebook and helper code so client tooling never silently sends `dev-only-key`. 4. Treat this API as an administrative interface: restrict network exposure and consider stronger authentication and authorization than a single shared static key.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Custom",
+   "area": "ansible",
+   "id": "CMS-SEC-01",
+   "title": "Weak or default credential in deployment config",
+   "guide": "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html",
+   "locations": [
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1733,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L1733"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2382,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L2382"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3180,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3180"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3285,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3285"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3309,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3309"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3561,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3561"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3716,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3716"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3819,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3819"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4091,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4091"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4359,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4359"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4400,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4400"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4440,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4440"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4471,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4471"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4611,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4611"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4707,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4707"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4709,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4709"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/_example.yml",
+     "line": 619,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/inventory/host_vars/_example.yml#L619"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/_example.yml",
+     "line": 622,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/inventory/host_vars/_example.yml#L622"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/_example.yml",
+     "line": 630,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/inventory/host_vars/_example.yml#L630"
+    },
+    {
+     "path": "local-setup/ansible/templates/globalConfigs.js.j2",
+     "line": 11,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/templates/globalConfigs.js.j2#L11"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "A well-known default credential (e.g. eGov@123, minioadmin, egov123) is baked into the deployment. Unless every call site is overridden, admin/superuser/datastore accounts ship with a guessable password - trivial account takeover, and this repo is PUBLIC.",
+   "fix": "Remove the hardcoded default: require the value from a vault/secret with no fallback (drop the `default('eGov@123')`), fail the deploy if unset, and rotate any credential that was ever deployed with the default.",
+   "curated": true,
+   "category": "Secrets Management",
+   "count": 20
+  },
+  {
+   "severity": "HIGH",
+   "source": "Custom",
+   "area": "docker-compose",
+   "id": "CMS-SEC-07",
+   "title": "Datastore or admin port published on all interfaces (0.0.0.0)",
+   "guide": "https://docs.docker.com/engine/network/port-publishing/#setting-the-default-bind-address-for-containers",
+   "locations": [
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 89,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L89"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 115,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L115"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 159,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L159"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 194,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L194"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 218,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L218"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 219,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L219"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 255,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L255"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1652,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1652"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 89,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L89"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 115,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L115"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 159,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L159"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 194,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L194"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 218,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L218"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 219,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L219"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 256,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L256"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1827,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1827"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Publishing the core PostgreSQL database port (5432) directly to all host interfaces (0.0.0.0:15432) exposes the database to the public internet, bypassing the Docker internal network and potential firewall restrictions. An attacker can attempt brute-force attacks or exploit database vulnerabilities directly.",
+   "fix": "In docker-compose.egov-digit.yaml under the `postgres-db` service, restrict the port binding to loopback only:\n```yaml\n    ports:\n      - \"127.0.0.1:15432:5432\"\n```",
+   "curated": true,
+   "category": "Network Exposure",
+   "count": 16,
+   "strix": {
+    "validated": true,
+    "cvss": 9.8,
+    "cwe": "CWE-306",
+    "title": "Unauthenticated JupyterLab Code Execution via empty `ServerApp` authentication settings"
+   },
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.98,
+    "reason": "Postgres and Prometheus ports published on 0.0.0.0 without host firewall protection."
+   },
+   "verify": {
+    "verified": true,
+    "note": ""
+   },
+   "enriched": true
+  },
+  {
+   "severity": "HIGH",
+   "source": "KICS",
+   "area": "docker-compose",
+   "id": "1c1325ff-831d-43a1-973e-839ae57dfcc0",
+   "title": "Volume Has Sensitive Host Directory",
+   "guide": "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html#rule-8-set-filesystem-and-volumes-to-read-only",
+   "locations": [
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1561,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1561"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1695,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1695"
+    },
+    {
+     "path": "docker-compose.monitoring.yml",
+     "line": 38,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.monitoring.yml#L38"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1562,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1562"
+    },
+    {
+     "path": "local-setup/docker-compose.monitoring.yml",
+     "line": 38,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.monitoring.yml#L38"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1695,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1695"
+    },
+    {
+     "path": "docker-compose.monitoring.yml",
+     "line": 45,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.monitoring.yml#L45"
+    },
+    {
+     "path": "docker-compose.monitoring.yml",
+     "line": 39,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.monitoring.yml#L39"
+    },
+    {
+     "path": "local-setup/docker-compose.monitoring.yml",
+     "line": 47,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.monitoring.yml#L47"
+    },
+    {
+     "path": "local-setup/docker-compose.monitoring.yml",
+     "line": 39,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.monitoring.yml#L39"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Bind-mounting a sensitive host path (`/`, `/etc`, `/var/run`, `/root`) lets the container read or modify host files, breaking isolation between the container and the server.",
+   "fix": "Mount only the specific sub-directory the service needs, and add `:ro` to make it read-only (e.g. `- ./config:/app/config:ro`). Never mount host system directories.",
+   "curated": true,
+   "category": "Container Isolation & Escape",
+   "count": 10
+  },
+  {
+   "severity": "HIGH",
+   "source": "KICS",
+   "area": "docker-compose",
+   "id": "d6355c88-1e8d-49e9-b2f2-f8a1ca12c75b",
+   "title": "Docker Socket Mounted In Container",
+   "guide": "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html#rule-1-do-not-expose-the-docker-daemon-socket-even-to-the-containers",
+   "locations": [
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1562,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1562"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1695,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1695"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Mounting the Docker socket (`/var/run/docker.sock`) into the `promtail` container grants root-level control over the Docker daemon on the host. If the promtail container is compromised, an attacker can escape the container, execute arbitrary commands on the host, or take over other containers.",
+   "fix": "In docker-compose.egov-digit.yaml under the `promtail` service, remove the Docker socket volume mount:\n```yaml\n    volumes:\n      - ./otel/promtail-config.yaml:/etc/promtail/config.yaml:ro\n      - /var/lib/docker/containers:/var/lib/docker/containers:ro\n      - promtail_data:/tmp\n```",
+   "curated": true,
+   "category": "Container Isolation & Escape",
+   "count": 2,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "local",
+    "confidence": 0.98,
+    "reason": "Docker socket mounted read-only into promtail, enabling container escape risks."
+   },
+   "verify": {
+    "verified": true,
+    "note": ""
+   },
+   "enriched": true
+  },
+  {
+   "severity": "HIGH",
+   "source": "Custom",
+   "area": "ansible",
+   "id": "CMS-SEC-02",
+   "title": "Remote script piped directly into a shell",
+   "guide": "https://cwe.mitre.org/data/definitions/494.html",
+   "locations": [
+    {
+     "path": "local-setup/ansible/tasks/ensure-node20.yml",
+     "line": 43,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/tasks/ensure-node20.yml#L43"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Piping a remote installation script directly into bash (`curl ... | bash`) executes untrusted code without integrity checking or verification, leaving the host vulnerable to Man-in-the-Middle (MitM) attacks or compromised upstream delivery mechanisms.",
+   "fix": "In the Ansible playbook task, download the script to a temporary file, inspect or verify it, and then execute it:\n```yaml\n    - name: \"{{ node_ensure_label }} \u2014 install NodeSource Node 20 safely\"\n      ansible.builtin.shell: |\n        set -euo pipefail\n        curl -fsSL https://{{ 'deb' if ansible_facts['os_family'] == 'Debian' else 'rpm' }}.nodesource.com/setup_20.x -o /tmp/nodesource_setup.sh\n        bash /tmp/nodesource_setup.sh\n        {{ 'apt-get' if ansible_facts['os_family'] == 'Debian' else 'dnf' }} install -y nodejs\n      args:\n        executable: /bin/bash\n      when: _node_needs_install | bool\n```",
+   "curated": true,
+   "category": "Supply Chain & Integrity",
+   "count": 1,
+   "triage": {
+    "status": "action_required",
+    "priority": "P1",
+    "exposure": "public",
+    "confidence": 0.95,
+    "reason": "Remote install script piped directly into bash shell."
+   },
+   "verify": {
+    "verified": true,
+    "note": ""
+   },
+   "enriched": true
+  },
+  {
+   "severity": "HIGH",
+   "source": "Custom",
+   "area": "ansible",
+   "id": "CMS-SEC-03",
+   "title": "Docker image registry used over insecure HTTP",
+   "guide": "https://docs.docker.com/reference/cli/dockerd/#insecure-registries",
+   "locations": [
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1042,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L1042"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Container images are pulled from a registry over plaintext HTTP with TLS verification disabled (insecure-registries). Images run with host-level privileges, so a MITM can substitute a malicious image and take over the host.",
+   "fix": "Serve the registry over HTTPS with a valid certificate and remove it from `insecure-registries`. If a private CA is used, distribute the CA bundle instead of disabling TLS.",
+   "curated": true,
+   "category": "Supply Chain & Integrity",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Custom",
+   "area": "ansible",
+   "id": "CMS-SEC-04",
+   "title": "SSH host-key verification disabled",
+   "guide": "https://docs.ansible.com/ansible/latest/reference_appendices/config.html#host-key-checking",
+   "locations": [
+    {
+     "path": "local-setup/ansible/deploy.sh",
+     "line": 134,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/deploy.sh#L134"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Disabling SSH host-key checking (`StrictHostKeyChecking=no`) during automated deployment makes the Ansible controller vulnerable to Man-in-the-Middle (MitM) attacks, allowing an attacker to intercept administrative credentials or inject malicious tasks into remote servers.",
+   "fix": "In the deployment script (`./deploy.sh`), remove or update the SSH common arguments line:\n```bash\n        # Remove or change to strict checking:\n        ansible_ssh_common_args: '-o StrictHostKeyChecking=yes'\n```",
+   "curated": true,
+   "category": "Access Control",
+   "count": 1,
+   "triage": {
+    "status": "action_required",
+    "priority": "P1",
+    "exposure": "local",
+    "confidence": 0.95,
+    "reason": "SSH host key checking disabled via StrictHostKeyChecking=no."
+   },
+   "verify": {
+    "verified": true,
+    "note": ""
+   },
+   "enriched": true
+  },
+  {
+   "severity": "HIGH",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-14257",
+   "title": "CVE-2026-14257 in brace-expansion 1.1.12 (memory-exhaustion DoS)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 7.5,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `brace-expansion@1.1.12`, which is affected by published advisory `CVE-2026-14257`. The vulnerable package is introduced through `jest@29.7.0`, and the nearest fixed release on the same branch is `1.1.17`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "Resource & Availability Controls",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-69152",
+   "title": "CVE-2026-69152 in brace-expansion 1.1.12 (bypass DoS fix)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 7.5,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `brace-expansion@1.1.12`, which is affected by published advisory `CVE-2026-69152`. The vulnerable package is introduced through `jest@29.7.0`, and the nearest fixed release on the same branch is `1.1.18`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-73088",
+   "title": "CVE-2026-73088 in browserslist 4.28.1 (prototype-pollution DoS)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 7.5,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `browserslist@4.28.1`, which is affected by published advisory `CVE-2026-73088`. The vulnerable package is introduced through `ts-jest@29.4.6`, and the first fixed release is `4.28.7`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-73089",
+   "title": "CVE-2026-73089 in browserslist 4.28.1 (memory-growth DoS)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 7.5,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `browserslist@4.28.1`, which is affected by published advisory `CVE-2026-73089`. The vulnerable package is introduced through `ts-jest@29.4.6`, and the first fixed release is `4.28.7`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "Resource & Availability Controls",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-33938",
+   "title": "CVE-2026-33938 in handlebars 4.7.8 (@partial-block RCE)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 8.1,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `handlebars@4.7.8`, which is affected by published advisory `CVE-2026-33938`. The vulnerable package is introduced through `ts-jest@29.4.6`, and the first fixed release is `4.7.9`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-33939",
+   "title": "CVE-2026-33939 in handlebars 4.7.8 (decorator DoS)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 7.5,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `handlebars@4.7.8`, which is affected by published advisory `CVE-2026-33939`. The vulnerable package is introduced through `ts-jest@29.4.6`, and the first fixed release is `4.7.9`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-33940",
+   "title": "CVE-2026-33940 in handlebars 4.7.8 (template-context RCE)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 8.1,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `handlebars@4.7.8`, which is affected by published advisory `CVE-2026-33940`. The vulnerable package is introduced through `ts-jest@29.4.6`, and the first fixed release is `4.7.9`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-33941",
+   "title": "CVE-2026-33941 in handlebars 4.7.8 (CLI precompiler code execution)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 8.2,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `handlebars@4.7.8`, which is affected by published advisory `CVE-2026-33941`. The vulnerable package is introduced through `ts-jest@29.4.6`, and the first fixed release is `4.7.9`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-59869",
+   "title": "CVE-2026-59869 in js-yaml 3.14.2 (crafted-document DoS)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 7.5,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `js-yaml@3.14.2`, which is affected by published advisory `CVE-2026-59869`. The vulnerable package is introduced through `ts-jest@29.4.6`, and the nearest fixed release on the same major line is `3.15.0`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-26996",
+   "title": "CVE-2026-26996 in minimatch 3.1.2 (glob-pattern DoS)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 7.5,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `minimatch@3.1.2`, which is affected by published advisory `CVE-2026-26996`. The vulnerable package is introduced through `jest@29.7.0`, and the nearest fixed release on the same major line is `3.1.3`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-27903",
+   "title": "CVE-2026-27903 in minimatch 3.1.2 (recursive backtracking DoS)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 7.5,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `minimatch@3.1.2`, which is affected by published advisory `CVE-2026-27903`. The vulnerable package is introduced through `jest@29.7.0`, and the nearest fixed release on the same major line is `3.1.3`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-27904",
+   "title": "CVE-2026-27904 in minimatch 3.1.2 (catastrophic-backtracking DoS)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 7.5,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `minimatch@3.1.2`, which is affected by published advisory `CVE-2026-27904`. The vulnerable package is introduced through `jest@29.7.0`, and the nearest fixed release on the same major line is `3.1.4`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "HIGH",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-33671",
+   "title": "CVE-2026-33671 in picomatch 2.3.1 (extglob ReDoS)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 7.5,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `picomatch@2.3.1`, which is affected by published advisory `CVE-2026-33671`. The vulnerable package is introduced through `ts-jest@29.4.6`, and the nearest fixed release on the same major line is `2.3.2`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "KICS",
+   "area": "docker-compose",
+   "id": "ce76b7d0-9e77-464d-b86f-c5c48e03e22d",
+   "title": "Container Capabilities Unrestricted",
+   "guide": "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html#rule-3-limit-capabilities-grant-only-specific-capabilities-needed-by-a-container",
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 800,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L800"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 102,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L102"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 208,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L208"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 247,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L247"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1273,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1273"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1421,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1421"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2339,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2339"
+    },
+    {
+     "path": "local-setup/docker-compose.matomo.yml",
+     "line": 39,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.matomo.yml#L39"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 69,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L69"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1174,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1174"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1637,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1637"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 77,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L77"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1855,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1855"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 172,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L172"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1226,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1226"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 172,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L172"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 207,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L207"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 526,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L526"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 861,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L861"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 586,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L586"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1513,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1513"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1623,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1623"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 817,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L817"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1851,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1851"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 397,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L397"
+    },
+    {
+     "path": "local-setup/docker-compose.monitoring.yml",
+     "line": 20,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.monitoring.yml#L20"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 245,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L245"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 223,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L223"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 155,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L155"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 113,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L113"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 865,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L865"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1589,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1589"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 9,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L9"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1961,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1961"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 367,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L367"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 245,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L245"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2099,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2099"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 755,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L755"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 405,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L405"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 388,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L388"
+    },
+    {
+     "path": "local-setup/docker-compose.matomo.yml",
+     "line": 20,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.matomo.yml#L20"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 436,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L436"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1336,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1336"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 307,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L307"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1595,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1595"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 263,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L263"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 383,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L383"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1456,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1456"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1021,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1021"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1446,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1446"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 577,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L577"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1715,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1715"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 283,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L283"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2016,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2016"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 72,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L72"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 520,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L520"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1710,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1710"
+    },
+    {
+     "path": "docker-compose.monitoring.yml",
+     "line": 20,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.monitoring.yml#L20"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1314,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1314"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 924,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L924"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 9,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L9"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1577,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1577"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 482,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L482"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 169,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L169"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 270,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L270"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 281,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L281"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1125,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1125"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1531,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1531"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 189,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L189"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 267,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L267"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 343,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L343"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 573,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L573"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 106,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L106"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 23,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L23"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1471,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1471"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 135,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L135"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 39,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L39"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 229,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L229"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 155,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L155"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2361,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2361"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 127,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L127"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2100,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2100"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2335,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2335"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 654,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L654"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 95,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L95"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 154,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L154"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 468,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L468"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 419,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L419"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 347,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L347"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1571,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1571"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1193,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1193"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 269,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L269"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 961,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L961"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 738,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L738"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 229,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L229"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1199,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1199"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2051,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2051"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 323,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L323"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 84,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L84"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 671,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L671"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 287,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L287"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 327,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L327"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 243,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L243"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 395,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L395"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1356,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1356"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 500,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L500"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 303,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L303"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1313,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1313"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 41,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L41"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 335,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L335"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 452,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L452"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 173,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L173"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 227,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L227"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 332,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L332"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2514,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2514"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 507,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L507"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1798,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1798"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1509,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1509"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1918,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1918"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 803,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L803"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1690,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1690"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 23,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L23"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 363,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L363"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1019,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1019"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 579,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L579"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 208,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L208"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 19,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L19"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 452,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L452"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 911,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L911"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1115,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1115"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 498,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L498"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1274,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1274"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1394,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1394"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1554,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1554"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 463,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L463"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1057,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1057"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 343,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L343"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1992,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1992"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1253,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1253"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Containers running with default capabilities retain powerful privileges that can facilitate container escape if an application vulnerability is exploited.",
+   "fix": "In docker-compose.egov-digit.yaml, add `cap_drop` to sensitive services:\n```yaml\n    cap_drop:\n      - ALL\n    cap_add:\n      - NET_BIND_SERVICE\n```",
+   "curated": true,
+   "category": "Container Isolation & Escape",
+   "count": 139,
+   "triage": {
+    "status": "action_required",
+    "priority": "P3",
+    "exposure": "internal",
+    "confidence": 0.85,
+    "reason": "Container capabilities are not dropped (missing cap_drop: ALL)."
+   },
+   "verify": {
+    "verified": true,
+    "note": ""
+   },
+   "enriched": true
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "KICS",
+   "area": "docker-compose",
+   "id": "610e266e-6c12-4bca-9925-1ed0cd29742b",
+   "title": "Security Opt Not Set",
+   "guide": "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html#rule-4-prevent-in-container-privilege-escalation",
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1961,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1961"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1531,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1531"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 106,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L106"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 154,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L154"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 654,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L654"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 135,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L135"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 463,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L463"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 69,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L69"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1274,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1274"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 520,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L520"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1021,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1021"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 95,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L95"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 388,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L388"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 229,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L229"
+    },
+    {
+     "path": "local-setup/docker-compose.matomo.yml",
+     "line": 39,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.matomo.yml#L39"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 267,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L267"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1226,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1226"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 343,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L343"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1199,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1199"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 227,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L227"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 397,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L397"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 586,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L586"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 283,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L283"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 526,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L526"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 327,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L327"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 113,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L113"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1509,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1509"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1057,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1057"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1992,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1992"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 419,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L419"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1313,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1313"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1356,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1356"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 924,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L924"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 84,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L84"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 363,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L363"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 39,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L39"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 269,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L269"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1918,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1918"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 72,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L72"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 800,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L800"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1456,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1456"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 208,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L208"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 335,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L335"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1394,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1394"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1421,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1421"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2051,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2051"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1851,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1851"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1446,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1446"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 307,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L307"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1336,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1336"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1314,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1314"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 189,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L189"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1595,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1595"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 405,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L405"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 243,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L243"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 281,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L281"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2339,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2339"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1589,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1589"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 247,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L247"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 41,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L41"
+    },
+    {
+     "path": "docker-compose.monitoring.yml",
+     "line": 20,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.monitoring.yml#L20"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 961,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L961"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 865,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L865"
+    },
+    {
+     "path": "local-setup/docker-compose.matomo.yml",
+     "line": 20,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.matomo.yml#L20"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 245,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L245"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 452,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L452"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1115,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1115"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 223,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L223"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 577,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L577"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 803,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L803"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 19,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L19"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1513,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1513"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 172,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L172"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 452,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L452"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 738,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L738"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 245,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L245"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 208,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L208"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 270,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L270"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 367,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L367"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 500,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L500"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 573,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L573"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 861,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L861"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1125,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1125"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 155,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L155"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 23,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L23"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2016,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2016"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 207,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L207"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 9,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L9"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 383,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L383"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1554,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1554"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 263,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L263"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 102,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L102"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 173,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L173"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 468,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L468"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 911,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L911"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1571,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1571"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 817,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L817"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 9,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L9"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1019,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1019"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 755,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L755"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 395,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L395"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2514,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2514"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 127,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L127"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2335,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2335"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 507,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L507"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 482,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L482"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2361,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2361"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1273,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1273"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1577,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1577"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1623,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1623"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 23,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L23"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 77,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L77"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 579,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L579"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 287,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L287"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 498,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L498"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1710,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1710"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 343,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L343"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1690,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1690"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 155,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L155"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 347,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L347"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1637,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1637"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1798,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1798"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 172,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L172"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1253,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1253"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2100,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2100"
+    },
+    {
+     "path": "local-setup/docker-compose.monitoring.yml",
+     "line": 20,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.monitoring.yml#L20"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1715,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1715"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 169,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L169"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 303,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L303"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 323,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L323"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1471,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1471"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1193,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1193"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 671,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L671"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 332,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L332"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 436,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L436"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2099,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2099"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 229,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L229"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1174,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1174"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Without `no-new-privileges`, a process in the container can escalate via setuid binaries; without an seccomp/AppArmor profile it can make syscalls it never needs, enlarging the kernel attack surface.",
+   "fix": "Add `security_opt: [\"no-new-privileges:true\"]` to each service (keep the default seccomp profile - do not set `seccomp:unconfined`).",
+   "curated": true,
+   "category": "Host & Service Hardening",
+   "count": 138
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "KICS",
+   "area": "docker-compose",
+   "id": "698ed579-b239-4f8f-a388-baa4bcb13ef8",
+   "title": "Healthcheck Not Set",
+   "guide": "https://docs.docker.com/reference/compose-file/services/#healthcheck",
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 383,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L383"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 207,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L207"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 468,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L468"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1623,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1623"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1690,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1690"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 77,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L77"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 113,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L113"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 9,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L9"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1356,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1356"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2016,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2016"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 343,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L343"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 405,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L405"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1174,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1174"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 283,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L283"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 287,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L287"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1992,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1992"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1798,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1798"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 154,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L154"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 347,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L347"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1273,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1273"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1253,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1253"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 388,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L388"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1021,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1021"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 227,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L227"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1226,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1226"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1313,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1313"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 135,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L135"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 436,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L436"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1509,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1509"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 419,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L419"
+    },
+    {
+     "path": "local-setup/docker-compose.monitoring.yml",
+     "line": 20,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.monitoring.yml#L20"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1314,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1314"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 229,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L229"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1554,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1554"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 9,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L9"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 169,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L169"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1199,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1199"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 84,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L84"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1513,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1513"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 367,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L367"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 106,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L106"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 303,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L303"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 189,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L189"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 19,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L19"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 323,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L323"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 267,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L267"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 39,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L39"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 263,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L263"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 247,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L247"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 229,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L229"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 243,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L243"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 363,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L363"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 69,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L69"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 498,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L498"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1421,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1421"
+    },
+    {
+     "path": "local-setup/docker-compose.matomo.yml",
+     "line": 39,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.matomo.yml#L39"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1637,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1637"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 482,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L482"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 327,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L327"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 223,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L223"
+    },
+    {
+     "path": "docker-compose.monitoring.yml",
+     "line": 20,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.monitoring.yml#L20"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 72,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L72"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 173,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L173"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 452,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L452"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1961,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1961"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 307,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L307"
+    },
+    {
+     "path": "local-setup/docker-compose.migrations.yml",
+     "line": 507,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.migrations.yml#L507"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 573,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L573"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Without a healthcheck the orchestrator cannot tell if the container is actually serving, so failed containers keep receiving traffic.",
+   "fix": "Add a `healthcheck:` block that probes a real readiness endpoint, e.g. `test: [\"CMD\", \"curl\", \"-f\", \"http://localhost:8080/health\"]` with sensible `interval`/`retries`.",
+   "curated": true,
+   "category": "Resource & Availability Controls",
+   "count": 68
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "KICS",
+   "area": "docker-compose",
+   "id": "451d79dc-0588-476a-ad03-3c7f0320abb3",
+   "title": "Container Traffic Not Bound To Host Interface",
+   "guide": "https://docs.docker.com/engine/network/port-publishing/#setting-the-default-bind-address-for-containers",
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1616,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1616"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1007,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1007"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1161,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1161"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 440,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L440"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 16,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L16"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 57,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L57"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2011,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2011"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 384,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L384"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1950,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1950"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1065,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1065"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1782,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1782"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1580,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1580"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1539,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1539"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 854,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L854"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1647,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1647"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 947,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L947"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 321,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L321"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 16,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L16"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 31,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L31"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2037,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2037"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1523,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1523"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 792,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L792"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 913,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L913"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 850,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L850"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1611,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1611"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 508,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L508"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1449,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1449"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 31,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L31"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 318,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L318"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1111,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1111"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 57,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L57"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 386,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L386"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 900,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L900"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 958,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L958"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1492,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1492"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 854,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L854"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1550,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1550"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1179,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1179"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 318,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L318"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Exposing management or proxy ports without binding them to a specific loopback interface makes internal services accessible to anyone with network reachability to the server.",
+   "fix": "In docker-compose.egov-digit.yaml, bind ports explicitly to localhost where external access is not required:\n```yaml\n    ports:\n      - \"127.0.0.1:18001:8001\"\n```",
+   "curated": true,
+   "category": "Network Exposure",
+   "count": 39,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.95,
+    "reason": "Kong admin and status ports bound to 0.0.0.0 without host firewall protection."
+   },
+   "verify": {
+    "verified": true,
+    "note": ""
+   },
+   "enriched": true
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Checkov",
+   "area": "ansible",
+   "id": "CKV2_ANSIBLE_1",
+   "title": "Ensure that HTTPS url is used with uri",
+   "guide": "https://docs.ansible.com/ansible/latest/collections/ansible/builtin/uri_module.html#parameter-validate_certs",
+   "locations": [
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1693,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L1693"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1702,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L1702"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1715,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L1715"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1922,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L1922"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2243,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L2243"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2282,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L2282"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2288,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L2288"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2299,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L2299"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2315,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L2315"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2339,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L2339"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2475,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L2475"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2485,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L2485"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3102,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3102"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3128,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3128"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3138,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3138"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3147,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3147"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3156,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3156"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3166,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3166"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3225,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3225"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3243,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3243"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3261,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3261"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3271,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3271"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3295,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3295"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3611,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3611"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3647,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3647"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3669,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3669"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3702,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3702"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3730,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3730"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3787,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3787"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4044,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4044"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4057,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4057"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4077,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4077"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4146,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4146"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4178,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4178"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Ansible `uri`/`get_url` tasks that call an http:// endpoint send data (including credentials, tokens and config) over the network in cleartext, exposing it to interception or man-in-the-middle tampering.",
+   "fix": "Change the task's `url:` from `http://` to `https://`. If the target is an internal service without TLS, front it with a TLS-terminating proxy or document the exception - do not disable certificate validation to work around it.",
+   "curated": true,
+   "category": "Transport Security (TLS)",
+   "count": 34
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "ansible-lint",
+   "area": "ansible",
+   "id": "risky-file-permissions",
+   "title": "File created without an explicit restrictive mode",
+   "guide": "https://ansible.readthedocs.io/projects/lint/rules/risky-file-permissions/",
+   "locations": [
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 345,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L345"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1082,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L1082"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1088,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L1088"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1096,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L1096"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1114,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L1114"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1132,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L1132"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1152,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L1152"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1303,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L1303"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2518,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L2518"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3021,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3021"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4260,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4260"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4270,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4270"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4286,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4286"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4338,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4338"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4492,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4492"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4554,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4554"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4599,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4599"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4641,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4641"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4647,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4647"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4659,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4659"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "The file/copy/template task creates a file without an explicit `mode:`, so it inherits the process umask. Config or secret material can land world-readable. The repo's own .ansible-lint suppresses this rule, so its CI never catches it.",
+   "fix": "Add an explicit least-privilege `mode:` to the task, e.g. `mode: '0640'` for config and `mode: '0600'` for anything holding a secret; `mode: '0750'`/`'0700'` for directories.",
+   "curated": true,
+   "category": "File Permissions",
+   "count": 20
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Checkov",
+   "area": "ansible",
+   "id": "CKV_ANSIBLE_1",
+   "title": "Ensure that certificate validation isn't disabled with uri",
+   "guide": "https://docs.ansible.com/ansible/latest/collections/ansible/builtin/uri_module.html#parameter-validate_certs",
+   "locations": [
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3128,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3128"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3138,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3138"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3147,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3147"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3156,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3156"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3166,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3166"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3611,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3611"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3702,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3702"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3730,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3730"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4044,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4044"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4057,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4057"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4077,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4077"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4146,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4146"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Disabling TLS certificate validation lets Ansible trust any certificate, enabling man-in-the-middle interception of the request.",
+   "fix": "Re-enable certificate validation (`validate_certs: true`) and supply the CA bundle via `ca_path:` if a private CA is in use.",
+   "curated": true,
+   "category": "Transport Security (TLS)",
+   "count": 12
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "ansible-lint",
+   "area": "ansible",
+   "id": "risky-shell-pipe",
+   "title": "Shell pipeline without pipefail (failures go undetected)",
+   "guide": "https://ansible.readthedocs.io/projects/lint/rules/risky-shell-pipe/",
+   "locations": [
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2640,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L2640"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2702,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L2702"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3518,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3518"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3559,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L3559"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4011,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/playbook-deploy.yml#L4011"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "A shell task pipes commands without `set -o pipefail`, so a failure in any stage except the last is silently ignored - a failed download/verify can still be treated as success (masking supply-chain or deploy errors).",
+   "fix": "Start the shell with `set -o pipefail` (and add `args: executable: /bin/bash`), or split the pipeline into discrete, checked steps.",
+   "curated": true,
+   "category": "Supply Chain & Integrity",
+   "count": 5
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "KICS",
+   "area": "docker-compose",
+   "id": "bc2908f3-f73c-40a9-8793-c1b7d5544f79",
+   "title": "Privileged Ports Mapped In Container",
+   "guide": "https://docs.docker.com/reference/compose-file/services/#ports",
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1550,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1550"
+    },
+    {
+     "path": "local-setup/docker-compose.matomo.yml",
+     "line": 58,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.matomo.yml#L58"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1580,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1580"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1449,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1449"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Mapping a privileged host port (below 1024) forces the daemon/container to bind with elevated privileges, widening the attack surface.",
+   "fix": "Map the service to a high host port (>=1024), e.g. `- \"8080:8080\"`, and let the reverse proxy terminate 80/443, so containers never bind privileged ports.",
+   "curated": true,
+   "category": "Network Exposure",
+   "count": 4
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "KICS",
+   "area": "docker-compose",
+   "id": "4f31dd9f-2cc3-4751-9b53-67e4af83dac0",
+   "title": "Host Namespace is Shared",
+   "guide": "https://docs.docker.com/reference/compose-file/services/#pid",
+   "locations": [
+    {
+     "path": "docker-compose.monitoring.yml",
+     "line": 36,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.monitoring.yml#L36"
+    },
+    {
+     "path": "local-setup/docker-compose.monitoring.yml",
+     "line": 36,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.monitoring.yml#L36"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "Sharing a host namespace (`pid`, `ipc`, or `network`) removes the isolation boundary: the container can see and signal host processes, access host IPC, or bind every host interface.",
+   "fix": "Remove `pid: host` / `ipc: host` / `network_mode: host` from the service. Use a user-defined bridge network and publish only the ports you need.",
+   "curated": true,
+   "category": "Container Isolation & Escape",
+   "count": 2
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Custom",
+   "area": "ansible",
+   "id": "CMS-SEC-06",
+   "title": "systemd service runs without hardening (NoNewPrivileges=true)",
+   "guide": "https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#NoNewPrivileges=",
+   "locations": [
+    {
+     "path": "local-setup/ansible/templates/integration-tests-runner.service.j2",
+     "line": 8,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/templates/integration-tests-runner.service.j2#L8"
+    },
+    {
+     "path": "local-setup/ansible/templates/integration-tests-runner.service.j2",
+     "line": 8,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/templates/integration-tests-runner.service.j2#L8"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "The systemd service runs without sandboxing - typically as root with no NoNewPrivileges/ProtectSystem. If the service (or a payload it runs) is compromised, there is nothing between it and full host control.",
+   "fix": "Add to the unit's [Service] section: a non-root `User=`, `NoNewPrivileges=true`, `ProtectSystem=strict`, `ProtectHome=true`, `PrivateTmp=true`, and `ReadWritePaths=` limited to what it needs.",
+   "curated": true,
+   "category": "Host & Service Hardening",
+   "count": 2
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Custom",
+   "area": "ansible",
+   "id": "CMS-SEC-06",
+   "title": "systemd service runs without hardening (a non-root User=)",
+   "guide": "https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#NoNewPrivileges=",
+   "locations": [
+    {
+     "path": "local-setup/ansible/templates/integration-tests-runner.service.j2",
+     "line": 8,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/templates/integration-tests-runner.service.j2#L8"
+    },
+    {
+     "path": "local-setup/ansible/templates/integration-tests-runner.service.j2",
+     "line": 8,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/templates/integration-tests-runner.service.j2#L8"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "The systemd service runs without sandboxing - typically as root with no NoNewPrivileges/ProtectSystem. If the service (or a payload it runs) is compromised, there is nothing between it and full host control.",
+   "fix": "Add to the unit's [Service] section: a non-root `User=`, `NoNewPrivileges=true`, `ProtectSystem=strict`, `ProtectHome=true`, `PrivateTmp=true`, and `ReadWritePaths=` limited to what it needs.",
+   "curated": true,
+   "category": "Host & Service Hardening",
+   "count": 2
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Custom",
+   "area": "ansible",
+   "id": "CMS-SEC-06",
+   "title": "systemd service runs without hardening (ProtectSystem=)",
+   "guide": "https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#NoNewPrivileges=",
+   "locations": [
+    {
+     "path": "local-setup/ansible/templates/integration-tests-runner.service.j2",
+     "line": 8,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/templates/integration-tests-runner.service.j2#L8"
+    },
+    {
+     "path": "local-setup/ansible/templates/integration-tests-runner.service.j2",
+     "line": 8,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/templates/integration-tests-runner.service.j2#L8"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "The systemd service runs without sandboxing - typically as root with no NoNewPrivileges/ProtectSystem. If the service (or a payload it runs) is compromised, there is nothing between it and full host control.",
+   "fix": "Add to the unit's [Service] section: a non-root `User=`, `NoNewPrivileges=true`, `ProtectSystem=strict`, `ProtectHome=true`, `PrivateTmp=true`, and `ReadWritePaths=` limited to what it needs.",
+   "curated": true,
+   "category": "Host & Service Hardening",
+   "count": 2
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Custom",
+   "area": "ansible",
+   "id": "CMS-SEC-05",
+   "title": "nginx is missing the security header: server_tokens off",
+   "guide": "https://owasp.org/www-project-secure-headers/",
+   "locations": [
+    {
+     "path": "local-setup/ansible/templates/nginx-site.conf.j2",
+     "line": 1,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/templates/nginx-site.conf.j2#L1"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "The public nginx edge for this citizen-facing government app does not set this security response header, leaving users exposed to protocol downgrade (no HSTS), MIME sniffing (no X-Content-Type-Options), clickjacking, or version disclosure (server_tokens on).",
+   "fix": "Add the header in the nginx server block: `add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains\" always;`, `add_header X-Content-Type-Options nosniff always;`, `add_header X-Frame-Options DENY always;`, and set `server_tokens off;`.",
+   "curated": true,
+   "category": "Web & Edge Hardening",
+   "count": 1
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Custom",
+   "area": "ansible",
+   "id": "CMS-SEC-05",
+   "title": "nginx is missing the security header: Strict-Transport-Security (HSTS)",
+   "guide": "https://owasp.org/www-project-secure-headers/",
+   "locations": [
+    {
+     "path": "local-setup/ansible/templates/nginx-site.conf.j2",
+     "line": 1,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/templates/nginx-site.conf.j2#L1"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "The public nginx edge for this citizen-facing government app does not set this security response header, leaving users exposed to protocol downgrade (no HSTS), MIME sniffing (no X-Content-Type-Options), clickjacking, or version disclosure (server_tokens on).",
+   "fix": "Add the header in the nginx server block: `add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains\" always;`, `add_header X-Content-Type-Options nosniff always;`, `add_header X-Frame-Options DENY always;`, and set `server_tokens off;`.",
+   "curated": true,
+   "category": "Web & Edge Hardening",
+   "count": 1
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Custom",
+   "area": "ansible",
+   "id": "CMS-SEC-05",
+   "title": "nginx is missing the security header: X-Content-Type-Options: nosniff",
+   "guide": "https://owasp.org/www-project-secure-headers/",
+   "locations": [
+    {
+     "path": "local-setup/ansible/templates/nginx-site.conf.j2",
+     "line": 1,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/templates/nginx-site.conf.j2#L1"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "The public nginx edge for this citizen-facing government app does not set this security response header, leaving users exposed to protocol downgrade (no HSTS), MIME sniffing (no X-Content-Type-Options), clickjacking, or version disclosure (server_tokens on).",
+   "fix": "Add the header in the nginx server block: `add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains\" always;`, `add_header X-Content-Type-Options nosniff always;`, `add_header X-Frame-Options DENY always;`, and set `server_tokens off;`.",
+   "curated": true,
+   "category": "Web & Edge Hardening",
+   "count": 1
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Custom",
+   "area": "ansible",
+   "id": "CMS-SEC-08",
+   "title": "Unauthenticated /mcp admin tools exposed only when nginx_features.mcp is enabled (default: off)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/ansible/templates/nginx-site.conf.j2",
+     "line": 246,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/templates/nginx-site.conf.j2#L246"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "This configuration diverges from a security best practice.",
+   "fix": "Follow the reference for this rule to apply the fix; the AI layer adds a code-specific fix when enabled.",
+   "curated": false,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Custom",
+   "area": "ansible",
+   "id": "CMS-SEC-10",
+   "title": "Security lint rule disabled in .ansible-lint",
+   "guide": "https://ansible.readthedocs.io/projects/lint/configuring/#pre-commit",
+   "locations": [
+    {
+     "path": "local-setup/ansible/.ansible-lint",
+     "line": 25,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/ansible/.ansible-lint#L25"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "The repo's `.ansible-lint` skip/warn list disables a security rule (e.g. risky-file-permissions), so the project's own linting is blind to that class of issue - a governance gap that lets insecure changes pass CI unnoticed.",
+   "fix": "Remove the security rule from the skip_list (fix the underlying tasks instead), or move it to warn_list only with a documented, time-boxed justification. Keep security rules enforcing in CI.",
+   "curated": true,
+   "category": "Host & Service Hardening",
+   "count": 1
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-13149",
+   "title": "CVE-2026-13149 in brace-expansion 1.1.12 (algorithmic DoS)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 5.3,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `brace-expansion@1.1.12`, which is affected by published advisory `CVE-2026-13149`. The vulnerable package is introduced through `jest@29.7.0`, and the nearest fixed release on the same branch is `1.1.16`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-33750",
+   "title": "CVE-2026-33750 in brace-expansion 1.1.12 (zero-step DoS)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 6.5,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `brace-expansion@1.1.12`, which is affected by published advisory `CVE-2026-33750`. The vulnerable package is introduced through `jest@29.7.0`, and the nearest fixed release on the same branch is `1.1.13`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-33916",
+   "title": "CVE-2026-33916 in handlebars 4.7.8 (prototype-pollution XSS)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 4.7,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `handlebars@4.7.8`, which is affected by published advisory `CVE-2026-33916`. The vulnerable package is introduced through `ts-jest@29.4.6`, and the first fixed release is `4.7.9`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-53550",
+   "title": "CVE-2026-53550 in js-yaml 3.14.2 (merge-key DoS)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 5.3,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `js-yaml@3.14.2`, which is affected by published advisory `CVE-2026-53550`. The vulnerable package is introduced through `ts-jest@29.4.6`, and the nearest fixed release on the same major line is `3.15.0`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-33672",
+   "title": "CVE-2026-33672 in picomatch 2.3.1 (method-injection integrity flaw)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 5.3,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `picomatch@2.3.1`, which is affected by published advisory `CVE-2026-33672`. The vulnerable package is introduced through `ts-jest@29.4.6`, and the nearest fixed release on the same major line is `2.3.2`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  },
+  {
+   "severity": "LOW",
+   "source": "KICS",
+   "area": "docker-compose",
+   "id": "8c978947-0ff6-485c-b0c2-0bfca6026466",
+   "title": "Shared Volumes Between Containers",
+   "guide": "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html#rule-8-set-filesystem-and-volumes-to-read-only",
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 936,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L936"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 85,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L85"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1869,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1869"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 974,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L974"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1724,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1724"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 54,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L54"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 883,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L883"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 946,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L946"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 285,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L285"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 285,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L285"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 408,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L408"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 347,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L347"
+    },
+    {
+     "path": "local-setup/docker-compose.matomo.yml",
+     "line": 31,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.matomo.yml#L31"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 462,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L462"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1552,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1552"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 350,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L350"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 56,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L56"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2370,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2370"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1580,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1580"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 253,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L253"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 85,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L85"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 30,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L30"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2116,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L2116"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 411,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L411"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 539,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L539"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 411,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L411"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 253,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L253"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1031,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1031"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 347,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L347"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 816,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L816"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 113,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L113"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 87,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L87"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1076,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1076"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 874,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L874"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 685,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L685"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 472,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L472"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 534,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L534"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1143,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1143"
+    },
+    {
+     "path": "local-setup/docker-compose.matomo.yml",
+     "line": 56,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.matomo.yml#L56"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 606,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L606"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1356,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1356"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1538,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1538"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 1563,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L1563"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 216,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L216"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 112,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L112"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1695,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1695"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1907,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L1907"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 28,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L28"
+    },
+    {
+     "path": "docker-compose.egov-digit.yaml",
+     "line": 772,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/docker-compose.egov-digit.yaml#L772"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 215,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/docker-compose.egov-digit.yaml#L215"
+    }
+   ],
+   "cvss": null,
+   "cwe": null,
+   "why": "A named/host volume mounted into more than one container lets a compromise in one service read or tamper with another service's data, and can leak secrets written to that volume across trust boundaries.",
+   "fix": "Give each service its own volume unless sharing is required. Where a volume must be shared, mount it read-only (`:ro`) in every consumer that does not need to write.",
+   "curated": true,
+   "category": "Data Sharing",
+   "count": 50
+  },
+  {
+   "severity": "LOW",
+   "source": "Strix",
+   "area": "ansible",
+   "id": "CVE-2026-49356",
+   "title": "CVE-2026-49356 in @babel/core 7.29.0 (arbitrary file read)",
+   "guide": "",
+   "locations": [
+    {
+     "path": "local-setup/tests/package-lock.json",
+     "line": null,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/57e28906bd1d42baae08bf4cd5640899b843c037/local-setup/tests/package-lock.json"
+    }
+   ],
+   "cvss": 3.2,
+   "cwe": "",
+   "why": "The test-suite lockfile `tests/package-lock.json` resolves the transitive npm dependency `@babel/core@7.29.0`, which is affected by published advisory `CVE-2026-49356`. The vulnerable package is introduced through `ts-jest@29.4.6`, and the nearest fixed release on the same major line is `7.29.6`.",
+   "fix": "See the Strix-generated patch for the concrete change.",
+   "curated": true,
+   "category": "General Hardening",
+   "count": 1
+  }
+ ]
+}
