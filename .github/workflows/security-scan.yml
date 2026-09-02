@@ -145,8 +145,12 @@ jobs:
           STRIX_AUTH: ${{ secrets.STRIX_AUTH }}
         run: |
           if [ -z "$STRIX_AUTH" ]; then echo "STRIX_AUTH secret not set; skipping Strix."; exit 0; fi
-          curl -sSL https://strix.ai/install | bash
+          # Pin the Strix version. The installer defaults to latest, and a release after
+          # 1.5.3 regressed the model config (KeyError: 'agents.models' at LLM warm-up on
+          # the chatgpt/gpt-5.4 subscription path). 1.5.3 is verified working.
+          curl -sSL https://strix.ai/install | VERSION=1.5.3 bash
           export PATH="$HOME/.strix/bin:$PATH"
+          strix --version
           mkdir -p ~/.strix
           printf '%s' "$STRIX_AUTH" | base64 -d > ~/.strix/subscription-auth.json
           chmod 600 ~/.strix/subscription-auth.json
