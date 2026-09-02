@@ -26,6 +26,34 @@ if not SARIF:
 
 _PATH_RE = re.compile(r"[\w][\w./-]+\.(?:json|ya?ml|md|sh|j2|py|js|ts|lock|env|toml|xml|properties|sql|conf|cfg|ini)")
 
+# --- Ansible remote-server deployment scope (see .github/SECURITY-SCOPE.md) ---
+# Strix scans ./local-setup broadly, but only files the Ansible deployment actually
+# uses are in scope. Findings whose validated path falls outside this set (k8s/helm,
+# Tilt/local-dev, unused config trees) are dropped so the report reflects the real
+# deployed attack surface, not dormant code. Derived by grepping the ansible layer +
+# the compose files it invokes for their referenced files and bind mounts.
+SCOPE_DIRS = (
+    "local-setup/ansible/",
+    "local-setup/configs/", "local-setup/db/", "local-setup/gatus/",
+    "local-setup/jupyter/", "local-setup/keycloak/", "local-setup/kong/",
+    "local-setup/nginx/", "local-setup/otel/", "local-setup/seeds/",
+    "local-setup/tests/",
+)
+SCOPE_FILES = {
+    "local-setup/docker-compose.egov-digit.yaml",
+    "local-setup/docker-compose.fast-path.yml",
+    "local-setup/docker-compose.bomet.yml",
+    "local-setup/docker-compose.monitoring.yml",
+    "local-setup/docker-compose.migrations.yml",
+    "local-setup/docker-compose.matomo.yml",
+}
+
+
+def in_scope(relpath):
+    """True if a validated repo path belongs to the Ansible remote-server deployment."""
+    p = (relpath or "").replace("\\", "/").lstrip("./")
+    return p in SCOPE_FILES or any(p.startswith(d) for d in SCOPE_DIRS)
+
 
 def sev_from_cvss(c):
     try: c = float(c)
@@ -106,6 +134,7 @@ def main():
     rules = run.get("tool", {}).get("driver", {}).get("rules", [])
     out = []
     dropped = []
+    out_of_scope = []
     for r in run.get("results", []):
         rid = r.get("ruleId") or ""
         rule = {}
@@ -131,6 +160,10 @@ def main():
         if not resolved:
             dropped.append(f"{rid} (uri={raw_uri!r} - no real repo file found)")
             continue
+        # SCOPE gate - drop findings outside the Ansible remote-server deployment set.
+        if not in_scope(resolved):
+            out_of_scope.append(f"{rid} ({resolved})")
+            continue
         if recovered:
             line = None                       # Strix's line was for its wrong uri; don't trust it
         title = fix_title_path(title, resolved)   # always: the title must name the validated file
@@ -148,7 +181,10 @@ def main():
     json.dump(existing + out, open(OUT, "w"), indent=1)
     msg = f"Strix: added {len(out)} finding(s) from {SARIF} -> {OUT} (total {len(existing) + len(out)})."
     if dropped:
-        msg += f" Dropped {len(dropped)} with unverifiable location: " + "; ".join(dropped)
+        msg += f" Dropped {len(dropped)} with unverifiable location: " + "; ".join(dropped) + "."
+    if out_of_scope:
+        msg += (f" Dropped {len(out_of_scope)} outside the Ansible deployment scope "
+                f"(see .github/SECURITY-SCOPE.md): " + "; ".join(out_of_scope) + ".")
     print(msg)
 
 

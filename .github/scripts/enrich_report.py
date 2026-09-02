@@ -2,13 +2,19 @@
 """
 Agentic enrichment of run.json via a free OpenAI-compatible LLM (default: Google Gemini).
 
-Pipeline (batched, ~5 calls/run):
+Pipeline (batched, ~6 calls/run):
   0. context   - read the real code around each finding (deterministic, no LLM)
-  1. triage    - confirmed / likely_false_positive / needs_review + confidence + reason
-  2. remediate - context-aware why / how-to-fix, grounded in the actual code
-  3. verify    - DUAL-PASS critic: a fix is "verified" only if BOTH independent
+  1. triage    - action_required / acceptable / false_positive + priority + exposure + reason
+     1b. audit  - skeptical independent second triage pass (fail-safe)
+  2. validate  - independent labeling/assertion pass: re-derives category, severity,
+                 priority and deployment-applicability FROM THE CODE, so mis-labeled or
+                 agent-sourced (Strix) findings get the right label/priority. Reconciled
+                 with a bias-to-caution 3-way vote; raw scanner severity is annotated, not
+                 overwritten.
+  3. remediate - context-aware why / how-to-fix, grounded in the actual code
+  4. verify    - DUAL-PASS critic: a fix is "verified" only if BOTH independent
                  reviewers approve; otherwise "needs review"
-  4. summary   - executive summary + prioritized action list
+  5. summary   - executive summary + prioritized action list
 
 Guardrails (no negligence):
   - No API key -> clean no-op (report keeps its curated remediation).
@@ -197,7 +203,9 @@ if not findings:
 rules = {}
 for f in findings:
     r = rules.setdefault(f["id"], {"id": f["id"], "title": f["title"], "severity": f["severity"],
-                                   "area": f["area"], "count": 0, "locs": []})
+                                   "area": f["area"], "source": f.get("source", ""),
+                                   "category": f.get("category", ""), "cvss": f.get("cvss"),
+                                   "cwe": f.get("cwe"), "count": 0, "locs": []})
     r["count"] += f["count"]
     if not r["locs"] and f.get("locations"):
         r["locs"] = f["locations"][:2]
@@ -281,14 +289,33 @@ def stage_triage_audit(rs):
         {"role": "user", "content": 'Return ONLY JSON: {"results":[{"id":"...","status":"action_required|acceptable|false_positive","reason":"<=20 words"}]}\n\nFindings:\n' + json.dumps(_tri_payload(rs))}]))
 
 
-def _final_status(a, b):
-    """Combine the two triage passes. Downgrade out of action_required ONLY when both
-    passes agree it is non-actionable; any action_required vote (or disagreement) wins."""
-    sa = (a or {}).get("status"); sb = (b or {}).get("status")
+def _final_status(*statuses):
+    """Combine triage/audit/validation votes. Downgrade out of action_required ONLY when
+    EVERY non-null vote agrees it is non-actionable; any action_required vote (or a
+    disagreement) keeps it action_required. Bias to caution - a single reviewer can never
+    silently suppress a finding the others consider real."""
+    votes = [s for s in statuses if s]
     non_act = {"acceptable", "false_positive"}
-    if sa in non_act and sb in non_act:
-        return "false_positive" if sa == sb == "false_positive" else "acceptable"
+    if votes and all(s in non_act for s in votes):
+        return "false_positive" if all(s == "false_positive" for s in votes) else "acceptable"
     return "action_required"
+
+
+def _val_status(v):
+    """Turn a validation assertion into a non-actionable vote, but only at high confidence:
+    a clear scanner misfire (is_real=false) reads as false_positive; a control that only
+    applies to a runtime this deploy does not use (applicable=false) reads as acceptable."""
+    if not v: return None
+    try: conf = float(v.get("confidence"))
+    except Exception: conf = 0.0
+    if v.get("is_real") is False and conf >= 0.7: return "false_positive"
+    if v.get("applicable") is False and conf >= 0.7: return "acceptable"
+    return "action_required"
+
+
+def _most_urgent(*prios):
+    ps = [p for p in prios if p in _PRI_RANK]
+    return min(ps, key=lambda p: _PRI_RANK[p]) if ps else None
 
 
 def stage_remediate(rs):
@@ -313,10 +340,63 @@ def stage_verify(rs, rem, n):
         {"role": "user", "content": 'Return ONLY JSON: {"results":[{"id":"...","verified":true,"note":"<=20 words, only when not verified"}]}\n\nRemediations:\n' + json.dumps(payload)}]))
 
 
+# The report's own 12-category taxonomy (mirrors SEC_CATEGORY in security_report.py).
+# The validator must pick EXACTLY one so the assigned label is consistent with the
+# rest of the dashboard - never an ad-hoc phrase.
+CANON_CATEGORIES = [
+    "Container Isolation & Escape", "Host & Service Hardening", "File Permissions",
+    "Access Control", "Supply Chain & Integrity", "Web & Edge Hardening",
+    "Network Exposure", "Transport Security (TLS)", "Secrets Management",
+    "Resource & Availability Controls", "Data Sharing", "General Hardening",
+]
+_SEV_LEVELS = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
+_SEV_RANK = {s: i for i, s in enumerate(_SEV_LEVELS)}          # 0 = most severe
+_PRI_RANK = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+
+
+def _val_payload(rs):
+    return [{"id": r["id"], "title": r["title"], "reported_severity": r["severity"],
+             "reported_cvss": r.get("cvss"), "cwe": r.get("cwe"), "area": r["area"],
+             "scanner": r.get("source") or "scanner",
+             "agent_sourced": (r.get("source") == "Strix"),
+             "current_category": r.get("category") or "",
+             "file": (r["locs"][0]["path"] if r["locs"] else ""), "snippet": r["snippet"]} for r in rs]
+
+
+def stage_validate(rs):
+    """Independent labeling/assertion pass - the 'get proper assertion & validation done'
+    layer. For every finding it re-derives, FROM THE CODE, the four things a scanner (and
+    especially the Strix agent, whose severity/CVSS/labels are unreliable) most often gets
+    wrong: the vulnerability category, the true severity, the priority, and whether the
+    finding even applies to THIS Ansible remote-server deployment or is a scanner misfire.
+    Returns per-id assertions; reconciliation (never blind trust) happens in the caller."""
+    if not rs: return {}
+    cats = ", ".join(CANON_CATEGORIES)
+    return rows(call([
+        {"role": "system", "content":
+            f"You are an independent security classifier auditing findings for a {CTX} {DEPLOY}\n\n"
+            "Do NOT trust the reported severity/CVSS/category - re-derive each from the actual code shown. "
+            "Findings marked agent_sourced:true come from an autonomous pentest agent whose severity, CVSS and "
+            "labels are frequently wrong; weigh those on the code evidence alone. For each finding assert:\n"
+            f"- category: EXACTLY one of [{cats}] - the best fit for the real weakness.\n"
+            "- severity: CRITICAL|HIGH|MEDIUM|LOW, judged from concrete impact in THIS deployment, not the CVE headline.\n"
+            "- priority: P0|P1|P2|P3 per the same rubric the triager uses (P0 = act now; P3 = defense-in-depth on an internal service).\n"
+            "- applicable: true if this weakness genuinely applies to this Ansible/docker-compose remote-server deployment; "
+            "false ONLY if it applies solely to a runtime this deploy does not use (e.g. a pure-Kubernetes control) or to dead/unused code.\n"
+            "- is_real: true if the flagged condition actually holds in the code shown; false if the scanner misfired "
+            "(templated/example value, control already present by other means, dev-only path that is off in prod).\n"
+            "Be evidence-based and decisive. Set a low confidence instead of guessing when the snippet is insufficient."},
+        {"role": "user", "content":
+            'Return ONLY JSON: {"results":[{"id":"...","category":"<one of the list>","severity":"CRITICAL|HIGH|MEDIUM|LOW",'
+            '"priority":"P0|P1|P2|P3","applicable":true,"is_real":true,"confidence":0.0,"note":"<=25 words, cite the evidence"}]}'
+            "\n\nFindings:\n" + json.dumps(_val_payload(rs))}]))
+
+
 if todo:
     log(f"enriching {len(todo)} new rule(s) via {MODEL} ...")
     tri = stage_triage(todo)            # primary deployment-aware assessment
     aud = stage_triage_audit(todo)      # skeptical fail-safe second pass
+    val = stage_validate(todo)          # independent labeling/assertion pass (category/severity/priority/applicability)
     rem = stage_remediate(todo)
     v1 = stage_verify(todo, rem, 1)
     v2 = stage_verify(todo, rem, 2)
@@ -328,14 +408,51 @@ if todo:
         if not (rr.get("why") and rr.get("fix")):
             continue
         t = tri.get(rid) or {}
-        status = _final_status(t, aud.get(rid))
-        prio = (t.get("priority") or "P2") if status == "action_required" else ""
+        v = val.get(rid) or {}
+        agent_sourced = (r.get("source") == "Strix")
+        try: vconf = float(v.get("confidence"))
+        except Exception: vconf = 0.0
+        # 3-way status vote: triage, skeptical audit, and the validation pass. Conservative
+        # about WHETHER a finding is real (any action_required vote wins).
+        status = _final_status(t.get("status"), (aud.get(rid) or {}).get("status"), _val_status(v))
+        # Label: adopt the validator's canonical category when confident, else keep the
+        # deterministic sec_category(). This is the "right label" the agent assigns.
+        vcat = v.get("category") if v.get("category") in CANON_CATEGORIES and vconf >= 0.5 else None
+        # Severity CALIBRATION. Deterministic scanners (Checkov/KICS/custom) produce trustworthy
+        # severities - we honour them and only RAISE on a confident higher read, never lower.
+        # Strix is an AI agent whose CVSS/severity is the known-unreliable input the user asked
+        # us to correct, so for agent-sourced findings the validator's severity is authoritative
+        # (up OR down) when confident. This is calibration of a soft label, not altering raw
+        # deterministic scan output.
+        vsev = v.get("severity") if v.get("severity") in _SEV_LEVELS else None
+        eff_sev = r["severity"]
+        if vsev:
+            if agent_sourced and vconf >= 0.6:
+                eff_sev = vsev
+            elif (not agent_sourced) and vconf >= 0.75 and _SEV_RANK[vsev] < _SEV_RANK.get(r["severity"], 9):
+                eff_sev = vsev
+        # Priority. For agent-sourced findings the validator calibrates it directly (it owns the
+        # severity too); for deterministic ones, keep the more urgent of triager vs validator.
+        if status == "action_required":
+            if agent_sourced and v.get("priority") in _PRI_RANK and vconf >= 0.6:
+                prio = v.get("priority")
+            else:
+                prio = _most_urgent(t.get("priority"), v.get("priority")) or "P2"
+        else:
+            prio = ""
         cache[rid] = {
             "v": CACHE_V,
+            "category": vcat,
+            "severity_effective": eff_sev,
             "triage": {"status": status, "priority": prio,
                        "exposure": t.get("exposure", "unknown"),
                        "confidence": t.get("confidence"),
                        "reason": t.get("reason") or (aud.get(rid, {}) or {}).get("reason", "")},
+            "validation": {"category": vcat, "severity": vsev, "severity_effective": eff_sev,
+                           "scanner_severity": r["severity"], "priority": v.get("priority"),
+                           "applicable": v.get("applicable"), "is_real": v.get("is_real"),
+                           "confidence": vconf, "adjusted": eff_sev != r["severity"],
+                           "note": v.get("note", "")} if v else None,
             "why": rr["why"], "fix": rr["fix"],
             "verify": {"verified": bool(v1.get(rid, {}).get("verified")) and bool(v2.get(rid, {}).get("verified")),
                        "note": (v1.get(rid, {}).get("note") or v2.get(rid, {}).get("note") or "")},
@@ -349,19 +466,35 @@ for f in findings:
     if not (c and c.get("why") and c.get("fix")):
         continue
     if c.get("triage"): f["triage"] = c["triage"]
+    if c.get("validation"): f["validation"] = c["validation"]
+    if c.get("category"): f["category"] = c["category"]   # validated label overrides the heuristic one
+    if c.get("severity_effective"): f["severity"] = c["severity_effective"]  # calibrated (Strix up/down, scanners raise-only)
     f["why"] = c["why"]
     f["fix"] = c["fix"]
     if c.get("verify"): f["verify"] = c["verify"]
     f["enriched"] = True
 
-# Severity floor on priority: a CRITICAL finding (e.g. a CVSS 9.8 dependency RCE surfaced
-# by Strix) must never sit below P0 - the context triage can under-rate a standard high-CVSS
-# CVE. We only raise urgency here, never lower it, and leave HIGH/MEDIUM to the triage's
-# nuanced call (a high-severity build-time dep legitimately can be P3).
+# Severity floor on priority: a CRITICAL finding must never sit below P0. This reads the
+# EFFECTIVE (post-calibration) severity, so a Strix finding the validator confidently
+# down-rated (e.g. a CVSS 9.8 CVE that only affects a build/test dependency) is no longer
+# force-floored to P0 - while a genuinely CRITICAL finding still is. We only raise urgency.
 for f in findings:
     t = f.get("triage") or {}
     if t.get("status") == "action_required" and f.get("severity") == "CRITICAL" and t.get("priority") != "P0":
         t["priority"] = "P0"; f["triage"] = t
+
+# Recompute the severity summary from the (possibly calibrated) finding severities so the
+# dashboard donut/counts stay consistent with per-finding severities after validation.
+import collections as _collections
+_types_by = _collections.Counter(f["severity"] for f in findings)
+_occ_by = _collections.Counter()
+for f in findings:
+    _occ_by[f["severity"]] += f.get("count", 1)
+_SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+run["summary"]["typesBySeverity"] = {s: _types_by.get(s, 0) for s in _SEV_ORDER}
+run["summary"]["occBySeverity"] = {s: _occ_by.get(s, 0) for s in _SEV_ORDER}
+run["summary"]["types"] = len(findings)
+run["summary"]["occurrences"] = sum(f.get("count", 1) for f in findings)
 
 # executive summary + priorities over ACTION-REQUIRED findings only (exclude acceptable / FPs)
 def _status(f): return (f.get("triage") or {}).get("status")

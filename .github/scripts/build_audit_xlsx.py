@@ -222,6 +222,9 @@ for f in action:
     if sx:  # surface independent Strix AI-pentest validation + CVSS/CWE inline
         tag = "[Strix-validated" + (f" · CVSS {sx.get('cvss')}" if sx.get("cvss") else "") + (f" · {sx.get('cwe')}" if sx.get("cwe") else "") + "]  "
         why = tag + why
+    vv = f.get("validation")
+    if vv and vv.get("adjusted") and vv.get("scanner_severity"):  # LLM severity calibration audit trail
+        why = f"[AI-validated · assessed {str(vv.get('severity','')).title()} (scanner rated {str(vv['scanner_severity']).title()})]  " + why
     vals = {3: f.get("category", ""), 4: f.get("title", ""), 5: f.get("id", ""), 6: f.get("source", ""),
             7: tri.get("exposure", ""), 8: f.get("count", 0), 9: why, 10: f.get("fix", ""),
             13: "Open", 16: tri.get("reason", "")}

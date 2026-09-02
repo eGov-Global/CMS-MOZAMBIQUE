@@ -16,6 +16,10 @@ name: Security Scan - Ansible Remote Server Deployment
 on:
   workflow_dispatch:
     inputs:
+      run_enrichment:
+        description: "AI enrichment (Gemini): triage, validate labels/severity/priority. Uncheck for a RAW scanner-only report to compare."
+        type: boolean
+        default: true
       run_strix:
         description: "Also run the Strix AI pentest (deep source review, ~30-60 min, uses your ChatGPT plan)"
         type: boolean
@@ -144,7 +148,16 @@ jobs:
           STRIX_LLM: "chatgpt/gpt-5.4"
           STRIX_AUTH: ${{ secrets.STRIX_AUTH }}
         run: |
-          if [ -z "$STRIX_AUTH" ]; then echo "STRIX_AUTH secret not set; skipping Strix."; exit 0; fi
+          if [ -z "$STRIX_AUTH" ]; then
+            echo "::warning title=Strix skipped::run_strix was selected but the STRIX_AUTH secret is not set."
+            {
+              echo "### ⚠️ Strix selected but STRIX_AUTH secret is not set"
+              echo ""
+              echo "The Strix AI pentest was requested (\`run_strix: true\`) but no \`STRIX_AUTH\` secret is configured, so it was skipped."
+              echo "This does **not** fail the scan - the rest of the report is complete. Add the \`STRIX_AUTH\` secret to enable Strix."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           # Pin the Strix version. The installer defaults to latest, and a release after
           # 1.5.3 regressed the model config (KeyError: 'agents.models' at LLM warm-up on
           # the chatgpt/gpt-5.4 subscription path). 1.5.3 is verified working.
@@ -154,10 +167,21 @@ jobs:
           mkdir -p ~/.strix
           printf '%s' "$STRIX_AUTH" | base64 -d > ~/.strix/subscription-auth.json
           chmod 600 ~/.strix/subscription-auth.json
-          strix -n -t ./local-setup -m deep --scope-mode full || echo "strix finished (findings or non-fatal)"
+          strix -n -t ./local-setup -m deep --scope-mode full 2>&1 | tee strix.log || echo "strix finished (findings or non-fatal)"
           SARIF="$(ls -t strix_runs/*/findings.sarif 2>/dev/null | head -1)"
           if [ -n "$SARIF" ]; then
             SARIF="$SARIF" OUT=custom.json STRIX_PREFIX=local-setup python3 .github/scripts/strix_to_findings.py
+          elif grep -qiE "usage[_ ]?limit|rate[_ ]?limit|\b429\b|too many requests|quota" strix.log 2>/dev/null; then
+            # ChatGPT Plus 5-hour rolling limit hit (not billing, not a pipeline failure).
+            # Make it unmistakable in the job summary so a capped run isn't mistaken for an auth error.
+            echo "::warning title=Strix skipped::ChatGPT 5-hour usage limit reached - re-run later."
+            {
+              echo "### ⚠️ Strix skipped: ChatGPT 5-hour usage limit reached"
+              echo ""
+              echo "The Strix AI pentest could not complete because the ChatGPT Plus **5-hour rolling usage limit** was hit."
+              echo "This is **not** a billing charge and does **not** fail the scan - the rest of the report (Checkov, KICS, custom rules, Gemini enrichment) is complete."
+              echo "Re-run the workflow with \`run_strix: true\` after the window resets (roughly 5 hours after the *previous* Strix run started)."
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "no Strix SARIF produced (auth or scan issue); continuing without Strix findings."
           fi
@@ -192,7 +216,20 @@ jobs:
           RUN_JSON: run.json
           CACHE_FILE: enrich-cache.json
           REPO: ${{ github.repository }}
-        run: python3 .github/scripts/enrich_report.py || echo "enrichment skipped (non-fatal)"
+        run: |
+          # Explicit opt-out for a RAW comparison run, without deleting the secret.
+          if [ "${{ github.event.inputs.run_enrichment }}" = "false" ]; then
+            export GEMINI_API_KEY=""
+            echo "run_enrichment=false — AI enrichment disabled for this run."
+          fi
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "ℹ️ RAW mode — scanner findings + curated remediation, no AI triage/validation/priority."
+            echo "### ℹ️ AI enrichment OFF — raw scanner report" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### ✨ AI enrichment ON — findings triaged, labels/severity/priority validated" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # Never fails the pipeline: the script no-ops cleanly when the key is absent.
+          python3 .github/scripts/enrich_report.py || echo "enrichment skipped (non-fatal)"
 
       # 3c) Build the multi-sheet audit workbook (Excel) for team tracking.
       # Tracks only action-required findings; acceptable/false-positive are documented
