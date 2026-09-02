@@ -208,7 +208,8 @@ async authenticateCreatedUser(createResult, mobileNumber, tenantId) {
       if (response.status === StatusCodes.OK) {
         return responseBody;
       } else {
-        throw new ExternalServiceError(`User creation failed with status ${response.status}`);
+        const errorCode = responseBody?.Errors?.[0]?.code || '';
+        throw new ExternalServiceError(`User creation failed with status ${response.status}: ${errorCode}`);
       }
     } catch (error) {
       throw error;

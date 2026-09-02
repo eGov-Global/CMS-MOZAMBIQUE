@@ -13,7 +13,8 @@ class UserProfileService {
     const url = `${BASE_URL}?tenantId=${tenantId}`;
     const requestBody = {
       RequestInfo: {
-        authToken: user.authToken
+        authToken: user.authToken,
+        userInfo: user.userInfo
       },
       user: user.userInfo
     };
