@@ -1,7 +1,7 @@
 // Migration port of shell-states.js/shell-transitions.js (onboarding + chassis)
-// to the class-based flow authoring in flow/flow-state*.js. Not wired into the
-// running system — state-machine.js still uses the original generate.js path.
-// `pgr` is a placeholder until pgr-states.js/pgr-transitions.js are ported.
+// to the class-based flow authoring in flow/flow-state*.js. Live: state-machine.js
+// requires this via citizen-service-machine.js. `pgr` here is a placeholder -
+// citizen-service-machine.js splices in pgr-machine.js's real config for that key.
 const State = require('./flow/flow-state');
 const QuestionState = require('./flow/flow-state-question');
 const AskState = require('./flow/flow-state-ask');
@@ -20,6 +20,11 @@ const isOnboarded = (context) => context.user.locale;
 const hasProfileName = (context) => context.user.name;
 const gaveName = (context) => context.onboarding.name;
 const commitName = (context) => { context.user.name = context.onboarding.name; };
+const isWhitelisted = (context) => {
+  const allowed = config.allowedMobileNumbers.split(',').map((n) => n.trim()).filter(Boolean);
+  return allowed.length === 0 || allowed.includes(context.user.mobileNumber);
+};
+
 
 // -- onboarding group ---------------------------------------------------
 
@@ -42,7 +47,8 @@ const invoke = new State('invoke');
 const startNode = new GateState('start');
 const endNode = new State('endstate');
 const systemErrorNode = new State('system_error');
-const pgrNode = new State('pgr'); // placeholder until pgr.js is ported
+const pgrNode = new State('pgr'); // placeholder - citizen-service-machine.js overrides this with pgr-machine.js's config
+const notAuthorized = new State('notAuthorized');
 
 const onboardingGroup = new Group('onboarding');
 onboardingGroup
@@ -58,6 +64,7 @@ const welcomeGroup = new Group('welcome')
 // -- wiring -----------------------------------------------------------
 
 startNode
+  .setConditionalNext(notAuthorized, (context) => !isWhitelisted(context))
   .setConditionalNext(welcomeGroup, isOnboarded)
   .setNext(onboardingGroup);
 
@@ -140,12 +147,17 @@ systemErrorNode
   .setEffect((context, event) => context.chatInterface.system_error(event.data))
   .setNext(welcomeGroup);
 
-const config_ = compile([startNode, onboardingGroup, welcomeGroup, endNode, systemErrorNode, pgrNode], 'start');
+notAuthorized
+  .setPrompt(messages.notAuthorized)
+  .setNext(startNode);
+
+const config_ = compile([startNode, onboardingGroup, welcomeGroup, endNode, systemErrorNode, pgrNode, notAuthorized], 'start');
 
 module.exports = {
   config: config_,
-  states: { start: startNode, onboardingGroup, welcomeGroup, endstate: endNode, system_error: systemErrorNode, pgr: pgrNode,
+  states: { start: startNode, onboardingGroup, welcomeGroup, endstate: endNode, system_error: systemErrorNode, pgr: pgrNode, notAuthorized,
     onboardingLocale: askLocale, onboardingWelcome: sayWelcome, onboardingName: askForName, onBoardingUserProfileConfirmation: askToConfirmProfile,
     changeName: askToChangeName, onboardingNameConfirmation: askToConfirmName, onboardingUpdateUserProfile: updateUserProfile, onboardingThankYou: sayThankYou,
     preCondition, invoke }
 };
+

@@ -76,4 +76,9 @@ module.exports = {
     pt_PT:
       "Estimado(a) {{name}},\n\nBem-vindo(a) ao chatbot Fala Cidadão no WhatsApp 🙏.\n\nJá pode apresentar a sua reclamação através do WhatsApp.\n",
   },
+  notAuthorized: {
+    en_IN: "Sorry, this number is not yet authorized to use this service.",
+    pt_PT: "Lamentamos, este número ainda não está autorizado a utilizar este serviço.",
+  },
+
 };

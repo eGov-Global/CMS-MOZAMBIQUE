@@ -16,6 +16,7 @@ function stub(request, from, exports) {
 stub("../env-variables", sessionDir, {
   pgrUseCase: {},
   supportedLocales: "en_IN",
+  allowedMobileNumbers: "",
   rootTenantId: "pg",
   timeZone: "Africa/Maputo",
   dateFormat: "DD/MM/YYYY",

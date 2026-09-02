@@ -17,6 +17,8 @@ const envVariables = {
 
     whatsAppBusinessNumber: process.env.WHATSAPP_BUSINESS_NUMBER || '919880900990',
 
+    allowedMobileNumbers: process.env.ALLOWED_MOBILE_NUMBERS || '',
+
     rootTenantId: process.env.ROOT_TENANTID || 'pg',
 
     supportedLocales: process.env.SUPPORTED_LOCALES || 'en_IN',
