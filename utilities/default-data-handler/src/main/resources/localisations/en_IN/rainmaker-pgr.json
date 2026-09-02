@@ -7507,7 +7507,7 @@
     },
     {
         "code": "PGR_LANDING_NAV_TRAINING",
-        "message": "Training & Help",
+        "message": "Tutorial",
         "module": "rainmaker-pgr",
         "locale": "en_IN"
     },
@@ -8184,6 +8184,36 @@
         "locale": "en_IN"
     },
     {
+        "code": "PGR_LANDING_TAB_TITLE",
+        "message": "Fala Cidadão",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_LANDING_TUTORIAL_PAGE_TITLE",
+        "message": "Tutorial",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_LANDING_TUTORIAL_VIDEO_LABEL",
+        "message": "How to Submit a Complaint (Video)",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_LANDING_TUTORIAL_MANUAL_LABEL",
+        "message": "User Manual (PDF)",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_LANDING_TUTORIAL_PENDING",
+        "message": "Content coming soon.",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
         "code": "PGR_CONSENT_SECTION_MANDATORY",
         "message": "MANDATORY",
         "module": "rainmaker-pgr",
@@ -8260,5 +8290,6 @@
         "message": "Complainant Details",
         "module": "rainmaker-pgr",
         "locale": "en_IN"
-    }
+    },
+    {"code": "ES_PGR_FILTER_ONLY_MY_COMPLAINTS", "message": "Only complaints I created", "module": "rainmaker-pgr", "locale": "en_IN"}
 ]
