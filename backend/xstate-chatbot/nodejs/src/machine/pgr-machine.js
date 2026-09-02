@@ -1,8 +1,11 @@
 // Migration port of pgr-states.js/pgr-transitions.js (the complaint-filing
-// journey) to the class-based flow authoring in flow/flow-state*.js. Not
-// wired into the running system - pgr.js still builds the original machine.
-// `endstate`/`system_error` are placeholders shared with shell-machine.js's
-// chassis; both ports will target the same real states once merged.
+// journey) to the class-based flow authoring in flow/flow-state*.js. Live:
+// required by citizen-service-machine.js, which state-machine.js requires.
+// `endstate`/`system_error` below are reference-only placeholders - used so
+// setNext/setOnError can target '#endstate'/'#system_error' by key, but never
+// compiled into pgr's own subtree (see the compile() call below), so those
+// absolute targets resolve to shell-machine.js's real chassis states instead
+// of colliding with a same-id node nested inside `pgr`.
 const { assign } = require('xstate');
 const dialog = require('./util/dialog');
 const moment = require('moment-timezone');
@@ -109,7 +112,16 @@ askForAttachments
   .setPrompt(messages.fileComplaint.imageUpload.question)
   .setAccept(['image', 'document'])
   .setOptional(true)
-  .setOnValid((context, input) => { context.slots.pgr.image = input; })
+  .setOnValid((context, input) => {
+    // channel-level media processing (download/upload) failed - the channel
+    // returns a blank placeholder rather than throwing. Don't forward that as
+    // a fake filestoreId; tell the citizen and carry on without an attachment.
+    if (!String(input).trim()) {
+      dialog.sendMessage(context, dialog.get_message(messages.fileComplaint.imageUpload.failed, context.user.locale));
+      return;
+    }
+    context.slots.pgr.image = input;
+  })
   .setNext(askConsent);
 
 askConsent
@@ -142,7 +154,7 @@ persistComplaint
 const pgrConfig = {
   id: 'pgr',
   entry: assign((context) => { context.slots.pgr = {}; context.pgr = { slots: {} }; }),
-  ...compile([menu, fileComplaintGroup, endstate, system_error], 'menu')
+  ...compile([menu, fileComplaintGroup], 'menu')
 };
 
 module.exports = {

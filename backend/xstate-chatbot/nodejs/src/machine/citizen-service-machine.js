@@ -1,8 +1,6 @@
 // Combines shell-machine.js (onboarding + chassis) and pgr-machine.js
-// (complaint filing) into one machine, matching how state-machine.js splices
-// pgr.js into the shell's `pgr` slot today. Not wired into the running
-// system - this is the migration candidate to compare against state-machine.js
-// before any cutover.
+// (complaint filing) into one machine, splicing pgr.config into the shell's
+// `pgr` slot. Live: required directly by state-machine.js.
 const shell = require('./shell-machine');
 const pgr = require('./pgr-machine');
 
