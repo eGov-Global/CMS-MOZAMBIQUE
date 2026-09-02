@@ -55,6 +55,10 @@ jobs:
       # 2) KICS - docker-compose misconfig (ports/protocols/privileged), with severities
       - name: KICS (docker-compose)
         if: always()
+        # continue-on-error: the KICS *scan* succeeds and writes kics-results/, but the
+        # action's annotation post-step installs Node at runtime and can crash on a
+        # base-image/GLIBC mismatch. That must never fail the whole pipeline.
+        continue-on-error: true
         uses: checkmarx/kics-github-action@v2
         with:
           path: "."
@@ -68,6 +72,11 @@ jobs:
           output_formats: "json,sarif"
           fail_on: ""
           ignore_on_exit: results
+          # avoid the action's Node-based annotation/comment post-steps (the source of
+          # the GLIBC crash) - we render findings from the JSON ourselves anyway.
+          enable_annotations: false
+          enable_comments: false
+          enable_jobs_summary: false
 
       # KICS output filename can vary; make the SARIF path deterministic so the
       # upload never hard-fails on a missing file.
@@ -129,7 +138,7 @@ jobs:
       #  Deep, fresh scan of local-setup each run (no cache). Findings are converted and
       #  merged - overlaps enrich existing findings with CVSS/CWE, net-new are added.
       - name: Strix AI pentest (opt-in)
-        if: ${{ github.event.inputs.run_strix == 'true' }}
+        if: ${{ always() && github.event.inputs.run_strix == 'true' }}
         timeout-minutes: 90
         env:
           STRIX_LLM: "chatgpt/gpt-5.4"
