@@ -12,6 +12,11 @@ const INPUT_TYPES = {
     UNKNOWN: 'unknown',
 }
 
+// Twilio's own webhook retry timeout is ~15s; stay under it so a stuck
+// backend degrades to "couldn't attach" instead of a hung HTTP response that
+// Twilio then retries (double-processing the same message).
+const MEDIA_PROCESSING_TIMEOUT_MS = 13000;
+
 
 class TwilioWhatsAppProvider {
 
@@ -272,21 +277,28 @@ class TwilioWhatsAppProvider {
 
     async processMediaInput(requestBody, tenantId = null) {
         const mediaUrl = requestBody.MediaUrl0;
-        if (!mediaUrl) 
+        if (!mediaUrl)
             return ' ';
-        
-        try {
-            const response = await this.downloadMediaFromUrl(mediaUrl);
-            const contentType = this.getMediaContentType(requestBody) || response.headers['content-type'] || '';
-            const fileExtension = this.getExtensionForMimeType(contentType);
-            const fileBuffer = Buffer.from(response.data);
 
-            return await this.uploadMediaToFileStore(
-                `pgr-whatsapp-${Date.now()}${fileExtension}`,
-                fileBuffer,
-                contentType,
-                tenantId
+        try {
+            const download = async () => {
+                const response = await this.downloadMediaFromUrl(mediaUrl);
+                const contentType = this.getMediaContentType(requestBody) || response.headers['content-type'] || '';
+                const fileExtension = this.getExtensionForMimeType(contentType);
+                const fileBuffer = Buffer.from(response.data);
+
+                return await this.uploadMediaToFileStore(
+                    `pgr-whatsapp-${Date.now()}${fileExtension}`,
+                    fileBuffer,
+                    contentType,
+                    tenantId
+                );
+            };
+            const timeout = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('media processing timed out')), MEDIA_PROCESSING_TIMEOUT_MS)
             );
+
+            return await Promise.race([download(), timeout]);
 
         } catch (error) {
             console.error('Error processing media input:', error);

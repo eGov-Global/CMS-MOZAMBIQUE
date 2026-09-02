@@ -137,12 +137,16 @@ module.exports = {
         code: 'chatbot.pgr.attachment.question',
         en_IN: 'If possible, attach a photo or document of your grievance.\n\nTo continue without attaching, type and send *1*',
         pt_PT: 'Se possível, anexe uma fotografia ou um documento relativo à sua reclamação.\n\n👉 Para continuar sem anexar, escreva e envie *1*.'
+      },
+      failed: {
+        en_IN: "Sorry, we couldn't process your attachment. Continuing without it.",
+        pt_PT: 'Lamentamos, não foi possível processar o seu anexo. A continuar sem ele.'
       }
     },
     persistComplaint: {
       code: 'chatbot.pgr.confirmation',
-      en_IN: 'Your complaint has been registered successfully.\n\nCategory: {{1}}\nReference: {{2}}\nDate: {{3}}\n\nYour complaint will be reviewed by the responsible institution.\nYou can follow its progress on the *Fala Cidadão Portal* or in the mobile app.\nThank you for helping improve public services.\n\nFala Cidadão\nhttps://www.falacidadao.co.mz',
-      pt_PT: 'Reclamação registada com sucesso.\n\nCategoria: {{1}}\nReferência: {{2}}\nData: {{3}}\n\nA sua reclamação será analisada pela instituição responsável.\nPode acompanhar o estado no *Portal Fala Cidadão* ou na aplicação móvel.\nObrigado por contribuir para a melhoria dos serviços públicos.\n\nFala Cidadão\nhttps://www.falacidadao.co.mz'
+      en_IN: 'Your complaint has been registered successfully.\n\nCategory: {{1}}\nReference: {{2}}\nDate: {{3}}\n\nYour complaint will be reviewed by the responsible institution.\nYou can follow its progress on the *Fala Cidadão Portal* or in the mobile app.\nThank you for helping improve public services.\n\nFala Cidadão\nhttps://www.falacidadao.gov.mz',
+      pt_PT: 'Reclamação registada com sucesso.\n\nCategoria: {{1}}\nReferência: {{2}}\nData: {{3}}\n\nA sua reclamação será analisada pela instituição responsável.\nPode acompanhar o estado no *Portal Fala Cidadão* ou na aplicação móvel.\nObrigado por contribuir para a melhoria dos serviços públicos.\n\nFala Cidadão\nhttps://www.falacidadao.gov.mz'
     },
     cityFuzzySearch: {
       question: {
