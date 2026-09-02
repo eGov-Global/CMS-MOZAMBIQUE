@@ -54,12 +54,24 @@ commands in the "How this was derived" section.
 
 ## How this is enforced
 
-- **Checkov** is already scoped to `local-setup/ansible` (workflow `directory:`).
-- **KICS** excludes `local-setup/k8s,devops,tests,node_modules`.
-- **Custom rules** run deterministically against known deployment files only.
-- **Strix** scans `./local-setup` broadly, so its findings are filtered
-  post-hoc by `.github/scripts/strix_to_findings.py`: any finding whose validated
-  file path is not in the in-scope set above is dropped, and the drop is logged.
+The scope set lives in one place - `.github/scripts/scope.py` (`in_scope()`) -
+and is applied as a post-filter to EVERY scanner, so nothing depends on each
+scanner's own path handling:
+
+- **`security_report.py`** drops any Checkov / KICS / custom / ansible-lint
+  finding whose file is out of scope, right after the findings are assembled
+  (the drop count is logged). This is the load-bearing filter: KICS scans the
+  whole tree (`path: "."`), so without it ~45% of reported occurrences came from
+  out-of-scope compose files (`docker-compose.yml`, `.deploy`, `.registry`,
+  `.db-migrations`, `.tilt`) and app source under `backend/` / `turbopass/`.
+- **`strix_to_findings.py`** applies the same `in_scope()` to Strix findings
+  after location validation.
+- Checkov is additionally scoped by `directory: local-setup/ansible`, and KICS
+  still sets `exclude_paths` as a first cut, but the shared post-filter is the
+  authoritative gate.
+
+Update `SCOPE_COMPOSE` / `SCOPE_SUBDIRS` in `scope.py` (and the tables above) if
+the deployment topology changes.
 
 ## How this was derived (reproduce)
 
