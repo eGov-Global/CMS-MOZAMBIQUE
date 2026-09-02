@@ -11,7 +11,8 @@ on the scanned commit. Each rule carries a curated "why / how to fix".
 Inputs (env): CHECKOV_JSON, KICS_JSON, OUT_JSON, REPO, REF, SHA, RUN_ID,
 RUN_URL, PR_NUMBER, PR_TITLE, SCAN_SCOPE
 """
-import json, os, datetime, collections
+import json, os, sys, datetime, collections
+from scope import in_scope
 
 SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]  # Info folded into Low (see norm_sev)
 CHECKOV_SEV = {"secrets": "HIGH", "dockerfile": "MEDIUM", "ansible": "MEDIUM"}
@@ -318,6 +319,18 @@ def main():
     findings = (from_checkov(load(os.environ.get("CHECKOV_JSON")))
                 + from_kics(load(os.environ.get("KICS_JSON")))
                 + from_custom(load(os.environ.get("CUSTOM_JSON"))))
+
+    # SCOPE gate for EVERY scanner (see .github/SECURITY-SCOPE.md). Checkov is already
+    # scoped by directory and custom rules run on known files, but KICS scans the whole
+    # tree (path: "."), so it flags out-of-scope compose files (the base docker-compose.yml,
+    # the .deploy/.registry/.db-migrations/.tilt variants, and app source under backend/ /
+    # turbopass/). Those are ~45% of raw occurrences and pure noise - drop them here.
+    _before = len(findings)
+    findings = [f for f in findings if in_scope(f.get("file"))]
+    _dropped = _before - len(findings)
+    if _dropped:
+        print(f"scope: dropped {_dropped}/{_before} findings outside the Ansible deployment "
+              f"set (see .github/SECURITY-SCOPE.md).", file=sys.stderr)
 
     # Supersede: the setup-specific datastore-exposure rule (CMS-SEC-07, High) is more
     # specific and actionable than KICS's generic "not bound to host interface" (Medium).

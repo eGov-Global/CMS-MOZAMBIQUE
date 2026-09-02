@@ -383,8 +383,11 @@ def stage_validate(rs):
             "- priority: P0|P1|P2|P3 per the same rubric the triager uses (P0 = act now; P3 = defense-in-depth on an internal service).\n"
             "- applicable: true if this weakness genuinely applies to this Ansible/docker-compose remote-server deployment; "
             "false ONLY if it applies solely to a runtime this deploy does not use (e.g. a pure-Kubernetes control) or to dead/unused code.\n"
-            "- is_real: true if the flagged condition actually holds in the code shown; false if the scanner misfired "
-            "(templated/example value, control already present by other means, dev-only path that is off in prod).\n"
+            "- is_real: true if the flagged condition actually holds in the code shown; false ONLY if the SNIPPET "
+            "ITSELF proves the scanner misfired - a templated/example value, or a dev-only flag clearly off in prod. "
+            "You are shown only a SNIPPET: you CANNOT see other files, so you must NOT claim a control is 'configured "
+            "elsewhere', 'managed elsewhere', or 'present in another file' - if you cannot prove the misfire from the "
+            "snippet in front of you, set is_real=true.\n"
             "Be evidence-based and decisive. Set a low confidence instead of guessing when the snippet is insufficient."},
         {"role": "user", "content":
             'Return ONLY JSON: {"results":[{"id":"...","category":"<one of the list>","severity":"CRITICAL|HIGH|MEDIUM|LOW",'
@@ -412,6 +415,18 @@ if todo:
         agent_sourced = (r.get("source") == "Strix")
         try: vconf = float(v.get("confidence"))
         except Exception: vconf = 0.0
+        # CLAIM-CHECK: reject a false-positive verdict that rests on an unverifiable external
+        # mitigation. The validator only sees a snippet; a note like "configured elsewhere" /
+        # "managed in another file" cannot be proven and has produced hallucinated FPs (e.g.
+        # nginx security headers it claimed were "managed elsewhere" but exist nowhere). If
+        # is_real=false is justified by such a claim, neutralize it so it cannot vote the
+        # finding non-actionable, and correct the misleading note.
+        if v.get("is_real") is False:
+            _note = (v.get("note") or "").lower()
+            if any(w in _note for w in ("elsewhere", "another file", "other file", "other template",
+                                        "managed", "configured in", "defined in", "handled in", "set in a")):
+                v["is_real"] = None
+                v["note"] = "Validator claimed an external mitigation it could not prove from the code; kept as action-required."
         # 3-way status vote: triage, skeptical audit, and the validation pass. Conservative
         # about WHETHER a finding is real (any action_required vote wins).
         status = _final_status(t.get("status"), (aud.get(rid) or {}).get("status"), _val_status(v))
@@ -482,6 +497,36 @@ for f in findings:
     t = f.get("triage") or {}
     if t.get("status") == "action_required" and f.get("severity") == "CRITICAL" and t.get("priority") != "P0":
         t["priority"] = "P0"; f["triage"] = t
+
+# Reliability-only / benign-by-design controls -> acceptable (documented, not tracked).
+# These are REAL but are not security weaknesses, so per the rubric they belong on the
+# "acceptable" list. The triage/validation vote lacks an "acceptable" path for a
+# real-AND-applicable finding (is_real/applicable are both true for a healthcheck gap), so
+# it wrongly kept them action_required. This deterministic floor corrects that for the
+# unambiguous cases. NOTE: the dangerous host-access rules are deliberately NOT here -
+# "Docker Socket Mounted" and "Volume Has Sensitive Host Directory" stay action_required.
+_ACCEPTABLE_SIGNATURES = (
+    "healthcheck",                      # missing healthcheck - reliability only
+    "memory not limited", "memory limit",
+    "cpus not limited", "cpu not limited", "cpu limit",
+    "privileged ports mapped",          # privileged container port remapped to a high host port
+    "shared volumes between containers",
+    "host namespace is shared",         # host pid/ipc share for read-only monitoring agents
+)
+def _is_reliability(f):
+    tl = (f.get("title") or "").lower()
+    return any(s in tl for s in _ACCEPTABLE_SIGNATURES)
+_rel = 0
+for f in findings:
+    if not _is_reliability(f):
+        continue
+    t = f.get("triage") or {}
+    if t.get("status") == "action_required":
+        t["status"] = "acceptable"; t["priority"] = ""
+        t["reason"] = (t.get("reason") or "").strip() or "Reliability/benign control, not a security weakness."
+        f["triage"] = t; _rel += 1
+if _rel:
+    log(f"reclassified {_rel} reliability-only finding(s) action_required -> acceptable.")
 
 # Recompute the severity summary from the (possibly calibrated) finding severities so the
 # dashboard donut/counts stay consistent with per-finding severities after validation.

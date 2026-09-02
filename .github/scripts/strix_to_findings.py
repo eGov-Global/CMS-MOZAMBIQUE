@@ -15,6 +15,7 @@ Env:
                (default local-setup)  e.g. local-setup or local-setup/ansible
 """
 import os, re, json, glob
+from scope import in_scope   # shared Ansible-deployment scope (see .github/SECURITY-SCOPE.md)
 
 OUT = os.environ.get("OUT", "custom.json")
 PREFIX = os.environ.get("STRIX_PREFIX", "local-setup").strip("/")
@@ -25,34 +26,6 @@ if not SARIF:
     SARIF = cands[0] if cands else "findings.sarif"
 
 _PATH_RE = re.compile(r"[\w][\w./-]+\.(?:json|ya?ml|md|sh|j2|py|js|ts|lock|env|toml|xml|properties|sql|conf|cfg|ini)")
-
-# --- Ansible remote-server deployment scope (see .github/SECURITY-SCOPE.md) ---
-# Strix scans ./local-setup broadly, but only files the Ansible deployment actually
-# uses are in scope. Findings whose validated path falls outside this set (k8s/helm,
-# Tilt/local-dev, unused config trees) are dropped so the report reflects the real
-# deployed attack surface, not dormant code. Derived by grepping the ansible layer +
-# the compose files it invokes for their referenced files and bind mounts.
-SCOPE_DIRS = (
-    "local-setup/ansible/",
-    "local-setup/configs/", "local-setup/db/", "local-setup/gatus/",
-    "local-setup/jupyter/", "local-setup/keycloak/", "local-setup/kong/",
-    "local-setup/nginx/", "local-setup/otel/", "local-setup/seeds/",
-    "local-setup/tests/",
-)
-SCOPE_FILES = {
-    "local-setup/docker-compose.egov-digit.yaml",
-    "local-setup/docker-compose.fast-path.yml",
-    "local-setup/docker-compose.bomet.yml",
-    "local-setup/docker-compose.monitoring.yml",
-    "local-setup/docker-compose.migrations.yml",
-    "local-setup/docker-compose.matomo.yml",
-}
-
-
-def in_scope(relpath):
-    """True if a validated repo path belongs to the Ansible remote-server deployment."""
-    p = (relpath or "").replace("\\", "/").lstrip("./")
-    return p in SCOPE_FILES or any(p.startswith(d) for d in SCOPE_DIRS)
 
 
 def sev_from_cvss(c):
