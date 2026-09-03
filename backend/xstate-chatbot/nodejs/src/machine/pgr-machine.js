@@ -153,7 +153,16 @@ persistComplaint
 
 const pgrConfig = {
   id: 'pgr',
-  entry: assign((context) => { context.slots.pgr = {}; context.pgr = { slots: {} }; }),
+  entry: assign((context) => {
+  context.slots.pgr = {};
+  context.pgr = { slots: {} };
+  for (const walk of [walkComplaintTypes, walkBoundaries]) {
+    delete context[walk.pathSlot];
+    delete context[walk.stepSlot];
+    delete context[walk.grammerSlot];
+  }
+}),
+
   ...compile([menu, fileComplaintGroup], 'menu')
 };
 
