@@ -30,12 +30,14 @@ const isWhitelisted = (context) => {
 
 const askLocale = new QuestionState('onboardingLocale');
 const sayWelcome = new State('onboardingWelcome');
+const checkProfile = new State('checkProfile');
 const askForName = new AskState('onboardingName');
 const askToConfirmProfile = new QuestionState('onBoardingUserProfileConfirmation');
 const askToChangeName = new AskState('changeName');
 const askToConfirmName = new QuestionState('onboardingNameConfirmation');
 const updateUserProfile = new ProcessingState('onboardingUpdateUserProfile');
 const sayThankYou = new State('onboardingThankYou');
+
 
 // -- welcome group --------------------------------------------------------
 
@@ -52,10 +54,11 @@ const notAuthorized = new State('notAuthorized');
 
 const onboardingGroup = new Group('onboarding');
 onboardingGroup
-  .setStates([askLocale, sayWelcome, askForName, askToConfirmProfile,
+  .setStates([askLocale, sayWelcome, checkProfile, askForName, askToConfirmProfile,
     askToChangeName, askToConfirmName, updateUserProfile, sayThankYou])
-  .setStart('onboardingLocale')
+  .setStart('onboardingWelcome')
   .setOnEntry((context) => { context.onboarding = {}; });
+
 
 const welcomeGroup = new Group('welcome')
   .setStates([preCondition, invoke])
@@ -71,19 +74,23 @@ startNode
 askLocale
   .setPrompt(messages.onboarding.localeMenu)
   .setOptions(() => offeredLocales())
-  .setOnUnknown(sayWelcome, (context) => {
+  .setOnUnknown(checkProfile, (context) => {
     context.user.locale = config.defaultLocale;
     context.onboarding.locale = config.defaultLocale;
   })
-  .setNext(sayWelcome, (context) => {
+  .setNext(checkProfile, (context) => {
     context.user.locale = context.intention;
     context.onboarding.locale = context.intention;
   });
 
 sayWelcome
   .setPrompt(messages.onboarding.onboardingWelcome)
+  .setNext(askLocale);
+
+checkProfile
   .setConditionalNext(askToConfirmProfile, hasProfileName)
   .setNext(askForName);
+
 
 askForName
   .setPrompt([
@@ -157,7 +164,7 @@ module.exports = {
   config: config_,
   isWhitelisted,
   states: { start: startNode, onboardingGroup, welcomeGroup, endstate: endNode, system_error: systemErrorNode, pgr: pgrNode, notAuthorized,
-    onboardingLocale: askLocale, onboardingWelcome: sayWelcome, onboardingName: askForName, onBoardingUserProfileConfirmation: askToConfirmProfile,
+    onboardingLocale: askLocale, onboardingWelcome: sayWelcome, checkProfile, onboardingName: askForName, onBoardingUserProfileConfirmation: askToConfirmProfile,
     changeName: askToChangeName, onboardingNameConfirmation: askToConfirmName, onboardingUpdateUserProfile: updateUserProfile, onboardingThankYou: sayThankYou,
     preCondition, invoke }
 };
