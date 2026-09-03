@@ -1,4 +1,6 @@
 const localisationService = require('./localisation-service');
+const config = require('../../env-variables');
+
 
 const INTENTION_UNKOWN = 'INTENTION_UKNOWN';
 const INTENTION_MORE = 'more';
@@ -15,7 +17,8 @@ function get_input(event, scrub = true) {
   return scrub ? input.trim().toLowerCase() : input;
 }
 
-function get_message(bundle, locale = 'en_IN') {
+function get_message(bundle, locale = config.defaultLocale) {
+  locale = locale || config.defaultLocale;
   if (bundle.code) {
     let localised;
     try {
@@ -26,8 +29,9 @@ function get_message(bundle, locale = 'en_IN') {
     const text = localised && localised[locale];
     if (text && String(text).trim()) return text;
   }
-  return (bundle[locale] === undefined)? bundle['en_IN'] : bundle[locale];
+  return (bundle[locale] === undefined) ? bundle[config.defaultLocale] : bundle[locale];
 }
+
 
 function get_intention(g, event, strict = false) {
   let utterance = get_input(event);
