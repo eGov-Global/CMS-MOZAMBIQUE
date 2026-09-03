@@ -87,8 +87,8 @@ sayWelcome
 
 askForName
   .setPrompt([
-    { bundle: messages.onboarding.nameInformation, delay: 3000 },
-    { bundle: messages.onboarding.onboardingName.question, delay: 4000 }
+    { bundle: messages.onboarding.nameInformation, delay: 2000 },
+    { bundle: messages.onboarding.onboardingName.question, delay: 3000 }
   ])
   .setOnValid((context, name) => { context.onboarding.name = name; })
   .setConditionalNext(askToConfirmName, gaveName)
@@ -96,8 +96,8 @@ askForName
 
 askToConfirmProfile
   .setPrompt([
-    { bundle: messages.onboarding.nameInformation, delay: 3000, immediate: false },
-    { bundle: messages.onboarding.onBoardingUserProfileConfirmation.question, delay: 4000 }
+    { bundle: messages.onboarding.nameInformation, delay: 1000, immediate: false },
+    { bundle: messages.onboarding.onBoardingUserProfileConfirmation.question, delay: 2000 }
   ])
   .setFill({ name: (context) => context.user.name })
   .setOptions(['Yes', 'No'])

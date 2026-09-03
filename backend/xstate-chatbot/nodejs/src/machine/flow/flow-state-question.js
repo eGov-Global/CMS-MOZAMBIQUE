@@ -38,7 +38,7 @@ class QuestionState extends State {
   }
 
   renderOptionsList(options) {
-    return options.map((option, i) => `*${i + 1}.*  ${typeof option === 'object' ? option.label : option}`).join('\n');
+    return options.map((option, i) => `*${i + 1}.* - ${typeof option === 'object' ? option.label : option}`).join('\n');
   }
 
   // matches the reply against the resolved options stored in context (by number
