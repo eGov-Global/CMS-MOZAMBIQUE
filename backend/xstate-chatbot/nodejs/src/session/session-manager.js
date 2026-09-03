@@ -15,6 +15,9 @@ const sandboxOrgCodeTracker = {};
 const sandboxOrgTracker = new SandboxOrgTracker(sandboxOrgCodeTracker);
 // Per-user chain of pending outbound sends - see toUser() below.
 const sendQueues = new Map();
+// Per-user chain of pending inbound dispatches - see authenticateAndDispatch() below.
+const dispatchQueues = new Map();
+
 
 
 // Prevent memory leak - automatically clean up expired sessions every 5 minutes
@@ -75,7 +78,22 @@ class SessionManager {
     });
   }
 
+  // Prevent concurrent requests for the same user from racing against
+  // persisted state by processing only the first message in a burst.
   async authenticateAndDispatch(rawRequestModel) {
+    const mobileNumber = rawRequestModel.user.mobileNumber;
+    if (dispatchQueues.has(mobileNumber)) {
+      console.log(`Discarding message from ${mobileNumber}: previous message still processing`);
+      return;
+    }
+    const current = this._authenticateAndDispatch(rawRequestModel)
+      .finally(() => dispatchQueues.delete(mobileNumber));
+    dispatchQueues.set(mobileNumber, current);
+    return current;
+  }
+
+
+  async _authenticateAndDispatch(rawRequestModel) {
     const inboundRequestModel = InboundRequestModel.create(rawRequestModel);
     const loginFlow = config.isSandboxMode
       ? new SandboxLoginFlow(inboundRequestModel, sandboxOrgTracker, getAuthenticatedSandboxUser)
@@ -89,6 +107,7 @@ class SessionManager {
     // `if (!session) return;` guard here before relying on sandbox mode.
     await this.chatService.dispatch(session, inboundRequestModel);
   }
+
 
 
   // toUser can fire multiple times per dispatch (e.g. a welcome message
