@@ -101,6 +101,7 @@ COMPOSE_FILES = [
     LS / "docker-compose.registry.yml",
     LS / "docker-compose.db-migrations.yml",
     LS / "docker-compose.bomet.yml",
+    LS / "docker-compose.ige.yml",
     LS / "docker-compose.core.yml",
     LS / "docker-compose.tilt.yml",
     LS / "docker-compose.monitoring.yml",

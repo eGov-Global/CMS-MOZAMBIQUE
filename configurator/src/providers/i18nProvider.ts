@@ -28,7 +28,8 @@ import { digitClient } from './bridge';
 export const AVAILABLE_LOCALES: Locale[] = [
   { locale: 'en_IN', name: 'EN' },
   { locale: 'hi_IN', name: 'HI' },
-  { locale: 'pt_BR', name: 'PT' },
+  { locale: 'pt_PT', name: 'PT' },
+  { locale: 'pt_BR', name: 'PT-BR' },
   { locale: 'fr_FR', name: 'FR' },
 ];
 
@@ -38,9 +39,8 @@ export const AVAILABLE_LOCALES: Locale[] = [
  * default is derived from LOCALE_DEFAULT/LOCALE_REGION exactly like the
  * portal's getDefaultLanguage(). One host_vars setting drives BOTH apps.
  *
- * Mapping: the portal's locale codes differ from the Studio's (portal
- * Portuguese is pt_PT, the Studio ships pt_BR), so resolve exact first, then
- * by language prefix ("pt" -> pt_BR). Unknown/absent config falls back to
+ * Mapping: resolve exact first, then by language prefix ("pt" -> pt_PT, the
+ * first pt_* entry). Unknown/absent config falls back to
  * en_IN (previous hardcoded behaviour, and the right answer on boxes that
  * don't serve the portal's globalConfigs at all). A user's manual language
  * pick is persisted by react-admin's store and always wins over this default.
