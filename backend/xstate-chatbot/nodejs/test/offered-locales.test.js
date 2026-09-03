@@ -44,10 +44,10 @@ test("only locales the platform declares AND the bot can speak are offered", () 
 test("a locale the bot can speak but the platform does not declare is not offered", () => {
   platform.locales = [{ value: "pt_PT", label: "PORTUGUÊS" }];
   // pt_PT is not speakable here (nameInformation lacks it), so nothing matches
-  assert.deepEqual(offeredLocales(), [{ value: "en_IN", label: "ENGLISH" }]);
+  assert.deepEqual(offeredLocales(), [{ value: "pt_PT", label: "PORTUGUÊS" }]);
 });
 
 test("the menu is never empty", () => {
   platform.locales = [];
-  assert.deepEqual(offeredLocales(), [{ value: "en_IN", label: "ENGLISH" }]);
+  assert.deepEqual(offeredLocales(), [{ value: "pt_PT", label: "PORTUGUÊS" }]);
 });

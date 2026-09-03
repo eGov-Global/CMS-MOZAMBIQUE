@@ -32,7 +32,7 @@ function localesWithFullFallback() {
 function offeredLocales() {
   const speakable = localesWithFullFallback();
   const offered = localisationService.getLocales().filter((l) => speakable.has(l.value));
-  return offered.length ? offered : [{ value: 'en_IN', label: 'ENGLISH' }];
+  return offered.length ? offered : [{ value: 'pt_PT', label: 'PORTUGUÊS' }];
 }
 
 module.exports = { offeredLocales, localesWithFullFallback };
