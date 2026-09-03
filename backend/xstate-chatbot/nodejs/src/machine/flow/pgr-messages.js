@@ -19,7 +19,9 @@ module.exports = {
       level: {
         question: {
           preamble: {
-            code: 'chatbot.pgr.hierarchy.preamble',
+            // no `code` - the real localization service has an old translation
+            // stored under chatbot.pgr.hierarchy.preamble (get_message would
+            // check that first, shadowing any wording change made here)
             en_IN : 'Please type and send the number to select a {{level}} from the list below 👇\n',
             pt_PT : '*{{level}}*\nEnvie o número da opção desejada: \n'
           }
@@ -29,7 +31,7 @@ module.exports = {
     boundary: {
       question: {
         preamble: {
-          code: 'chatbot.pgr.boundary.preamble',
+          // no `code` - same reason as complaintType2Step's preamble above
           en_IN: 'Please type and send the number to select the {{level}} for your grievance 👇\n',
           pt_PT: '*{{level}}*\nEnvie o número correspondente ao local da sua reclamação: \n'
         }
