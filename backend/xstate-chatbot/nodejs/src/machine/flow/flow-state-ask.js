@@ -72,7 +72,7 @@ class AskState extends State {
         retry: {
           entry: (context) => {
             const bundle = context[this.retryMessageSlot] || this.retryPrompt || dialog.global_messages.error.retry;
-            const text = typeof bundle === 'string' ? bundle : dialog.get_message(bundle, context.user.locale);
+            const text = typeof bundle === 'string' ? bundle : this.renderText(bundle, this.fill, context);
             dialog.sendMessage(context, text);
           },
           always: 'question'
