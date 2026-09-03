@@ -13,6 +13,9 @@ const ChatService = require("./chat-service");
 // Format: { mobileNumber: { timestamp: Date, waitingForEmail: boolean } }
 const sandboxOrgCodeTracker = {};
 const sandboxOrgTracker = new SandboxOrgTracker(sandboxOrgCodeTracker);
+// Per-user chain of pending outbound sends - see toUser() below.
+const sendQueues = new Map();
+
 
 // Prevent memory leak - automatically clean up expired sessions every 5 minutes
 const cleanupInterval = setInterval(() => {
@@ -88,14 +91,29 @@ class SessionManager {
   }
 
 
+  // toUser can fire multiple times per dispatch (e.g. a welcome message
+  // cascading straight into a menu prompt), each an independent, unawaited
+  // send - two concurrent Twilio requests race with no ordering guarantee,
+  // so the menu can land before the welcome it followed. Chaining each send
+  // onto the previous one per user forces them out in the order queued,
+  // regardless of how the underlying network calls actually complete.
   async toUser(user, outputMessages, extraInfo) {
-    channelProvider.sendMessageToUser(user, outputMessages, extraInfo);
+    const userId = user.userId;
+    const previousSend = sendQueues.get(userId) || Promise.resolve();
+    
+    const thisSend = previousSend
+      .catch(() => {}) // a prior send's failure must not skip this one
+      .then(() => channelProvider.sendMessageToUser(user, outputMessages, extraInfo))
+      .catch((error) => console.error(`Failed to send message to user ${userId}:`, error));
+    sendQueues.set(userId, thisSend);
+
     for (let message of outputMessages) {
       telemetry.log(user.userId, "to_user", {
         message: { type: "text", output: message, locale: user.locale },
       });
     }
   }
+
 
   // Method to get tenant ID for a mobile number from tracker (for image uploads)
   getSandboxTenantForMobileNumber(mobileNumber) {

@@ -6,6 +6,10 @@ const projectRoot = path.resolve(__dirname, "..");
 const sessionDir = path.join(projectRoot, "src/session");
 const machineDir = path.join(projectRoot, "src/machine");
 
+function flush() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 function stub(request, from, exports) {
   const filename = require.resolve(request, { paths: [from] });
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
@@ -132,7 +136,7 @@ test("the fallback discards stale scratch context but keeps the user and tenant"
   service.stop();
 });
 
-test("a discarded session recovers on the next message instead of staying stuck", () => {
+test("a discarded session recovers on the next message instead of staying stuck", async () => {
   const chatState = persistedState((json) => {
     json.value = { pgr: { fileComplaint: { type: { complaintType2Step: "GONE" } } } };
   });
@@ -141,6 +145,9 @@ test("a discarded session recovers on the next message instead of staying stuck"
   sent.length = 0;
   service.send({ type: "USER_MESSAGE", message: { type: "text", input: "hi" } });
   assert.notEqual(service.state.value, "start", "start must route the message onward");
+  // toUser queues the send behind a promise chain now (session-manager.js),
+  // so it lands a microtask after service.send() returns, not synchronously.
+  await flush();
   assert.ok(sent.length > 0, "the citizen must receive something, not silence");
   service.stop();
 });
