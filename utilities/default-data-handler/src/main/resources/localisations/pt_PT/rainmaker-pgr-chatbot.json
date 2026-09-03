@@ -1,7 +1,7 @@
 [
     {
         "code": "chatbot.pgr.attachment.question",
-        "message": "Se possível, anexe uma fotografia ou um documento relativo à sua reclamação.\n\n*1* - Continuar sem anexar.",
+        "message": "Se possível, anexe uma fotografia ou um documento relativo à sua reclamação.\n\n*1.* Continuar sem anexar.",
         "module": "rainmaker-pgr",
         "locale": "pt_PT"
     },
@@ -13,7 +13,7 @@
     },
     {
         "code": "chatbot.pgr.confidentiality.question",
-        "message": "{{label}}\n\n{{hint}}\n\n*1* - Manter os meus dados confidenciais.\n*2* - Continuar sem confidencialidade.",
+        "message": "{{label}}\n\n{{hint}}\n\n*1.* Manter os meus dados confidenciais.\n*2.* Continuar sem confidencialidade.",
         "module": "rainmaker-pgr",
         "locale": "pt_PT"
     },
@@ -31,7 +31,7 @@
     },
     {
         "code": "chatbot.pgr.consent.question",
-        "message": "Antes de registarmos a sua reclamação, confirme o seguinte:\n\n{{statements}}\n\n👉 *1* Aceitar.\n👉 *2* Rejeitar",
+        "message": "Antes de registarmos a sua reclamação, confirme o seguinte:\n\n{{statements}}\n\n*1.* Aceitar.\n*2.* Rejeitar",
         "module": "rainmaker-pgr",
         "locale": "pt_PT"
     },
@@ -97,13 +97,13 @@
     },
     {
         "code": "chatbot.pgr.onboarding.name.confirm",
-        "message": "Confirmar o nome: {{name}}?\n\n  *1* - Confirmar o nome.\n\n  *2* - Alterar o nome.",
+        "message": "Confirmar o nome: {{name}}?\n\n*1.* Confirmar o nome.\n\n*2.* Alterar o nome.",
         "module": "rainmaker-pgr",
         "locale": "pt_PT"
     },
     {
         "code": "chatbot.pgr.onboarding.name.confirmProfile",
-        "message": "Nos nossos registos, este número está associado ao nome  *“{{name}}”*.\n\n  *1* - Confirmar o nome.\n\n  *2* - Alterar o nome.",
+        "message": "Nos nossos registos, este número está associado ao nome  *“{{name}}”*.\n\n*1.* Confirmar o nome.\n*2.* Alterar o nome.",
         "module": "rainmaker-pgr",
         "locale": "pt_PT"
     },

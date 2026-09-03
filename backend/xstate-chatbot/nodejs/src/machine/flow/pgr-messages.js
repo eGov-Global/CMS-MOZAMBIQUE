@@ -11,7 +11,7 @@ module.exports = {
     // under chatbot.pgr.menu.question (get_message would check that first)
     singleOptionQuestion: {
       en_IN: 'Please type and send *1* to file a new complaint.',
-      pt_PT: 'Envie *1* para apresentar uma nova reclamação.'
+      pt_PT: '*Menu* \n\n*1.* Apresentar uma reclamação'
     }
   },
   fileComplaint: {
@@ -85,7 +85,7 @@ module.exports = {
       question: {
         code: 'chatbot.pgr.consent.question',
         en_IN: 'Before your grievance is filed, please confirm the following:\n\n{{statements}}\n\n👉 Type and send *1* to accept.\n👉 Type and send *2* to decline.',
-        pt_PT: 'Antes de registarmos a sua reclamação, confirme o seguinte:\n\n{{statements}}\n\n👉 *1* Aceitar.\n👉 *2* Rejeitar'
+        pt_PT: 'Antes de registarmos a sua reclamação, confirme o seguinte:\n\n{{statements}}\n\n*1.* Aceitar.\n*2.* Rejeitar'
       },
       declined: {
         code: 'chatbot.pgr.consent.declined',
@@ -97,7 +97,7 @@ module.exports = {
       label: {
         code: 'PGR_EXT_IS_CONFIDENTIAL_LABEL',
         en_IN: 'Keep details confidential.',
-        pt_PT: 'Mantenha os detalhes confidenciais.'
+        pt_PT: '*Confidencialidade*'
       },
       hint: {
         code: 'PGR_EXT_IS_CONFIDENTIAL_HINT',
@@ -107,7 +107,7 @@ module.exports = {
       question: {
         code: 'chatbot.pgr.confidentiality.question',
         en_IN: '{{label}}\n\n{{hint}}\n\n👉 Type and send *1* to keep your details confidential.\n👉 Type and send *2* to continue without confidentiality.',
-        pt_PT: '{{label}}\n\n{{hint}}\n\n*1* - Manter os meus dados confidenciais.\n*2* - Continuar sem confidencialidade.'
+        pt_PT: '{{label}}\n\n{{hint}}\n\n*1.* Manter os meus dados confidenciais.\n*2.* Continuar sem confidencialidade.'
       }
     },
     institution: {
@@ -138,7 +138,7 @@ module.exports = {
       question: {
         code: 'chatbot.pgr.attachment.question',
         en_IN: 'If possible, attach a photo or document of your grievance.\n\nTo continue without attaching, type and send *1*',
-        pt_PT: 'Se possível, anexe uma fotografia ou um documento relativo à sua reclamação.\n\n*1* - Continuar sem anexar.'
+        pt_PT: 'Se possível, anexe uma fotografia ou um documento relativo à sua reclamação.\n\n*1.* Continuar sem anexar.'
       },
       failed: {
         en_IN: "Sorry, we couldn't process your attachment. Continuing without it.",

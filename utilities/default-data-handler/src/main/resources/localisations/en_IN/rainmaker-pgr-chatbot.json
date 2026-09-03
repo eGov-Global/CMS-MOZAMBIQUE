@@ -103,7 +103,7 @@
     },
     {
         "code": "chatbot.pgr.onboarding.name.confirmProfile",
-        "message": "As per our records, we have found the name  *“{{name}}”* linked with this mobile number.\n\n*1* - Confirm the name.\n\n*2* - Change the name.",
+        "message": "As per our records, we have found the name  *“{{name}}”* linked with this mobile number.\n\n*1.* Confirm the name.\n*2.* Change the name.",
         "module": "rainmaker-pgr",
         "locale": "en_IN"
     },

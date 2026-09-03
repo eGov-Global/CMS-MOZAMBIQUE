@@ -35,9 +35,9 @@ module.exports = {
       question: {
         code: 'chatbot.pgr.onboarding.name.confirmProfile',
         en_IN:
-          "As per our records, we have found the name  *“{{name}}”* linked with this mobile number.\n\n*1* - Confirm the name.\n\n*2* - Change the name.",
+          "As per our records, we have found the name  *“{{name}}”* linked with this mobile number.\n\n*1.* Confirm the name.\n*2.* Change the name.",
         pt_PT:
-          "Nos nossos registos, este número está associado ao nome  *“{{name}}”*.\n\n  *1* - Confirmar o nome.\n\n  *2* - Alterar o nome.",
+          "Nos nossos registos, este número está associado ao nome  *“{{name}}”*.\n\n*1.* Confirmar o nome.\n*2.* Alterar o nome.",
       },
     },
     changeName: {
@@ -52,7 +52,7 @@ module.exports = {
       en_IN:
         "Confirm Name : {{name}}?\n\n👉  Type and send *1* to confirm the name.\n\n👉  Type and send *2* to change the name.",
       pt_PT:
-        "Confirmar o nome: {{name}}?\n\n  *1* - Confirmar o nome.\n\n  *2* - Alterar o nome.",
+        "Confirmar o nome: {{name}}?\n\n*1.* Confirmar o nome.\n\n*2.* Alterar o nome.",
     },
     onboardingThankYou: {
       code: 'chatbot.pgr.onboarding.thankYou',
