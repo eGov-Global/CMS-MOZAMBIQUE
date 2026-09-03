@@ -55,6 +55,15 @@ class StateRepository {
         }
     }
 
+    async getLastActivityTimestamp(userId) {
+        const query = 'SELECT time_stamp FROM eg_chat_state_v2 WHERE user_id = $1 AND active = true';
+        let result = await pool.query(query, [userId]);
+        if (result.rowCount >= 1) {
+            return Number(result.rows[0].time_stamp);
+        }
+    }
+
+
 }
 
 module.exports = new StateRepository();

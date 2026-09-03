@@ -17,10 +17,10 @@ class ChatService {
   async dispatch(session, inboundRequestModel) {
     const sessionUserId = session.userId;
 
+    const chatState = await this.getOrCreateChatState(sessionUserId, session.user);
     await chatStateRepository.updateSessionId(sessionUserId, config.avgSessionTime);
     telemetry.log(sessionUserId, "from_user", inboundRequestModel);
 
-    const chatState = await this.getOrCreateChatState(sessionUserId, session.user);
     const stateMachineService = this.getStateMachineServiceFor(chatState, inboundRequestModel);
 
     const event = inboundRequestModel.getMessage().isReset() ? "USER_RESET" : "USER_MESSAGE";
@@ -33,22 +33,35 @@ class ChatService {
    */
   async getOrCreateChatState(sessionUserId, user) {
     const existingState = await chatStateRepository.getActiveStateForUserId(sessionUserId);
-    if (existingState) {
+    const isExpiredSession = await this.isSessionExpired(sessionUserId);
+
+    if (existingState && !isExpiredSession) {
       return existingState;
     }
 
-    // come here if virgin dialog, old dialog was inactive, or reset case
+    // come here if virgin dialog, old dialog was inactive, session expired, or reset case
     const chatState = this.createChatStateFor(user);
-    const sessionId = uuid.v4();
-    await chatStateRepository.insertNewState(
-      sessionUserId,
-      true,
-      chatState.toPersistableState().state,
-      sessionId,
-      new Date().getTime()
-    );
+    const timeStamp = new Date().getTime();
+    if (existingState) {
+      // a row already exists for this user (just expired) - overwrite it, don't INSERT
+      await chatStateRepository.updateState(sessionUserId, true, chatState.toPersistableState().state, timeStamp);
+    } else {
+      const sessionId = uuid.v4();
+      await chatStateRepository.insertNewState(sessionUserId, true, chatState.toPersistableState().state, sessionId, timeStamp);
+    }
     return chatState;
+
   }
+
+  // Postgres tracks last-activity time_stamp; InMemory doesn't need this
+  // feature, so it simply has no getLastActivityTimestamp to call.
+  async isSessionExpired(sessionUserId) {
+    if (typeof chatStateRepository.getLastActivityTimestamp !== "function") return false;
+    const lastActivity = await chatStateRepository.getLastActivityTimestamp(sessionUserId);
+    if (!lastActivity) return false;
+    return (Date.now() - lastActivity) / 1000 / 60 > config.avgSessionTime;
+  }
+
 
   /**
    * Retrieves the state machine service for the given chat state and reformatted message.
