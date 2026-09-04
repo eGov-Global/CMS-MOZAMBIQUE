@@ -12,18 +12,19 @@ Every commit reference below is a working link into this repository.
 2. [Headline Customizations](#2-headline-customizations)
 3. [Backend Changes](#3-backend-changes)
 4. [Frontend Changes](#4-frontend-changes)
-5. [Workflow Changes](#5-workflow-changes)
-6. [Configuration & Master Data (MDMS)](#6-configuration--master-data-mdms)
-7. [Localization](#7-localization)
-8. [Roles & Permissions](#8-roles--permissions)
-9. [Integrations](#9-integrations)
-10. [Fixes & Improvements](#10-fixes--improvements)
-11. [Commit Summary](#11-commit-summary)
-12. [Customization Matrix — Product vs Mozambique](#12-customization-matrix--product-vs-mozambique)
-13. [Known Technical Issues (under product review)](#13-known-technical-issues-under-product-review)
-14. [Testing Status](#14-testing-status)
-15. [Known Limitations & Product Decisions](#15-known-limitations--product-decisions)
-16. [Documentation](#16-documentation)
+5. [Complaint Classification Hierarchy (2 Levels → N Levels)](#5-complaint-classification-hierarchy-2-levels--n-levels)
+6. [Workflow Changes](#6-workflow-changes)
+7. [Configuration & Master Data (MDMS)](#7-configuration--master-data-mdms)
+8. [Localization](#8-localization)
+9. [Roles & Permissions](#9-roles--permissions)
+10. [Integrations](#10-integrations)
+11. [Fixes & Improvements](#11-fixes--improvements)
+12. [Commit Summary](#12-commit-summary)
+13. [Customization Matrix — Product vs Mozambique](#13-customization-matrix--product-vs-mozambique)
+14. [Known Technical Issues (under product review)](#14-known-technical-issues-under-product-review)
+15. [Testing Status](#15-testing-status)
+16. [Known Limitations & Product Decisions](#16-known-limitations--product-decisions)
+17. [Documentation](#17-documentation)
 
 ---
 
@@ -45,18 +46,18 @@ Every commit reference below is a working link into this repository.
 
 ## 2. Headline Customizations
 
-The ten changes that most define this product versus stock DIGIT:
+The eleven changes that most define this product versus stock DIGIT:
 
 1. **Public "Fala Cidadão" website** — a real public homepage, privacy-policy and tutorial pages in Portuguese, reachable without login, fully content-configurable and visually editable from the admin console ([`ccd8b576`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/ccd8b576), [`0737156a`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/0737156a), [`0dce489b`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/0dce489b), [`cec2b6fe`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/cec2b6fe))
 2. **Multi-tier CMS workflow** — Reception Officer → Screening Officer → Supervisor → Case Manager; the employee action screens build themselves from the workflow definition, so the chain is configuration, not code ([`772a5986`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/772a5986), [`bffdce15`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/bffdce15))
-3. **Visibility scoping** — employees can be restricted to their own department and/or geographic jurisdiction (including everything under their boundary); reception staff see the complaints they filed ([`fe7cab60`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/fe7cab60), [`9e650397`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/9e650397), [`79dae4ef`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/79dae4ef), [`74eac21c`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/74eac21c))
-4. **Admin cross-department search** — one screen for SUPERUSER/CMS_ADMIN to search everything, with filters and Excel export ([`dae9ec08`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/dae9ec08), [`8da74a9e`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/8da74a9e))
-5. **Confidential complaints** — complainant identity masked on employee screens; selected fields (e.g. institution name) stay visible via configuration ([`992735af`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/992735af), [`8746bcab`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/8746bcab))
-6. **Rebuilt citizen complaint form** — 3-step wizard, authority picker, per-authority dynamic questions from MDMS, multi-level complaint categories, drafts, consent ([`81054330`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/81054330), [`be6c9eaa`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/be6c9eaa))
-7. **Portuguese product** — pt_PT as the default language, full translation packs seeded per tenant, city-level wording overlays, Fala Cidadão branding with configuration-driven theme colours ([`21a6f1f2`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/21a6f1f2), [`f42ad659`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/f42ad659), [`954e134d`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/954e134d), [`9597f0ab`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/9597f0ab))
-8. **Notifications for Mozambique's infrastructure** — SMS via the Ozeki gateway, a direct-delivery mode that runs without the Novu stack, an OTP delivery pipeline, deep-link placeholders ([`a95f8df2`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/a95f8df2), [`91aded4c`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/91aded4c), [`a3be88e5`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/a3be88e5), [`15ec1db5`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/15ec1db5))
-9. **Analytics, off by default** — analytics destinations (Matomo/GA4/PostHog/custom) configured as data, with strict safety rails; one-command self-hosted Matomo ([`e9a0f0e4`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/e9a0f0e4), [`1fd0711e`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/1fd0711e), [`1abef50f`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/1abef50f))
-10. **Operator tooling** — one-command tenant migration, escalation enablement, testing entrance, CI security scanning ([`16b91133`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/16b91133), [`718d65b1`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/718d65b1), [`06ee871e`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/06ee871e), [`bc0ecdac`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/bc0ecdac))
+4. **Visibility scoping** — employees can be restricted to their own department and/or geographic jurisdiction (including everything under their boundary); reception staff see the complaints they filed ([`fe7cab60`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/fe7cab60), [`9e650397`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/9e650397), [`79dae4ef`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/79dae4ef), [`74eac21c`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/74eac21c))
+5. **Admin cross-department search** — one screen for SUPERUSER/CMS_ADMIN to search everything, with filters and Excel export ([`dae9ec08`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/dae9ec08), [`8da74a9e`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/8da74a9e))
+6. **Confidential complaints** — complainant identity masked on employee screens; selected fields (e.g. institution name) stay visible via configuration ([`992735af`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/992735af), [`8746bcab`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/8746bcab))
+7. **Rebuilt citizen complaint form** — 3-step wizard, authority picker, per-authority dynamic questions from MDMS, multi-level complaint categories, drafts, consent ([`81054330`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/81054330), [`be6c9eaa`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/be6c9eaa))
+8. **Portuguese product** — pt_PT as the default language, full translation packs seeded per tenant, city-level wording overlays, Fala Cidadão branding with configuration-driven theme colours ([`21a6f1f2`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/21a6f1f2), [`f42ad659`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/f42ad659), [`954e134d`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/954e134d), [`9597f0ab`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/9597f0ab))
+9. **Notifications for Mozambique's infrastructure** — SMS via the Ozeki gateway, a direct-delivery mode that runs without the Novu stack, an OTP delivery pipeline, deep-link placeholders ([`a95f8df2`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/a95f8df2), [`91aded4c`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/91aded4c), [`a3be88e5`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/a3be88e5), [`15ec1db5`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/15ec1db5))
+10. **Analytics, off by default** — analytics destinations (Matomo/GA4/PostHog/custom) configured as data, with strict safety rails; one-command self-hosted Matomo ([`e9a0f0e4`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/e9a0f0e4), [`1fd0711e`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/1fd0711e), [`1abef50f`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/1abef50f))
+11. **Operator tooling** — one-command tenant migration, escalation enablement, testing entrance, CI security scanning ([`16b91133`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/16b91133), [`718d65b1`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/718d65b1), [`06ee871e`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/06ee871e), [`bc0ecdac`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/bc0ecdac))
 
 ---
 
@@ -125,7 +126,46 @@ The frontend is the largest customization area (139 files, +12,782/−1,292):
 
 ---
 
-## 5. Workflow Changes
+## 5. Complaint Classification Hierarchy (2 Levels → N Levels)
+
+### What changed
+
+The DIGIT product historically classified every complaint on a **fixed two-level** model — complaint type → subtype — and each complaint type was mapped to exactly **one** department (a single text field). Mozambique needed deeper, per-authority classification trees and more flexible department routing, so the model was redesigned:
+
+- **N-level hierarchy as data.** Two masters replace the fixed model: `ComplaintHierarchyDefinition` (how many levels a tenant has and what each level is called) and `ComplaintHierarchy` (the tree of nodes). Any depth works; the citizen wizard renders one picker per level automatically.
+- **Department mapping: one-to-one → one-to-many.** A complaint type can now map to **several departments** (`departments` list and the `ComplaintTypeDepartments` master) instead of a single department string; the old field is kept for backward compatibility.
+- **Works with no department at all.** A complaint type that maps to no department still flows end-to-end — nothing blocks creation, assignment or resolution.
+- **Admin management + migration.** The admin console manages the tree (list/create/show, including a searchable collapsible view) and offers a **guided migration** that upgrades an existing 2-level tenant to the N-level model; operator tooling ([migration guide](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/migration/complaint-type-2level-to-Nlevel.md), [operator runbook](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/migration/operator-runbook.md), dry-run + migrator scripts) covers the cutover.
+
+This foundation was built under the Mozambique programme and adopted into the core DIGIT product (it is part of the product baseline this release builds on). It is documented here because it is central to how CMS Mozambique works and because this release carries substantial work on top of it.
+
+### What this release adds on top
+
+| Change | What it means | Commit |
+|---|---|---|
+| Routed-department stamping | The department chosen at assignment is stamped on the complaint and every later assignee list is scoped by that **routed** department, not re-derived from the type | [`0c1123c8`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/0c1123c8) |
+| No-department operation | For types with no/unmapped department: the assignee dropdown explains the situation instead of appearing broken, and the assignee becomes optional on ASSIGN (the screening step stays mandatory) | [`394e6136`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/394e6136), [`af818c2d`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/af818c2d) |
+| Department survives reopen/rate | Reopening or rating a complaint **merges** its details instead of replacing them, so the routed department is preserved — previously it was wiped, hiding the complaint from department-scoped supervisors | [`92eaec23`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/92eaec23), [`2debbcfc`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/2debbcfc) |
+| Department names in notifications | Notification templates resolve the department with a three-tier fallback (hierarchy mapping → department stamped on the complaint → assignee's department) instead of erroring | [`4fa8964c`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/4fa8964c) |
+| Localized hierarchy labels | Category names are localization keys (`COMPLAINT_HIERARCHY.*`) following the key-in-name convention, with city-tenant wording overlays — so trees read correctly in Portuguese and per city | [`23326ca2`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/23326ca2), [`3289ac3f`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/3289ac3f) |
+| Leaf-type titles | Citizen complaint cards are titled by the most specific (leaf) category instead of the top level | [`d109187b`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/d109187b) |
+| Correct tenant resolution | The hierarchy is fetched at the **complaint's** tenant (not the logged-in tenant), fixing wrong or empty trees on multi-authority environments | [`5a096d23`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/5a096d23), [`9a29c3de`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/9a29c3de) |
+| Wizard integration | The citizen create wizard renders the hierarchy pickers with draft persistence across navigation and refresh | [`a3365a70`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/a3365a70) |
+| Seeding & migration phase | The unified migration runner (`ccrs-migrate.cjs`) seeds and verifies the hierarchy as one of its phases | [`16b91133`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/16b91133) |
+| Design record | Spec for the `category` / `authority` MIS fields and the many-to-many department master: [complaint-hierarchy-withnew-parameters.md](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/complaint-hierarchy-withnew-parameters.md) | — |
+
+### Downstream effects (workflow & pgr-services)
+
+The hierarchy + department redesign ripples through the rest of the system, which is why several changes in other sections exist:
+
+- **Workflow assignment** — assignee dropdowns are scoped by the routed department and widen automatically for cross-department roles; an explicit "no eligible employee" message replaces an empty dropdown ([`aa500b8d`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/aa500b8d))
+- **Search & visibility** — department-scoped employee search reads the same department stamp, so scoping and routing stay consistent ([`fe7cab60`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/fe7cab60), [`4a6537c3`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/4a6537c3))
+- **Notifications** — department placeholders resolve through the hierarchy mapping first ([`4fa8964c`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/4fa8964c))
+- **Dashboards** — the product's analytics grain follows the hierarchy (materialized views were repointed to `ComplaintHierarchy` in the core product)
+
+---
+
+## 6. Workflow Changes
 
 - **New CMS multi-tier workflow** ([`CmsPgrWorkflowConfig.json`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/utilities/default-data-handler/src/main/resources/CmsPgrWorkflowConfig.json), 11 states / 18 actions), selected per deployment by the `pgr.workflow.variant` setting (default `standard`) — [`bffdce15`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/bffdce15), [`d37299b4`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/d37299b4)
 - **Escalation** — the scan states are configurable ([`718d65b1`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/718d65b1)); [`enable-escalation.sh`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/local-setup/scripts/enable-escalation.sh) switches escalation on for a running environment in six independent, re-runnable steps, documented in the [escalation runbook](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/pgr-escalation/RUNBOOK.md). A reopened complaint restarts its escalation clock ([`92eaec23`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/92eaec23))
@@ -134,7 +174,7 @@ The frontend is the largest customization area (139 files, +12,782/−1,292):
 
 ---
 
-## 6. Configuration & Master Data (MDMS)
+## 7. Configuration & Master Data (MDMS)
 
 **New masters:** complaint authority dispatcher (`ComplaintRelatedToMap`), per-authority form templates (`ComplaintTemplateType`), dynamic-field schemas for IGE/IGSAE (`ComplaintExtendedAttributeSchema`), landing page (`LandingSection`, `LandingPageConfig`), analytics destinations (`AnalyticsProvider`), privacy policy (`commonMDMSConfig.PrivacyPolicy` — module corrected, [`c3e42214`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/c3e42214)), tenant banner image ([`00ffd59f`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/00ffd59f)).
 
@@ -155,7 +195,7 @@ The frontend is the largest customization area (139 files, +12,782/−1,292):
 
 ---
 
-## 7. Localization
+## 8. Localization
 
 - **pt_PT is a first-class locale** — full packs seeded per tenant ([`f42ad659`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/f42ad659)), default for the mz tenant ([`21a6f1f2`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/21a6f1f2)), honoured on first load ([`812b36b8`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/812b36b8)), admin console included ([`833f759d`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/833f759d))
 - **City-level wording overlay** — city translations (department names, categories, boundary headings) load and win over state-level ([`3289ac3f`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/3289ac3f), [`e33e801d`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/e33e801d))
@@ -164,7 +204,7 @@ The frontend is the largest customization area (139 files, +12,782/−1,292):
 
 ---
 
-## 8. Roles & Permissions
+## 9. Roles & Permissions
 
 **13 new roles seeded** ([`e79f0847`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/e79f0847), [`8e8c16dd`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/8e8c16dd), [`bffdce15`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/bffdce15)), in three families:
 
@@ -184,7 +224,7 @@ Approximately 2,180 lines of role-to-permission grants accompany them. (`CMS_SCR
 
 ---
 
-## 9. Integrations
+## 10. Integrations
 
 | Integration | Purpose | Status |
 |---|---|---|
@@ -198,7 +238,7 @@ Approximately 2,180 lines of role-to-permission grants accompany them. (`CMS_SCR
 
 ---
 
-## 10. Fixes & Improvements
+## 11. Fixes & Improvements
 
 - Reopening or rating a complaint no longer wipes its routed department (data-loss fix + stale-cache follow-up) — [`92eaec23`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/92eaec23), [`2debbcfc`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/2debbcfc)
 - Complaint-details crash ([`12d0a960`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/12d0a960)) and employee-create crash ([`57d6b242`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/57d6b242)) fixed
@@ -212,7 +252,7 @@ Approximately 2,180 lines of role-to-permission grants accompany them. (`CMS_SCR
 
 ---
 
-## 11. Commit Summary
+## 12. Commit Summary
 
 **658 commits** = 255 merges + 403 non-merge; about 45 changes landed twice as cherry-pick pairs during branch synchronization, giving **~358 distinct changes**. Around 189 commits reference Jira tickets — **78 unique keys, CCSD-1914 → CCSD-2207**. The security-scanning and analytics work is tracked by GitHub PR numbers (#13–#58) instead of Jira.
 
@@ -236,7 +276,7 @@ Approximately 2,180 lines of role-to-permission grants accompany them. (`CMS_SCR
 
 ---
 
-## 12. Customization Matrix — Product vs Mozambique
+## 13. Customization Matrix — Product vs Mozambique
 
 | # | Area | DIGIT Product | Mozambique Customization | Files/Module | Commit(s) |
 |---|---|---|---|---|---|
@@ -288,10 +328,12 @@ Approximately 2,180 lines of role-to-permission grants accompany them. (`CMS_SCR
 | 46 | CI | Product CI only | Security scanning (Checkov/KICS/Strix + AI triage + dashboard); manual trigger, report-only | `.github/` (15 files) | [`bc0ecdac`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/bc0ecdac), [`57e28906`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/57e28906) |
 | 47 | Docs | Product docs | PRD/design, migration guides, runbooks, analytics guide | `docs/` (32 files) | [`ab8c3a2c`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/ab8c3a2c), [`48e4bc08`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/48e4bc08) |
 | 48 | Tests | Postal-code test specs | Retired with the feature; 19 test files touched repo-wide (8 added, 10 modified, 1 deleted) | `tests/`, per-module tests | [`4aa5aa3b`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/4aa5aa3b), [`ac4ce48a`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/ac4ce48a) |
+| 49 | Classification | Fixed 2-level type/subtype | N-level hierarchy as data (core product, built under the Mozambique programme) + routed-department stamping, localized labels, tenant-correct fetch | `ComplaintHierarchy*` masters, `ComplaintHierarchyComponent.js` | [`0c1123c8`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/0c1123c8), [`3289ac3f`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/3289ac3f) |
+| 50 | Classification | One department per complaint type (1-1) | One-to-many department mapping (`departments`, `ComplaintTypeDepartments`) and full operation with **no** department mapped | ServiceDefs schema, assignment flow | [`394e6136`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/394e6136), [`af818c2d`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/af818c2d) |
 
 ---
 
-## 13. Known Technical Issues (under product review)
+## 14. Known Technical Issues (under product review)
 
 Three issues found during the Mozambique implementation and Ozeki SMS integration. Each was verified against the repository; none is fixed in the repository yet.
 
@@ -318,7 +360,7 @@ Changing the bootstrap secrets away from the defaults causes deployment failures
 
 ---
 
-## 14. Testing Status
+## 15. Testing Status
 
 - Functional flows exercised on the UAT environment (`cms-pilot.digit.org`): citizen creation, the full assignment chain, resolve/reopen/rate, notification delivery, document upload and retrieval, dashboard rendering.
 - Automated coverage: 19 test files across the delta — concentrated in analytics (a 786-line suite), backend visibility scoping and direct notification delivery. Workflow transitions, localization and roles rely on manual validation.
@@ -326,7 +368,7 @@ Changing the bootstrap secrets away from the defaults causes deployment failures
 
 ---
 
-## 15. Known Limitations & Product Decisions
+## 16. Known Limitations & Product Decisions
 
 **Product decisions recorded:**
 
@@ -336,9 +378,9 @@ Changing the bootstrap secrets away from the defaults causes deployment failures
 
 **Known limitations:**
 
-1. The three technical issues in [section 13](#13-known-technical-issues-under-product-review)
+1. The three technical issues in [section 14](#14-known-technical-issues-under-product-review)
 2. Confidential-complaint masking is a display control; API-level masking gated on `CONFIDENTIAL_COMPLAINT_VIEWER` is not yet wired end-to-end
-3. Three roles need manual registration after deploy (see [Roles & Permissions](#8-roles--permissions))
+3. Three roles need manual registration after deploy (see [Roles & Permissions](#9-roles--permissions))
 4. No dashboard geography drill-down in this release
 5. Notification templates for the CMS workflow's new states may be incomplete — transitions through those states can send nothing
 6. Automated test coverage is thin outside analytics/scoping/notifications
@@ -348,7 +390,7 @@ Changing the bootstrap secrets away from the defaults causes deployment failures
 
 ---
 
-## 16. Documentation
+## 17. Documentation
 
 | Document | Purpose |
 |---|---|
@@ -359,4 +401,5 @@ Changing the bootstrap secrets away from the defaults causes deployment failures
 | [Escalation runbook](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/pgr-escalation/RUNBOOK.md) | Enabling auto-escalation on a running environment |
 | [HTTPS with Let's Encrypt](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/enabling-https-with-letsencrypt.md) | TLS setup guide |
 | [PRD / solution design](https://github.com/eGov-Global/CMS-MOZAMBIQUE/tree/master/docs/superpowers/specs/mozambique-prd) | Product requirements and solution design |
-| [Mobile app](https://github.com/eGov-Global/CMS-MOZAMBIQUE/tree/master/mobile) | Flutter WebView wrapper (configuration: [`app_config.json`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/mobile/assets/config/app_config.json)) |
+| [Mobile app](https://github.com/eGov-Global/CMS-MOZAMBIQUE/tree/master/mobile) | Flutter WebView wrapper (configuration: [`app_config.json`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/mobile/assets/config/app_config.json)) |3. **Configurable complaint classification (N levels)** — the fixed 2-level type/subtype model became an N-level hierarchy defined entirely as data, with department mapping per complaint type evolved from one-to-one to one-to-many — and complaints route correctly even when a type has **no** department ([`0c1123c8`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/0c1123c8), [`394e6136`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/394e6136), [`3289ac3f`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/3289ac3f))
+
