@@ -121,12 +121,14 @@ All new capabilities are **opt-in with off/empty defaults** — a stock deployme
 
 ## Documentation
 
-- `docs/mozambique-customizations.md` — customization record
-- `docs/migration/README.md` — migration runner guide
-- `docs/analytics-guide/` — analytics setup & self-hosted Matomo
-- `docs/pgr-escalation/RUNBOOK.md` — escalation enablement
-- `docs/enabling-https-with-letsencrypt.md` — HTTPS setup
-- `docs/superpowers/specs/mozambique-prd/` — PRD / solution design
+- [Mozambique customization record](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/mozambique-customizations.md)
+- [Release audit / evidence document](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/mozambique/RELEASE-PREVIEW-CMS-MOZ-V2.12.md) — full product-baseline comparison behind these notes
+- [Migration runner guide](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/migration/README.md) — `ccrs-migrate.cjs`
+- [Analytics setup & self-hosted Matomo](https://github.com/eGov-Global/CMS-MOZAMBIQUE/tree/master/docs/analytics-guide)
+- [Escalation enablement runbook](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/pgr-escalation/RUNBOOK.md)
+- [HTTPS with Let's Encrypt](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/enabling-https-with-letsencrypt.md)
+- [PRD / solution design](https://github.com/eGov-Global/CMS-MOZAMBIQUE/tree/master/docs/superpowers/specs/mozambique-prd)
+- [Mobile app configuration](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/mobile/assets/config/app_config.json) — portal URL, branding
 
 <!-- ============================================================
 END OF RELEASE BODY
