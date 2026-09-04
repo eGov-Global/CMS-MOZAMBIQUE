@@ -112,6 +112,7 @@ askForAttachments
   .setPrompt(messages.fileComplaint.imageUpload.question)
   .setAccept(['image', 'document'])
   .setOptional(true)
+  .setValidate((input) => input === 'FILE_TOO_LARGE' ? messages.fileComplaint.imageUpload.tooLarge : true)
   .setOnValid((context, input) => {
     // channel-level media processing (download/upload) failed - the channel
     // returns a blank placeholder rather than throwing. Don't forward that as
@@ -123,6 +124,7 @@ askForAttachments
     context.slots.pgr.image = input;
   })
   .setNext(askConsent);
+
 
 askConsent
   .setPrompt(messages.fileComplaint.consent.question)

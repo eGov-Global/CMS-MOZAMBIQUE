@@ -16,6 +16,8 @@ const INPUT_TYPES = {
 // backend degrades to "couldn't attach" instead of a hung HTTP response that
 // Twilio then retries (double-processing the same message).
 const MEDIA_PROCESSING_TIMEOUT_MS = 13000;
+const MAX_MEDIA_SIZE_BYTES = 5 * 1024 * 1024;
+
 
 
 class TwilioWhatsAppProvider {
@@ -286,6 +288,10 @@ class TwilioWhatsAppProvider {
                 const contentType = this.getMediaContentType(requestBody) || response.headers['content-type'] || '';
                 const fileExtension = this.getExtensionForMimeType(contentType);
                 const fileBuffer = Buffer.from(response.data);
+
+                if (fileBuffer.length > MAX_MEDIA_SIZE_BYTES) {
+                    return 'FILE_TOO_LARGE';
+                }
 
                 return await this.uploadMediaToFileStore(
                     `pgr-whatsapp-${Date.now()}${fileExtension}`,

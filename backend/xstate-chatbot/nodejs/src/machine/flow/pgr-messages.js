@@ -143,6 +143,10 @@ module.exports = {
       failed: {
         en_IN: "Sorry, we couldn't process your attachment. Continuing without it.",
         pt_PT: 'Lamentamos, não foi possível processar o seu anexo. A continuar sem ele.'
+      },
+      tooLarge: {
+        en_IN: 'That file is too large. Please send a file under 5MB.',
+        pt_PT: 'Esse ficheiro é demasiado grande. Envie um ficheiro com menos de 5MB.'
       }
     },
     persistComplaint: {
