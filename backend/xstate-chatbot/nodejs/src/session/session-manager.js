@@ -17,6 +17,10 @@ const sandboxOrgTracker = new SandboxOrgTracker(sandboxOrgCodeTracker);
 const sendQueues = new Map();
 // Per-user chain of pending inbound dispatches - see authenticateAndDispatch() below.
 const dispatchQueues = new Map();
+// Extra grace period after a reply is sent, before the next inbound message
+// from the same user is accepted - gives the citizen time to read the reply
+// instead of racing ahead through several menu steps in one burst.
+const REPLY_COOLDOWN_MS = 2000;
 
 
 
@@ -86,8 +90,12 @@ class SessionManager {
       console.log(`Discarding message from ${mobileNumber}: previous message still processing`);
       return;
     }
+    
     const current = this._authenticateAndDispatch(rawRequestModel)
+      .then((userId) => sendQueues.get(userId))
+      .then(() => new Promise((resolve) => setTimeout(resolve, REPLY_COOLDOWN_MS)))
       .finally(() => dispatchQueues.delete(mobileNumber));
+
     dispatchQueues.set(mobileNumber, current);
     return current;
   }
@@ -106,7 +114,9 @@ class SessionManager {
     // generic error handler sends a second, confusing message. Restore an
     // `if (!session) return;` guard here before relying on sandbox mode.
     await this.chatService.dispatch(session, inboundRequestModel);
+    return session.userId;
   }
+
 
 
 
