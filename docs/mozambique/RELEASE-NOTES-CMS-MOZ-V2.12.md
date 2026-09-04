@@ -49,6 +49,12 @@ CMS Mozambique — **Fala Cidadão** — is the Mozambique implementation of the
 
 ---
 
+### Coming next
+
+- **Mobile app (Android / iOS):** a Flutter WebView wrapper of the Fala Cidadão portal has been merged into the repository (`mobile/`) and will be deployed shortly after this release. Everything about it is configuration-driven (portal URL, app name, colours — `mobile/assets/config/app_config.json`); it is not part of this release tag.
+
+---
+
 ## Changes by Area (summary)
 
 | Area | Highlights |

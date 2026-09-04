@@ -339,6 +339,7 @@ Reopen/rate data loss (department wiped — `92eaec23`, `2debbcfc`); complaint-d
 
 **Recorded product decisions:**
 - **D-1 (IGE/IGSAE):** the product retains full two-authority functionality (schemas, dynamic fields, masters for both IGE and IGSAE). For this deployment, IGSAE is **disabled by configuration** (MDMS `active: false`, `21ff33d5`/`07bd5c4c`) — a deliberate deployment choice, not removed product capability.
+- **D-3 (mobile app):** the Flutter WebView mobile app is merged to the repository (`mobile/`, PR #61) but is NOT part of this release tag; it is announced as "coming next" in the release notes and ships with the next deployment.
 - **D-2 (rate stale-cache):** rate's stale-cache exposure accepted, terminal states only (`aafa912b`).
 
 **Open gaps:**
