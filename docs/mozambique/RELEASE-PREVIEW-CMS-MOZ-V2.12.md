@@ -1,4 +1,6 @@
-# CMS-MOZ-V12.2 — Initial Release Preview (Revision 3 — fact-check corrections applied)
+# CMS-MOZ-V2.12 — Initial Release Preview (Revision 4)
+
+> **Revision 4 (2026-09-04):** release version corrected to **V2.12** (was mistyped 12.2); tag string is now `CMS-MOZ-V2.12`; files renamed accordingly.
 
 > **Revision 3 (2026-09-04):** 13 corrections from the independent fact-check applied — §A2 Helm-path nuance, §A3 six password literals (was 1), test coverage 19 files (was ~3), subtree debt 41 files (was 25), corrected hashes/counts/Jira figures/role list. Post-correction confidence: ~90%.
 
@@ -14,7 +16,7 @@
 | 1 | Remove the admin-search endpoint item | Removed from Release Gaps / risks / readiness blockers |
 | 2 | Remove the Gate 2 Release Checklist section | Section removed |
 | 3 | IGE/IGSAE product decision | Recorded: the product **keeps both-authority functionality**; IGSAE is switched off for this deployment via MDMS (`active: false`), not removed from the product |
-| 4 | Tag name spaces | Tag is now **`CMS-MOZ-V12.2`** throughout |
+| 4 | Tag name spaces | Tag is now **`CMS-MOZ-V2.12`** throughout |
 | 5 | Hygiene before tagging | Reduced to: tag targets `origin/master` @ `57e28906`; include necessary commits only; local/unpushed commits and the "possibly unrelated" list are ignored for the tag |
 
 Also added in this revision: **Section A — Implementation observations (Ozeki SMS / OTP / passwords)**, saved for review as requested, each item verified against the repository.
@@ -86,7 +88,7 @@ CMS Mozambique ("Fala Cidadão") is the Mozambique implementation of the DIGIT C
 
 | Fact | Value |
 |---|---|
-| Proposed tag | **`CMS-MOZ-V12.2`** |
+| Proposed tag | **`CMS-MOZ-V2.12`** |
 | Release ref | `origin/master` @ `57e28906` (2026-09-03) — necessary commits only; local/unpushed commits are not part of the tag |
 | Product baseline | `egovernments/Citizen-Complaint-Resolution-System` @ `815b2374` |
 | Comparison basis | Full tree diff product → Mozambique (initial official release; not v1.0.0-relative) |
@@ -312,7 +314,7 @@ Reopen/rate data loss (department wiped — `92eaec23`, `2debbcfc`); complaint-d
 | `.github/SECURITY-SCANNING.md`, `SECURITY-SCOPE.md` | CI security-scan docs |
 | On the v1.0.0 tag only (NOT on master) | Previous release's matrix/notes/manifest — stranded on a side branch |
 
-**Missing documentation:** frontend customization record; V12.2 release notes/matrix/manifest on master; roles & permissions reference; notification-template coverage for CMS states.
+**Missing documentation:** frontend customization record; V2.12 release notes/matrix/manifest on master; roles & permissions reference; notification-template coverage for CMS states.
 
 ## 15. Missing / Undocumented Changes
 
@@ -368,12 +370,12 @@ The release documentation (this file) now captures the complete meaningful custo
 2. Update `docs/mozambique-customizations.md` per §15 (a day's work from this file).
 3. Validate pt_PT JSON bundles.
 4. Product sign-offs: telemetry data residency (§16.7), `x-no-mask` PII carve-out (§16.8).
-5. Tag `CMS-MOZ-V12.2` on `origin/master` @ `57e28906` once the above are accepted or explicitly deferred.
+5. Tag `CMS-MOZ-V2.12` on `origin/master` @ `57e28906` once the above are accepted or explicitly deferred.
 
 ---
 
 ## Proposed Tag
 
-`CMS-MOZ-V12.2`
+`CMS-MOZ-V2.12`
 
 **Status: PREVIEW ONLY — TAG NOT CREATED** · nothing pushed · no release published · no repository modified

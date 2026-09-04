@@ -1,7 +1,7 @@
 <!-- ============================================================
 PASTE-READY GITHUB RELEASE
-Tag:            CMS-MOZ-V12.2
-Release title:  CMS Mozambique V12.2 — Fala Cidadão (Initial Official Release)
+Tag:            CMS-MOZ-V2.12
+Release title:  CMS Mozambique V2.12 — Fala Cidadão (Initial Official Release)
 Target:         set to the commit actually running in production.
                 Verify on the prod box first:
                   git -C /opt/digit-ui-esbuild log -1 --format='%H %ad %s'
@@ -11,7 +11,7 @@ Target:         set to the commit actually running in production.
 Everything below this comment block is the release body — paste as-is.
 ============================================================ -->
 
-# CMS Mozambique V12.2 — Fala Cidadão
+# CMS Mozambique V2.12 — Fala Cidadão
 
 **Initial official release of the CMS Mozambique product line.**
 Repository: `eGov-Global/CMS-MOZAMBIQUE` · Product baseline: DIGIT Complaint Management System (`egovernments/Citizen-Complaint-Resolution-System` @ `815b2374`) · This release describes the complete Mozambique customization currently live in production.
@@ -131,15 +131,15 @@ When you are ready to actually cut the release:
      git -C /opt/digit-ui-esbuild log -1 --format='%H %ad %s'
 
 2. Create the annotated tag at that commit and push it:
-     git tag -a CMS-MOZ-V12.2 <COMMIT_SHA> -m "CMS Mozambique V12.2 - initial official release (Fala Cidadao)"
-     git push origin CMS-MOZ-V12.2
+     git tag -a CMS-MOZ-V2.12 <COMMIT_SHA> -m "CMS Mozambique V2.12 - initial official release (Fala Cidadao)"
+     git push origin CMS-MOZ-V2.12
 
 3. Create the GitHub release with this body:
-     gh release create CMS-MOZ-V12.2 \
+     gh release create CMS-MOZ-V2.12 \
        --repo eGov-Global/CMS-MOZAMBIQUE \
-       --title "CMS Mozambique V12.2 — Fala Cidadão (Initial Official Release)" \
-       --notes-file docs/mozambique/RELEASE-NOTES-CMS-MOZ-V12.2.md
+       --title "CMS Mozambique V2.12 — Fala Cidadão (Initial Official Release)" \
+       --notes-file docs/mozambique/RELEASE-NOTES-CMS-MOZ-V2.12.md
    (strip these HTML comment blocks first, or paste the body via the web UI)
 
-Full evidence & internal detail: RELEASE-PREVIEW-CMS-MOZ-V12.2.md (Revision 3, in this folder)
+Full evidence & internal detail: RELEASE-PREVIEW-CMS-MOZ-V2.12.md (Revision 3, in this folder)
 ============================================================ -->
