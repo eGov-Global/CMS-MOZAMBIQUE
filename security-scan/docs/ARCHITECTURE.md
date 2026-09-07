@@ -73,7 +73,7 @@ far more accurate, and a deterministic scoring layer on top makes the labels rep
 Only files the Ansible deployment actually uses are audited — `local-setup/ansible/**`, the six
 compose stacks the playbook invokes, the config trees they mount, and `tests/`. Out of scope:
 `k8s/`, Tilt, the base/registry/deploy/db-migrations compose variants, and app source under
-`backend/`. This mirrors `.github/SECURITY-SCOPE.md`.
+`backend/`. The allowlist lives in `scan.py` (`SCOPE_COMPOSE` / `SCOPE_SUBDIRS`).
 
 See **`docs/CONSISTENCY.md`** for the scoring model and what is/ isn't reproducible, and
 **`docs/ADDING-A-REPO.md`** to deploy this in another repo.
