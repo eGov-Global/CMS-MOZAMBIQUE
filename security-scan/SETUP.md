@@ -19,9 +19,13 @@ Repo → Settings → Pages → Source = **Deploy from a branch**, Branch = **gh
 ## 3. Deploy the Apps Script
 
 1. https://script.google.com → New project → paste **`apps-script.gs`** (in this folder).
-2. Project Settings → **Script properties** → add:
-   - `SHARED_TOKEN` = a long random string (this is what runners set as `SECSCAN_TOKEN`)
-   - `GH_TOKEN` = the fine-grained PAT from step 1
+2. Set the two secrets — **either** edit the config vars at the top of the script:
+   ```js
+   var SHARED_TOKEN = "eDyz05i…";                 // runners pass this as SECSCAN_TOKEN
+   var GH_TOKEN     = "github_pat_…";              // fine-grained PAT (Contents: read+write)
+   ```
+   **or** leave the `PASTE_…` placeholders and add them in Project Settings → **Script properties**
+   (keys `SHARED_TOKEN`, `GH_TOKEN`). The script uses the in-code value if set, else the property.
 3. **Deploy → New deployment → Web app**: Execute as **Me**, Who has access **Anyone** → Deploy,
    and **Authorize** (grant Drive + external requests).
 4. Copy the `/exec` URL and paste it into `scan.py` → `WEBAPP_URL` (it's public/safe to commit).

@@ -14,19 +14,32 @@
  *              folders:[...], runJsonBase64, xlsxBase64 }
  */
 
+// =============================== CONFIG ======================================
+// Set these two here, OR leave the PASTE_… placeholders and put them in
+// Project Settings → Script properties (keys: SHARED_TOKEN, GH_TOKEN) instead.
+var SHARED_TOKEN = "PASTE_SHARED_TOKEN_HERE";       // runners pass this as SECSCAN_TOKEN
+var GH_TOKEN     = "PASTE_GITHUB_FINE_GRAINED_PAT"; // fine-grained PAT, Contents: read+write
+
 var DRIVE_ROOT = "CMS-Security-Scan";
 var PAGES_DIR  = "security_scan";                 // gh-pages path that serves the dashboard
 var GH_BRANCH  = "gh-pages";
 var INDEX_RAW  = "https://raw.githubusercontent.com/%REPO%/master/security-scan/dashboard-index.html";
 
 function _props(){ return PropertiesService.getScriptProperties(); }
+function _cfg(codeVal, propKey){
+  var v = (codeVal || "").trim();
+  if (v && v.indexOf("PASTE_") !== 0) return v;          // use the in-code value if set
+  return (_props().getProperty(propKey) || "").trim();    // else fall back to Script Properties
+}
+function _sharedToken(){ return _cfg(SHARED_TOKEN, "SHARED_TOKEN"); }
+function _ghToken(){ return _cfg(GH_TOKEN, "GH_TOKEN"); }
 function _json(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 function doGet(){ return _json({ ok:true, service:"cms-security-scan" }); }
 
 function doPost(e) {
   try {
     var b = JSON.parse(e.postData.contents);
-    var need = _props().getProperty("SHARED_TOKEN") || "";
+    var need = _sharedToken();
     if (need && b.token !== need) return _json({ ok:false, error:"unauthorized" });
 
     // ---- 1) Drive: store run.json + Excel ----
@@ -52,7 +65,7 @@ function doPost(e) {
 }
 
 function _publishToPages(b, xlsxUrl) {
-  var ghTok = _props().getProperty("GH_TOKEN");
+  var ghTok = _ghToken();
   if (!ghTok) return { ok:false, error:"GH_TOKEN not set" };
   var repo = b.repo;                                   // owner/name
   var run  = JSON.parse(Utilities.newBlob(Utilities.base64Decode(b.runJsonBase64)).getDataAsString());
