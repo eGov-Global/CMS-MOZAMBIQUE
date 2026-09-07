@@ -1,0 +1,2077 @@
+{
+ "meta": {
+  "repo": "eGov-Global/CMS-MOZAMBIQUE",
+  "branch": "master",
+  "sha": "960c657401a905bb7ba7242ab605fb2c5ce6c4f8",
+  "shaShort": "960c657",
+  "runId": "20260907-173407",
+  "runUrl": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/tree/960c657401a905bb7ba7242ab605fb2c5ce6c4f8",
+  "pr": null,
+  "scope": "Ansible Deployment \u2014 Remote Server",
+  "scanners": [
+   "Claude deep scan (claude-haiku-4-5-20251001,claude-opus-5)"
+  ],
+  "engine": "Claude (claude-haiku-4-5-20251001,claude-opus-5)",
+  "executive_summary": "This Ansible single-host deployment puts a confidential citizen-grievance platform on the public internet with several unauthenticated administrative entry points reachable directly through port 443: Grafana is proxied at /grafana/ with anonymous auth and an Admin org role, the MCP admin-tool server is proxied at /mcp with no auth in every shipped host_vars template, the Gatus topology board is public at /status/, and Kong's gateway RBAC ships in log-only fail-open mode with wildcard CORS plus credentials. Authentication itself is largely nominal \u2014 citizen OTP is fixed to 123456 and mocked at the gateway, and the deploy actively creates an ADMIN/eGov@123 SUPERUSER account. Systemically, the stack has no host firewall, publishes roughly 33 ports (datastores, Kong Admin, a root Jupyter with an empty token, and fifteen backend microservices) on 0.0.0.0 behind the cloud security group alone, and hardens no container (no cap_drop, no no-new-privileges, a Docker socket mounted into promtail). Encryption of citizen PII rests on a committed master password, salt and IV, and MinIO serves complaint attachments anonymously. Fix the internet-reachable auth holes first (Grafana, /mcp, OTP, ADMIN default, MinIO anonymous), then close the network surface (loopback binds plus a real firewall), then rotate the committed cryptographic material.",
+  "priority_actions": [
+   "Disable Grafana anonymous auth (GF_AUTH_ANONYMOUS_ENABLED=false, restore the login form) and put the unconditional nginx /grafana/ location behind a feature flag plus auth_basic.",
+   "Set nginx_features.mcp: false in _example.yml and all five tenant examples, or place auth in front of /mcp \u2014 it exposes user_create/employee_create/mdms_create/pgr_update with no credential.",
+   "Turn off the fixed OTP (CITIZEN_LOGIN_PASSWORD_OTP_FIXED_ENABLED=false) and delete the two Kong request-termination mocks on /user-otp and /otp/v1/_validate; enable enable_otp_services with a real SMS provider.",
+   "Stop seeding ADMIN/eGov@123: set bootstrap_password and egov_hrms_default_password from OpenBao, remove the eGov@123 fallbacks in the playbook and seeds/user-seed.sh, and rotate the Kong '\u2026-change-me' consumer keys.",
+   "Remove `mc anonymous set download myminio/egov-rainmaker` so citizen complaint attachments stop being world-readable.",
+   "Bind every non-public container port to 127.0.0.1 (Postgres, Redis, Redpanda, MinIO, Elasticsearch, Kong Admin 18001/18002, Jupyter 18888, the 15 backend service ports) and add a real host firewall task, remembering that Docker bypasses ufw's INPUT chain \u2014 use DOCKER-USER.",
+   "Remove the root, tokenless Jupyter service from the Ansible-deployed stack (or at minimum drop user: root, set a token from OpenBao, bind loopback, and make its three host binds read-only).",
+   "Set ENFORCE_UNAUTH = true and ENFORCE_RBAC = true in kong/kong.yml, replace CORS origins '*' with the tenant origin, and drop /user/_search from the AUTH_OPTIONAL whitelist.",
+   "Rotate the egov-enc-service MASTER_PASSWORD/MASTER_SALT/MASTER_INITIALVECTOR out of the repo into OpenBao and re-key eg_enc_*_keys; revoke the two committed Google Maps API keys.",
+   "Add security headers and server_tokens off to the nginx vhost template; add cap_drop: [ALL] and security_opt: no-new-privileges to every compose service; drop the /var/run/docker.sock mount from promtail.",
+   "Enable TLS on the OpenBao listener and move to KMS auto-unseal so /opt/digit/.openbao/init.json no longer holds a usable unseal key and root token beside the data it protects.",
+   "Add checksum verification to otel/download-agent.sh and replace the NodeSource `curl | bash` in tasks/ensure-node20.yml with a keyring + pinned-repo install; pin the eight `:latest` images to digests."
+  ],
+  "enriched": true,
+  "date": "2026-09-07 12:04 UTC",
+  "ts": "2026-09-07T12:04:07.774355+00:00"
+ },
+ "summary": {
+  "types": 37,
+  "occurrences": 220,
+  "typesBySeverity": {
+   "CRITICAL": 11,
+   "HIGH": 18,
+   "MEDIUM": 6,
+   "LOW": 2
+  },
+  "occBySeverity": {
+   "CRITICAL": 80,
+   "HIGH": 106,
+   "MEDIUM": 28,
+   "LOW": 6
+  }
+ },
+ "findings": [
+  {
+   "severity": "CRITICAL",
+   "source": "Claude",
+   "area": "ansible",
+   "id": "seeded-default-credentials",
+   "title": "Deploy seeds and authenticates with the committed default password eGov@123 for ADMIN/SUPERUSER, HRMS employees, the MCP service account and the token-exchange system user; Kong ships '\u2026-change-me' consumer API keys",
+   "category": "Secrets Management",
+   "guide": "https://cwe.mitre.org/data/definitions/1392.html",
+   "cvss": null,
+   "cwe": "CWE-1392",
+   "count": 16,
+   "locations": [
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3180,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L3180"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3285,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L3285"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3309,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L3309"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3561,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L3561"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 3716,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L3716"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 4091,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L4091"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1733,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L1733"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2382,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L2382"
+    },
+    {
+     "path": "local-setup/seeds/user-seed.sh",
+     "line": 67,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/seeds/user-seed.sh#L67"
+    },
+    {
+     "path": "local-setup/seeds/user-seed.sh",
+     "line": 156,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/seeds/user-seed.sh#L156"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1174,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1174"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1762,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1762"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/_example.yml",
+     "line": 622,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/_example.yml#L622"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/_example.yml",
+     "line": 630,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/_example.yml#L630"
+    },
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 6,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L6"
+    },
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 11,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L11"
+    }
+   ],
+   "why": "ADMIN/eGov@123 is a documented, publicly-known DIGIT default and the deploy actively creates that account with SUPERUSER, MDMS_ADMIN and LOC_ADMIN roles on the state tenant. Anyone can POST to https://<domain>/user/oauth/token and obtain full administrative access to all citizen grievance data. bootstrap_password is not set in any shipped host_vars, so the default always applies.",
+   "fix": "Set `bootstrap_password` per tenant from OpenBao in host_vars (and add it to bootstrap_secrets), change `password` in local-setup/seeds/user-seed.sh to read a required env var, set `EGOV_HRMS_DEFAULT_PASSWORD`/`MCP_PASSWORD` from the OpenBao-populated .env with no `:-eGov@123` fallback, and replace the two kong.yml keyauth_credentials with generated keys (or delete the consumers if key-auth is unused).",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.99,
+    "reason": "playbook `bootstrap_password | default('eGov@123')` mints the SUPERUSER token and creates the ADMIN user; user-seed.sh hardcodes password eGov@123; compose defaults EGOV_HRMS_DEFAULT_PASSWORD and CRS_PASSWORD to eGov@123; kong.yml consumers carry digit-dev-api-key-change-me / digit-admin-api-key-change-me."
+   }
+  },
+  {
+   "severity": "CRITICAL",
+   "source": "Claude",
+   "area": "nginx",
+   "id": "mcp-unauth-admin",
+   "title": "nginx /mcp exposes unauthenticated MCP admin tools; group_vars default is off but every shipped host_vars template (including _example.yml) sets nginx_features.mcp: true and enable_mcp: true",
+   "category": "Access Control",
+   "guide": "https://cwe.mitre.org/data/definitions/306.html",
+   "cvss": null,
+   "cwe": "CWE-306",
+   "count": 15,
+   "locations": [
+    {
+     "path": "local-setup/ansible/templates/nginx-site.conf.j2",
+     "line": 242,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/nginx-site.conf.j2#L242"
+    },
+    {
+     "path": "local-setup/ansible/templates/nginx-site.conf.j2",
+     "line": 246,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/nginx-site.conf.j2#L246"
+    },
+    {
+     "path": "local-setup/ansible/inventory/group_vars/digit.yml",
+     "line": 128,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/group_vars/digit.yml#L128"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/_example.yml",
+     "line": 292,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/_example.yml#L292"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/_example.yml",
+     "line": 577,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/_example.yml#L577"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/bomet.yml.example",
+     "line": 107,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/bomet.yml.example#L107"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/bomet.yml.example",
+     "line": 185,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/bomet.yml.example#L185"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/maputo.yml.example",
+     "line": 81,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/maputo.yml.example#L81"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/maputo.yml.example",
+     "line": 108,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/maputo.yml.example#L108"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/stateige.yml.example",
+     "line": 80,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/stateige.yml.example#L80"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/stateige.yml.example",
+     "line": 127,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/stateige.yml.example#L127"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/localhost-full.yml.example",
+     "line": 70,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/localhost-full.yml.example#L70"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/localhost-full.yml.example",
+     "line": 109,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/localhost-full.yml.example#L109"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/localhost-slim.yml.example",
+     "line": 75,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/localhost-slim.yml.example#L75"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/localhost-slim.yml.example",
+     "line": 119,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/localhost-slim.yml.example#L119"
+    }
+   ],
+   "why": "Anyone on the internet can POST to https://<domain>/mcp and invoke user_create, employee_create, mdms_create and pgr_update \u2014 creating privileged DIGIT accounts and mutating master data and complaint records without any credential. The operator copies _example.yml verbatim per the README, so the insecure value is what actually ships.",
+   "fix": "Flip `mcp: false` in local-setup/ansible/inventory/host_vars/_example.yml (and bomet/maputo/stateige/localhost-* examples). If /mcp must be served, wrap the location in nginx-site.conf.j2 with `auth_basic`/`allow 127.0.0.1; deny all;` or require the same bearer token the /v1/ shim enforces.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.97,
+    "reason": "nginx-site.conf.j2 comment: '/mcp exposes admin tools (mdms_create, user_create, employee_create, tenant_bootstrap, pgr_update, ...) without auth'. group_vars/digit.yml:128 mcp:false, but _example.yml:577 and all five tenant examples set mcp:true."
+   }
+  },
+  {
+   "severity": "CRITICAL",
+   "source": "Claude",
+   "area": "jupyter",
+   "id": "jupyter-root-published",
+   "title": "Jupyter Lab container runs as root on 0.0.0.0:18888 with token and password both set to empty strings and allow_origin '*'",
+   "category": "Access Control",
+   "guide": "https://cwe.mitre.org/data/definitions/306.html",
+   "cvss": null,
+   "cwe": "CWE-306",
+   "count": 8,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1801,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1801"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1818,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1818"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1821,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1821"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1822,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1822"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1823,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1823"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1825,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1825"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1827,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1827"
+    },
+    {
+     "path": "local-setup/jupyter/Dockerfile",
+     "line": 41,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/jupyter/Dockerfile#L41"
+    }
+   ],
+   "why": "Anyone who can reach TCP/18888 on the host gets an unauthenticated root shell inside a container on the egov-network, with direct reach to Postgres, Redis, Kafka, MinIO and every DIGIT service holding citizen grievance data. Only the cloud security group stands in front of it; there is no host firewall.",
+   "fix": "In local-setup/docker-compose.egov-digit.yaml, remove `user: root` and `--allow-root`, bind the publish to loopback (`- \"127.0.0.1:18888:8888\"`), and set a real token: `--ServerApp.token=${JUPYTER_TOKEN:?set JUPYTER_TOKEN}` with the value seeded from OpenBao into /opt/digit/.env. Better: drop the jupyter service from the Ansible-deployed stack entirely (it is an onboarding tool, not a runtime component).",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.99,
+    "reason": "Read compose jupyter service: user: root, --allow-root, --ServerApp.token='' --ServerApp.password='', --ip=0.0.0.0, ports 18888:8888."
+   }
+  },
+  {
+   "severity": "CRITICAL",
+   "source": "Claude",
+   "area": "kong",
+   "id": "otp-fixed-or-mocked",
+   "title": "Citizen OTP login is fixed to 123456 in egov-user and both /user-otp/* and /otp/v1/_validate are rubber-stamped by Kong request-termination mocks (enable_otp_services defaults false everywhere)",
+   "category": "Access Control",
+   "guide": "https://owasp.org/www-project-top-ten/2017/A2_2017-Broken_Authentication",
+   "cvss": null,
+   "cwe": "CWE-287",
+   "count": 7,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 703,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L703"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 704,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L704"
+    },
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 354,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L354"
+    },
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 358,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L358"
+    },
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 868,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L868"
+    },
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 872,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L872"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/_example.yml",
+     "line": 273,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/_example.yml#L273"
+    }
+   ],
+   "why": "Citizen authentication is effectively unauthenticated: an attacker supplies any mobile number plus OTP 123456 (or relies on the mock validating anything) and receives a citizen session for that number, reading and filing grievances as that person. enable_otp_services is false in group_vars and in every shipped host_vars example, so this is the deployed state.",
+   "fix": "Delete the `plugins: - name: request-termination` blocks on `user-otp-route` (local-setup/kong/kong.yml:353-358) and `otp-validate-mock` (:867-872), set `enable_otp_services: true` in host_vars, set CITIZEN_LOGIN_PASSWORD_OTP_FIXED_ENABLED to 'false' in local-setup/docker-compose.egov-digit.yaml, and configure a real SMS_PROVIDER_CLASS for egov-notification-sms.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.99,
+    "reason": "Compose sets CITIZEN_LOGIN_PASSWORD_OTP_FIXED_ENABLED 'true' / _VALUE '123456'; kong.yml user-otp-route and otp-validate-route each carry a request-termination plugin returning a canned success, with isValidationSuccessful:true."
+   }
+  },
+  {
+   "severity": "CRITICAL",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "grafana-anonymous-admin",
+   "title": "Grafana runs with anonymous auth enabled, anonymous org role = Admin and the login form disabled, and host nginx proxies it publicly at /grafana/ unconditionally",
+   "category": "Access Control",
+   "guide": "https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/",
+   "cvss": null,
+   "cwe": "CWE-306",
+   "count": 4,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 46,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L46"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 47,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L47"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 48,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L48"
+    },
+    {
+     "path": "local-setup/ansible/templates/nginx-site.conf.j2",
+     "line": 128,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/nginx-site.conf.j2#L128"
+    }
+   ],
+   "why": "https://<domain>/grafana/ is an unauthenticated Grafana Admin console on the public internet. An Admin can browse Loki logs (which carry container stdout including request payloads), query Tempo traces and Prometheus, and add new data sources \u2014 including a Postgres data source pointed at the citizen grievance database.",
+   "fix": "In local-setup/docker-compose.egov-digit.yaml set GF_AUTH_ANONYMOUS_ENABLED to 'false' and GF_AUTH_DISABLE_LOGIN_FORM to 'false', and provision GF_SECURITY_ADMIN_PASSWORD from OpenBao. Additionally gate the nginx block: wrap `location /grafana/` in nginx-site.conf.j2 with `{% if nginx_features.grafana | default(false) %}` plus `auth_basic`.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.99,
+    "reason": "Compose grafana env: GF_AUTH_ANONYMOUS_ENABLED 'true', GF_AUTH_ANONYMOUS_ORG_ROLE Admin, GF_AUTH_DISABLE_LOGIN_FORM 'true'; nginx-site.conf.j2 renders `location /grafana/` with no nginx_features guard and no auth_basic."
+   }
+  },
+  {
+   "severity": "CRITICAL",
+   "source": "Claude",
+   "area": "ansible",
+   "id": "curl-pipe-bash-install",
+   "title": "Node 20 install pipes the NodeSource setup script straight into bash as root with no signature or checksum verification",
+   "category": "Supply Chain & Integrity",
+   "guide": "https://cwe.mitre.org/data/definitions/494.html",
+   "cvss": null,
+   "cwe": "CWE-494",
+   "count": 4,
+   "locations": [
+    {
+     "path": "local-setup/ansible/tasks/ensure-node20.yml",
+     "line": 43,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/tasks/ensure-node20.yml#L43"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1632,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L1632"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1990,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L1990"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2146,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L2146"
+    }
+   ],
+   "why": "The fetched script executes as root on the production host and itself adds an APT repository and GPG key. A compromise of nodesource.com, or any TLS interception on the target's egress, yields root code execution on the box holding all citizen grievance data. Triggered whenever an operator enables build_digit_ui, build_configurator, enable_digit_ui_v2 or enable_integration_tests.",
+   "fix": "Replace the pipe in local-setup/ansible/tasks/ensure-node20.yml with `ansible.builtin.get_url` of the NodeSource GPG key to /etc/apt/keyrings/ (with a pinned `checksum:`), an `ansible.builtin.deb822_repository`/`apt_repository` entry, then `apt: name=nodejs`. Alternatively pin an exact nodejs version and verify the .deb checksum.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "local",
+    "confidence": 0.98,
+    "reason": "tasks/ensure-node20.yml:43 runs `curl -fsSL https://deb.nodesource.com/setup_20.x | bash -` then `apt-get install -y nodejs`; included from playbook-deploy.yml at 1632/1990/2146/2536/2725/4236, each gated on a build_* / enable_* flag that defaults false."
+   }
+  },
+  {
+   "severity": "CRITICAL",
+   "source": "Claude",
+   "area": "kong",
+   "id": "kong-auth-rbac-disabled",
+   "title": "Kong gateway authentication and RBAC both ship in audit-only fail-open mode (ENFORCE_UNAUTH=false, ENFORCE_RBAC=false)",
+   "category": "Access Control",
+   "guide": "https://owasp.org/www-project-top-ten/2017/A5_2017-Broken_Access_Control",
+   "cvss": null,
+   "cwe": "CWE-285",
+   "count": 4,
+   "locations": [
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 90,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L90"
+    },
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 93,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L93"
+    },
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 144,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L144"
+    },
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 281,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L281"
+    }
+   ],
+   "why": "Every 'protected' DIGIT API \u2014 /pgr-services, /egov-hrms, /mdms-v2 writes, /workflow \u2014 is reachable through https://<domain>/ with no token at all; the gateway records a warning and forwards the request. Whether the request succeeds then depends entirely on each Spring service's own checks, with the designed central control disabled. This is the sole gateway RBAC layer in the compose deployment (there is no Spring Cloud Gateway here).",
+   "fix": "Set `local ENFORCE_UNAUTH = true` and `local ENFORCE_RBAC = true` in local-setup/kong/kong.yml after confirming no legitimate anonymous call appears in the RBAC-audit warnings, and keep AUTH_OPTIONAL in sync with the documented open/mixed-mode whitelist.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.99,
+    "reason": "kong.yml global pre-function: `local ENFORCE_UNAUTH = false` and `local ENFORCE_RBAC = false`; deny_unauth() only calls kong.log.warn(\"RBAC-audit(#5): unauthenticated request to protected path (would 401)\") when enforcement is off, and the Phase-2 accesscontrol check likewise only logs 'would 403'."
+   }
+  },
+  {
+   "severity": "CRITICAL",
+   "source": "Claude",
+   "area": "kong",
+   "id": "kong-admin-published",
+   "title": "Kong Admin API listens on 0.0.0.0:8001 and both the Admin API (18001) and Kong Manager GUI (18002) are published to the host",
+   "category": "Access Control",
+   "guide": "https://docs.konghq.com/gateway/latest/production/running-kong/secure-admin-api/",
+   "cvss": null,
+   "cwe": "CWE-284",
+   "count": 3,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1605,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1605"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1619,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1619"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1620,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1620"
+    }
+   ],
+   "why": "Kong runs `KONG_DATABASE: off` (declarative), but the Admin API still exposes full route/service/plugin introspection and, on 3.x, the /config endpoint that can replace the declarative config wholesale \u2014 letting an attacker re-point every DIGIT API route or strip the auth pre-function.",
+   "fix": "In local-setup/docker-compose.egov-digit.yaml set `KONG_ADMIN_LISTEN: 127.0.0.1:8001` and delete the `- \"18001:8001\"` and `- \"18002:8002\"` publishes; if the Manager is needed, tunnel to it over SSH.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.99,
+    "reason": "Compose kong service: `KONG_ADMIN_LISTEN: 0.0.0.0:8001` plus published ports `18001:8001` and `18002:8002`; no RBAC/auth plugin on the admin listener."
+   }
+  },
+  {
+   "severity": "CRITICAL",
+   "source": "Claude",
+   "area": "kong",
+   "id": "kong-cors-wildcard-creds",
+   "title": "Kong global CORS plugin allows origins '*' together with credentials: true and exposes X-Auth-Token",
+   "category": "Web & Edge Hardening",
+   "guide": "https://cwe.mitre.org/data/definitions/942.html",
+   "cvss": null,
+   "cwe": "CWE-942",
+   "count": 3,
+   "locations": [
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 24,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L24"
+    },
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 48,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L48"
+    },
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 49,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L49"
+    }
+   ],
+   "why": "Any website a logged-in employee or citizen visits can issue credentialed cross-origin requests to https://<domain>/ and read the responses, including the X-Auth-Token minted at login. That turns any drive-by page into a full session-theft and grievance-data-exfiltration primitive.",
+   "fix": "In local-setup/kong/kong.yml replace `origins: - '*'` with the explicit deployment origins (e.g. `- https://<domain>`), or set `credentials: false` if wildcard access is genuinely required. Never combine the two.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.99,
+    "reason": "kong.yml global plugins: `- name: cors` with `origins: - '*'`, `credentials: true`, `exposed_headers: - X-Auth-Token`, and Authorization/auth-token in the allowed headers."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "backend-services-published",
+   "title": "Fifteen backend microservice ports (including egov-enc-service:11234 and egov-hrms:18092) are published to the host, reachable bypassing Kong and the gateway auth pre-function",
+   "category": "Network Exposure",
+   "guide": "https://owasp.org/www-project-top-ten/2017/A6_2017-Security_Misconfiguration",
+   "cvss": null,
+   "cwe": "CWE-1327",
+   "count": 15,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 452,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L452"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 515,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L515"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 855,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L855"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 914,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L914"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 959,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L959"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1006,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1006"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1066,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1066"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1180,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1180"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1230,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1230"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 319,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L319"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 385,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L385"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1551,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1551"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1581,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1581"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1783,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1783"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2505,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L2505"
+    }
+   ],
+   "why": "Every request that reaches these ports skips Kong entirely \u2014 no CORS policy, no auth-enrichment pre-function, no request-size limit, no tracing. egov-enc-service on 11234 will encrypt and decrypt citizen PII for anyone who can reach it, and digit-mcp on 13101 is the unauthenticated admin tool server. The cloud security group is the only thing in front of all of them.",
+   "fix": "Delete the `ports:` blocks for the internal services in local-setup/docker-compose.egov-digit.yaml (they are all reachable by service name on egov-network), or at minimum prefix each with `127.0.0.1:` so only host nginx and the playbook's local probes can reach them.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.98,
+    "reason": "Compose publishes 11234 (enc-service), 18094 (mdms), 18096 (localization), 18081 (boundary), 18090 (accesscontrol), 18091 (persister), 18084 (filestore), 18092 (hrms), 18086 (bndry-mgmnt), 18095 (indexer), 18097 (inbox), 18080 (digit-ui), 18890 (configurator), 13101 (digit-mcp), 18300 (token-exchange), all without a host-IP prefix."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "datastores-published-0000",
+   "title": "PostgreSQL, Redis, Redpanda/Kafka, MinIO and Elasticsearch all publish host ports on every interface (no 127.0.0.1 bind)",
+   "category": "Network Exposure",
+   "guide": "https://docs.docker.com/engine/network/#published-ports",
+   "cvss": null,
+   "cwe": "CWE-1327",
+   "count": 7,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 115,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L115"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 159,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L159"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 194,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L194"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 195,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L195"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 218,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L218"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 219,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L219"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 256,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L256"
+    }
+   ],
+   "why": "Every datastore holding citizen grievance data listens on the host's public IP. Redis has no password (compose sets none) and Redpanda advertises PLAINTEXT; a single security-group edit, an added interface, or a VPC neighbour reaches the raw databases with no gateway, no audit trail and no rate limiting.",
+   "fix": "Prefix every datastore publish with the loopback address in local-setup/docker-compose.egov-digit.yaml, e.g. `- \"127.0.0.1:15432:5432\"`, `- \"127.0.0.1:16379:6379\"`, `- \"127.0.0.1:19000:9000\"`, `- \"127.0.0.1:19200:9200\"`, or delete the `ports:` blocks outright \u2014 every consumer reaches them by service name on egov-network.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.99,
+    "reason": "Compose port maps `15432:5432`, `16379:6379`, `19092:9092`+`18082:8082`, `19000:9000`+`19001:9001`, `19200:9200` \u2014 none prefixed with 127.0.0.1 (contrast openbao line 1872)."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "admin-ui-published-0000",
+   "title": "Grafana, Prometheus, Loki, Tempo, Gatus and Kong Manager publish admin/observability UIs on all host interfaces",
+   "category": "Network Exposure",
+   "guide": "https://owasp.org/www-project-top-ten/2017/A6_2017-Security_Misconfiguration",
+   "cvss": null,
+   "cwe": "CWE-1327",
+   "count": 6,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 58,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L58"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 89,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L89"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1676,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1676"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 32,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L32"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1648,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1648"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1620,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1620"
+    }
+   ],
+   "why": "These consoles expose infrastructure topology, log contents (which include request payloads via promtail) and metrics for the whole tenant. Grafana in particular ships anonymous Admin (see grafana-anonymous-admin), so the port is an unauthenticated admin console on the box's public IP.",
+   "fix": "Bind each to loopback in local-setup/docker-compose.egov-digit.yaml (e.g. `- \"127.0.0.1:13000:3000\"`, `- \"127.0.0.1:19090:9090\"`, `- \"127.0.0.1:13100:3100\"`, `- \"127.0.0.1:18889:8080\"`) and reach them only through the authenticated host-nginx vhost or an SSH tunnel.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.98,
+    "reason": "Compose publishes 13000 (Grafana), 19090 (Prometheus), 13100 (Loki), 13200 (Tempo), 18889 (Gatus), 18002 (Kong Manager) with no host-IP prefix."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "ansible",
+   "id": "host-firewall-absent",
+   "title": "The playbook configures no host firewall on Ubuntu (the documented target) while publishing ~33 container ports on 0.0.0.0; firewalld is only touched on RHEL-family hosts, and there only to OPEN http/https",
+   "category": "Host & Service Hardening",
+   "guide": "https://docs.docker.com/engine/network/packet-filtering-firewalls/",
+   "cvss": null,
+   "cwe": "CWE-1327",
+   "count": 5,
+   "locations": [
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 818,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L818"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 825,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L825"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 844,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L844"
+    },
+    {
+     "path": "local-setup/ansible/README.md",
+     "line": 479,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/README.md#L479"
+    },
+    {
+     "path": "local-setup/ansible/README.md",
+     "line": 482,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/README.md#L482"
+    }
+   ],
+   "why": "With ufw inactive and Docker's own iptables DNAT rules bypassing ufw's INPUT chain even if it were enabled, the cloud security group is the single control between the internet and Postgres, Redis, Kafka, MinIO, Elasticsearch, Kong Admin, Grafana, Prometheus and Jupyter. One SG rule change, VPC peering, or a second network interface exposes all of them at once.",
+   "fix": "Add a firewall task to local-setup/ansible/playbook-deploy.yml for the Debian family: install ufw, `ufw default deny incoming`, allow 22/80/443, and \u2014 because Docker writes to the DOCKER-USER chain, not INPUT \u2014 add an explicit `iptables -I DOCKER-USER -i <public-if> -j DROP` rule (or set `\"iptables\": false` semantics via per-port loopback binds). Defence in depth: bind every non-public container port to 127.0.0.1 as well.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.98,
+    "reason": "playbook-deploy.yml:818 states \"Ubuntu's ufw ships inactive by default on cloud images, so this playbook never needed firewall tasks\"; the only firewall block is `when: ansible_facts['os_family'] == 'RedHat'` and loops [http, https] to ENABLE. ansible/README.md:479-483 only tells the operator to allow 80+443, never to deny the rest."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "minio-init-hardcoded-creds",
+   "title": "minio-init bootstraps the object store with the literal credentials minioadmin/minioadmin, and MinIO itself defaults to the same pair",
+   "category": "Secrets Management",
+   "guide": "https://cwe.mitre.org/data/definitions/798.html",
+   "cvss": null,
+   "cwe": "CWE-798",
+   "count": 5,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 213,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L213"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 214,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L214"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 237,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L237"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/_example.yml",
+     "line": 619,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/_example.yml#L619"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/_example.yml",
+     "line": 620,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/_example.yml#L620"
+    }
+   ],
+   "why": "On the first `docker compose up` \u2014 before the OpenBao secrets block rewrites .env \u2014 MinIO starts with minioadmin/minioadmin while ports 19000/19001 are already published on 0.0.0.0, giving a window of full object-store admin with a universally-known credential. If the operator leaves minio_root_password at the template value, or the init container is re-run after a password rotation, the hardcoded pair breaks or persists as a valid alias.",
+   "fix": "In local-setup/docker-compose.egov-digit.yaml change the minio-init entrypoint to `mc alias set myminio http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\"` with those variables passed through from .env, remove the `:-minioadmin` defaults on the minio service, and set a generated minio_root_user/password in bootstrap_secrets.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "internal",
+    "confidence": 0.99,
+    "reason": "Compose minio-init entrypoint: `mc alias set myminio http://minio:9000 minioadmin minioadmin;` (literals, not ${MINIO_ROOT_USER}/${MINIO_ROOT_PASSWORD}); minio service defaults MINIO_ROOT_USER/MINIO_ROOT_PASSWORD to minioadmin; _example.yml seeds minio_root_user: minioadmin."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "minio-anonymous-access",
+   "title": "minio-init sets the egov-rainmaker bucket to anonymous download, making every uploaded complaint attachment world-readable",
+   "category": "Access Control",
+   "guide": "https://cwe.mitre.org/data/definitions/732.html",
+   "cvss": null,
+   "cwe": "CWE-732",
+   "count": 1,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 239,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L239"
+    }
+   ],
+   "why": "egov-rainmaker is the filestore bucket for citizen complaint attachments \u2014 photographs of the complainant's location, identity documents, evidence. `anonymous set download` grants s3:GetObject to `*`, so anyone who can reach MinIO (or guess/enumerate an object key via the filestore URL endpoints, which Kong also treats as auth-optional) retrieves confidential citizen files with no credential.",
+   "fix": "Remove the `mc anonymous set download myminio/egov-rainmaker;` line from the minio-init entrypoint in local-setup/docker-compose.egov-digit.yaml and let egov-filestore serve objects through presigned URLs using its AWS_KEY/AWS_SECRETKEY credentials.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P0",
+    "exposure": "public",
+    "confidence": 0.99,
+    "reason": "Compose minio-init entrypoint runs `mc anonymous set download myminio/egov-rainmaker;` after creating the bucket; MinIO's S3 API is published on 19000 and 19001."
+   }
+  },
+  {
+   "severity": "CRITICAL",
+   "source": "Claude",
+   "area": "ansible",
+   "id": "insecure-http-registry",
+   "title": "Docker daemon.json is written with insecure-registries defaulting to 10.0.0.4:5000, and eight stack images plus the SPA/MCP git refs are unpinned mutable tags",
+   "category": "Supply Chain & Integrity",
+   "guide": "https://docs.docker.com/reference/cli/dockerd/#insecure-registries",
+   "cvss": null,
+   "cwe": "CWE-494",
+   "count": 12,
+   "locations": [
+    {
+     "path": "local-setup/ansible/inventory/group_vars/digit.yml",
+     "line": 151,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/group_vars/digit.yml#L151"
+    },
+    {
+     "path": "local-setup/ansible/inventory/group_vars/digit.yml",
+     "line": 160,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/group_vars/digit.yml#L160"
+    },
+    {
+     "path": "local-setup/ansible/inventory/group_vars/digit.yml",
+     "line": 161,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/group_vars/digit.yml#L161"
+    },
+    {
+     "path": "local-setup/ansible/inventory/group_vars/digit.yml",
+     "line": 217,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/group_vars/digit.yml#L217"
+    },
+    {
+     "path": "local-setup/ansible/inventory/group_vars/digit.yml",
+     "line": 223,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/group_vars/digit.yml#L223"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1042,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L1042"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 128,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L128"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 636,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L636"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1638,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1638"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1799,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1799"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1852,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1852"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2052,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L2052"
+    }
+   ],
+   "why": "Every deployed host trusts a plaintext-HTTP registry with no certificate check, so anyone on the path to 10.0.0.4:5000 can substitute an arbitrary image that then runs on the DIGIT box. Independently, `:latest` and branch refs mean the artefact deployed today is not the artefact reviewed, and a compromised upstream tag silently lands on the next re-deploy.",
+   "fix": "Set `insecure_registries: []` and a TLS registry in local-setup/ansible/inventory/group_vars/digit.yml (or override per tenant), and replace every `:latest` in local-setup/docker-compose.egov-digit.yaml with an immutable digest (`image: egovio/gatus@sha256:...`). Pin `mcp_ref` and `digit_ui_esbuild_branch` to commit SHAs.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P1",
+    "exposure": "local",
+    "confidence": 0.97,
+    "reason": "group_vars/digit.yml:151 `docker_registry: 10.0.0.4:5000` and :160-161 `insecure_registries: - {{ docker_registry }}`; playbook:1042 writes that key into /etc/docker/daemon.json unconditionally. Compose pins `:latest` for pgbouncer, tilt-demo-db-migrations, curl, gatus, tilt-demo-jupyter, openbao and novu-bridge-endpoint; group_vars pins mcp_ref/digit_ui_esbuild_branch to `main`."
+   }
+  },
+  {
+   "severity": "CRITICAL",
+   "source": "Claude",
+   "area": "otel",
+   "id": "unverified-binary-download",
+   "title": "The 21 MB OpenTelemetry Java agent JAR is downloaded at deploy time with curl and no checksum or signature verification, then loaded via -javaagent into every JVM service",
+   "category": "Supply Chain & Integrity",
+   "guide": "https://cwe.mitre.org/data/definitions/494.html",
+   "cvss": null,
+   "cwe": "CWE-494",
+   "count": 4,
+   "locations": [
+    {
+     "path": "local-setup/otel/download-agent.sh",
+     "line": 20,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/otel/download-agent.sh#L20"
+    },
+    {
+     "path": "local-setup/otel/download-agent.sh",
+     "line": 26,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/otel/download-agent.sh#L26"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1165,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L1165"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 450,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L450"
+    }
+   ],
+   "why": "A Java agent runs with the full privileges of the JVM it instruments and can rewrite any bytecode. A tampered download \u2014 via a compromised release asset, a redirect, or TLS interception on the controller's egress \u2014 silently executes attacker code inside every DIGIT service handling citizen grievance data, and it is loaded before application code runs.",
+   "fix": "Publish the expected SHA-256 alongside the version in local-setup/otel/download-agent.sh and verify it after download (`echo \"$SHA  $DEST\" | sha256sum -c -` and delete on mismatch), or replace the curl with an Ansible `get_url` task carrying `checksum: sha256:...`. Upstream also publishes .asc signatures \u2014 verifying those is stronger.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P1",
+    "exposure": "local",
+    "confidence": 0.98,
+    "reason": "otel/download-agent.sh:26 `curl -fSL -o \"$DEST\" \"$URL\"` against a GitHub release URL with no checksum step; playbook-deploy.yml:1165 runs the script on the controller, the JAR is rsynced to the target and mounted read-only into ~20 services whose JAVA_TOOL_OPTIONS include `-javaagent:/otel/opentelemetry-javaagent.jar`."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "optin-stack-dev-secrets",
+   "title": "Novu, mcp-postgres, Keycloak and Matomo opt-in stacks ship dev-default secrets that the playbook never replaces (Novu enabled in three shipped host_vars examples)",
+   "category": "Secrets Management",
+   "guide": "https://cwe.mitre.org/data/definitions/798.html",
+   "cvss": null,
+   "cwe": "CWE-798",
+   "count": 13,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1723,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1723"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1906,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1906"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1933,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1933"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1940,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1940"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1941,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1941"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1942,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1942"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2062,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L2062"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2302,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L2302"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2368,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L2368"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2404,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L2404"
+    },
+    {
+     "path": "local-setup/docker-compose.matomo.yml",
+     "line": 28,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.matomo.yml#L28"
+    },
+    {
+     "path": "local-setup/docker-compose.matomo.yml",
+     "line": 29,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.matomo.yml#L29"
+    },
+    {
+     "path": "local-setup/docker-compose.matomo.yml",
+     "line": 51,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.matomo.yml#L51"
+    }
+   ],
+   "why": "With enable_novu: true (set in bomet, stateige and localhost-full examples) the Novu API runs on published port 14002 signing session JWTs with a public secret and encrypting stored provider credentials \u2014 including the operator's Twilio auth token \u2014 with a public 32-byte key. Anyone can forge a Novu admin JWT and read those credentials plus every citizen phone number Novu has messaged.",
+   "fix": "Add novu_jwt_secret, novu_store_encryption_key, novu_secret_key and novu_mongo_password to bootstrap_secrets and render them into /opt/digit/.env from the OpenBao block in local-setup/ansible/playbook-deploy.yml (alongside POSTGRES_PASSWORD), then remove the `:-dev-...` fallbacks in local-setup/docker-compose.egov-digit.yaml. Do the same for MCP_DB_PASSWORD, KC_DB_PASSWORD and KC_ADMIN_PASSWORD.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P1",
+    "exposure": "internal",
+    "confidence": 0.95,
+    "reason": "Compose: NOVU_JWT_SECRET default 'dev-jwt-secret-change-in-production-please', NOVU_STORE_ENCRYPTION_KEY 'change-this-key-32-characters!!!', NOVU_SECRET_KEY 'dev-novu-secret-key-change-in-production', mongo root/secret, NOVU_API_KEY 'changeme', MCP_DB_PASSWORD 'mcp123', KC_DB_PASSWORD 'keycloak', KEYCLOAK_ADMIN_PASSWORD 'admin'. Grepping the playbook and digit.env.j2 for NOVU_JWT_SECRET / NOVU_STORE_ENCRYPTION_KEY / NOVU_SECRET_KEY / NOVU_MONGO_PASSWORD returns nothing \u2014 the compose comment claiming Ansible generates them is inaccurate."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "openbao-vault-tls-disabled",
+   "title": "OpenBao listener runs with tls_disable: true and the single-share unseal key plus root token are stored in plaintext JSON on the same host at /opt/digit/.openbao/init.json",
+   "category": "Secrets Management",
+   "guide": "https://cwe.mitre.org/data/definitions/319.html",
+   "cvss": null,
+   "cwe": "CWE-319",
+   "count": 9,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1863,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1863"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2258,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L2258"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2259,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L2259"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2265,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L2265"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2266,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L2266"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2267,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L2267"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 2279,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L2279"
+    },
+    {
+     "path": "local-setup/ansible/runbooks/01-openbao.md",
+     "line": 28,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/runbooks/01-openbao.md#L28"
+    },
+    {
+     "path": "local-setup/ansible/runbooks/01-openbao.md",
+     "line": 31,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/runbooks/01-openbao.md#L31"
+    }
+   ],
+   "why": "Every token and secret exchange between the playbook, the containers and OpenBao crosses the docker bridge and localhost in cleartext, readable by any container that can sniff the bridge or by tcpdump on the host. More importantly the unseal key and root token sit next to the encrypted data on the same box, so a single host compromise (e.g. via the docker-socket mount or the root Jupyter container) yields every tenant secret \u2014 the deployment's own comment acknowledges this.",
+   "fix": "Enable TLS on the OpenBao listener (mount a cert and set `tls_cert_file`/`tls_key_file`, drop `tls_disable`) in local-setup/docker-compose.egov-digit.yaml, and move to cloud-KMS auto-unseal (`seal \"awskms\"`) or operator-held Shamir shares so /opt/digit/.openbao/init.json never contains a usable unseal key or root token. At minimum, revoke the root token after bootstrap and use a scoped AppRole.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P1",
+    "exposure": "internal",
+    "confidence": 0.98,
+    "reason": "Compose BAO_LOCAL_CONFIG listener `{\"tcp\": {\"address\": \"0.0.0.0:8200\", \"tls_disable\": true}}`; playbook inits with secret_shares 1 / secret_threshold 1 and writes bao_init_response.json (root_token + keys_base64) to {{ digit_dir }}/.openbao/init.json mode 0600; runbook 01 documents reading it back."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "keycloak",
+   "id": "keycloak-loose-redirect",
+   "title": "Keycloak realm allows http://localhost:* redirect URIs, localhost:3000/5173 web origins and a *.egov.theflywheel.in wildcard (only when enable_keycloak: true, default off)",
+   "category": "Access Control",
+   "guide": "https://cwe.mitre.org/data/definitions/601.html",
+   "cvss": null,
+   "cwe": "CWE-601",
+   "count": 8,
+   "locations": [
+    {
+     "path": "local-setup/ansible/templates/keycloak-realm.json.j2",
+     "line": 64,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/keycloak-realm.json.j2#L64"
+    },
+    {
+     "path": "local-setup/ansible/templates/keycloak-realm.json.j2",
+     "line": 69,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/keycloak-realm.json.j2#L69"
+    },
+    {
+     "path": "local-setup/ansible/templates/keycloak-realm.json.j2",
+     "line": 70,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/keycloak-realm.json.j2#L70"
+    },
+    {
+     "path": "local-setup/keycloak/realm-template.json",
+     "line": 55,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/keycloak/realm-template.json#L55"
+    },
+    {
+     "path": "local-setup/keycloak/realm-template.json",
+     "line": 56,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/keycloak/realm-template.json#L56"
+    },
+    {
+     "path": "local-setup/keycloak/realm-template.json",
+     "line": 59,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/keycloak/realm-template.json#L59"
+    },
+    {
+     "path": "local-setup/keycloak/realm-template.json",
+     "line": 60,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/keycloak/realm-template.json#L60"
+    },
+    {
+     "path": "local-setup/keycloak/realm-template.json",
+     "line": 61,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/keycloak/realm-template.json#L61"
+    }
+   ],
+   "why": "`http://localhost:*` on a public client lets an attacker who can get a victim to click a crafted authorize URL have the authorization code delivered to a listener on the victim's own machine (or to any port on a host resolving to localhost), and the wildcard subdomain accepts any host under egov.theflywheel.in. Combined with PKCE this is narrowed but not closed, and the localhost web origins re-open the CORS surface for token endpoints. enable_keycloak is false in group_vars and every shipped host_vars example.",
+   "fix": "Remove the 'http://localhost:*' entry and the two localhost webOrigins from local-setup/ansible/templates/keycloak-realm.json.j2 (lines 64, 69-70) and the localhost/wildcard entries from local-setup/keycloak/realm-template.json; keep only the tenant's exact https origin and paths, and add localhost entries through a separate dev-only realm.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P1",
+    "exposure": "public",
+    "confidence": 0.95,
+    "reason": "keycloak-realm.json.j2 sets redirectUris to [base/citizen/*, base/digit-ui/*, base/auth/callback*, 'http://localhost:*'] and webOrigins to [base, http://localhost:3000, http://localhost:5173] on a publicClient with directAccessGrantsEnabled; keycloak/realm-template.json ships 'http://localhost:*' and 'https://*.egov.theflywheel.in/*'."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "jupyter",
+   "id": "kubectl-api-arbitrary-sql",
+   "title": "jupyter/dataloader/kubectl_api.py exposes POST /sql/execute (arbitrary SQL) on 0.0.0.0:8765 guarded only by the default API key 'dev-only-key'",
+   "category": "Access Control",
+   "guide": "https://cwe.mitre.org/data/definitions/798.html",
+   "cvss": null,
+   "cwe": "CWE-798",
+   "count": 6,
+   "locations": [
+    {
+     "path": "local-setup/jupyter/dataloader/kubectl_api.py",
+     "line": 37,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/jupyter/dataloader/kubectl_api.py#L37"
+    },
+    {
+     "path": "local-setup/jupyter/dataloader/kubectl_api.py",
+     "line": 43,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/jupyter/dataloader/kubectl_api.py#L43"
+    },
+    {
+     "path": "local-setup/jupyter/dataloader/kubectl_api.py",
+     "line": 248,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/jupyter/dataloader/kubectl_api.py#L248"
+    },
+    {
+     "path": "local-setup/jupyter/dataloader/kubectl_api.py",
+     "line": 268,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/jupyter/dataloader/kubectl_api.py#L268"
+    },
+    {
+     "path": "local-setup/jupyter/dataloader/kubectl_api.py",
+     "line": 291,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/jupyter/dataloader/kubectl_api.py#L291"
+    },
+    {
+     "path": "local-setup/jupyter/dataloader/crs_loader.py",
+     "line": 39,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/jupyter/dataloader/crs_loader.py#L39"
+    }
+   ],
+   "why": "The default key is committed in a public repo, and the only guard on arbitrary SQL execution is a header comparison against it (the DROP/TRUNCATE blocklist is trivially bypassed with DELETE or `drop\\ttable`). The file is bind-mounted into the unauthenticated root Jupyter container, so an attacker who reaches Jupyter can start it and get a network-exposed SQL endpoint against the citizen database.",
+   "fix": "Delete local-setup/jupyter/dataloader/kubectl_api.py from the deployed tree, or if it must stay: remove the `'dev-only-key'` fallback (`os.environ['KUBECTL_API_KEY']`), bind `app.run(host='127.0.0.1')`, and remove the /sql/execute route entirely.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P1",
+    "exposure": "internal",
+    "confidence": 0.95,
+    "reason": "kubectl_api.py: `API_KEY = os.environ.get('KUBECTL_API_KEY', 'dev-only-key')`, `@app.route('/sql/execute')` docstring 'Execute arbitrary SQL', `app.run(host='0.0.0.0', port=port)`; crs_loader.py uses the same default key. No compose service or playbook task starts it."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "elasticsearch-security-off",
+   "title": "Elasticsearch runs with xpack.security.enabled=false and publishes 19200 (only when enable_search_stack: true, default false)",
+   "category": "Access Control",
+   "guide": "https://www.elastic.co/guide/en/elasticsearch/reference/current/secure-cluster.html",
+   "cvss": null,
+   "cwe": "CWE-306",
+   "count": 6,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 247,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L247"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 251,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L251"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 256,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L256"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 305,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L305"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 361,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L361"
+    },
+    {
+     "path": "local-setup/ansible/inventory/group_vars/digit.yml",
+     "line": 49,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/group_vars/digit.yml#L49"
+    }
+   ],
+   "why": "When a tenant enables the inbox/search stack, the Elasticsearch index containing indexed PGR complaints (complainant names, mobile numbers, addresses, complaint text) is served with no authentication on a host port, and any client can also delete or overwrite indices.",
+   "fix": "Set `xpack.security.enabled=true` in local-setup/docker-compose.egov-digit.yaml, provide ELASTIC_PASSWORD from OpenBao, populate EGOV_INDEXER_ES_PASSWORD / SERVICES_ESINDEXER_PASSWORD accordingly, and drop or loopback-bind the 19200 publish.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P1",
+    "exposure": "public",
+    "confidence": 0.97,
+    "reason": "Compose elasticsearch: `profiles: [\"search\"]`, `- xpack.security.enabled=false`, `ports: - 19200:9200`; egov-indexer/inbox pass empty ES passwords. compose_profiles adds 'search' only when enable_search_stack is true, which is false in group_vars/digit.yml:49 and in all five shipped host_vars examples."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "extra-novu-open-registration-no-rate-limit",
+   "title": "novu-api ships DISABLE_USER_REGISTRATION 'false' and IS_API_RATE_LIMITING_ENABLED 'false' on published port 14002 (only when enable_novu: true)",
+   "category": "Access Control",
+   "guide": "https://owasp.org/www-project-top-ten/2017/A5_2017-Broken_Access_Control",
+   "cvss": null,
+   "cwe": "CWE-284",
+   "count": 5,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1944,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1944"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1946,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1946"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1951,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1951"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2012,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L2012"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2038,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L2038"
+    }
+   ],
+   "why": "Self-registration being open on a self-hosted Novu means anyone reaching the API \u2014 directly on 14002 or through the public /novu-api/ nginx location \u2014 can create an account in the notification platform that holds citizen phone numbers and the Twilio delivery credentials. With rate limiting off there is also no brake on credential-stuffing or bulk message triggering.",
+   "fix": "Set `DISABLE_USER_REGISTRATION: 'true'` and `IS_API_RATE_LIMITING_ENABLED: 'true'` on novu-api in local-setup/docker-compose.egov-digit.yaml, and bind the 14002/14003/14000 publishes to 127.0.0.1 so the nginx locations are the only entry point.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P1",
+    "exposure": "public",
+    "confidence": 0.9,
+    "reason": "Compose novu-api environment: DISABLE_USER_REGISTRATION 'false', IS_API_RATE_LIMITING_ENABLED 'false', IS_API_IDEMPOTENCY_ENABLED 'false', ports `- \"14002:3000\"`; nginx renders /novu-api/ and /novu/ publicly when enable_novu."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "enc-or-jwt-dev-secret",
+   "title": "egov-enc-service master password, salt and initialisation vector are committed dev literals (asd@#$@$!132123 / qweasdzx / qweasdzxqwea) and the fast-path dump requires that exact master password",
+   "category": "Secrets Management",
+   "guide": "https://cwe.mitre.org/data/definitions/798.html",
+   "cvss": null,
+   "cwe": "CWE-798",
+   "count": 4,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 442,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L442"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 443,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L443"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 444,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L444"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/_example.yml",
+     "line": 621,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/_example.yml#L621"
+    }
+   ],
+   "why": "egov-enc-service derives the keys that encrypt citizen PII (names, mobile numbers, addresses) at rest. With the master password, salt and IV all public in this repo, anyone who obtains a database dump \u2014 or reaches the published Postgres port \u2014 can decrypt every citizen record offline. The db_fast_path requirement means operators cannot change it without re-keying.",
+   "fix": "Generate a per-tenant master password, salt and IV into OpenBao and render MASTER_PASSWORD/MASTER_SALT/MASTER_INITIALVECTOR from /opt/digit/.env with no literal fallbacks; then re-key the eg_enc_*_keys rows instead of shipping the fast-path dump's baked keys. Remove the literal from local-setup/ansible/inventory/host_vars/_example.yml:621.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P1",
+    "exposure": "internal",
+    "confidence": 0.98,
+    "reason": "Compose egov-enc-service: MASTER_PASSWORD ${ELASTICSEARCH_MASTER_PASSWORD:-asd@#$@$!132123}, MASTER_SALT qweasdzx, MASTER_INITIALVECTOR qweasdzxqwea (both hardcoded, no env indirection); _example.yml pins elasticsearch_master_password to the same literal and says it MUST be that value with db_fast_path."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "kong",
+   "id": "anonymous-user-search",
+   "title": "Kong whitelists POST /user/_search as auth-optional, permitting unauthenticated enumeration of the citizen/employee directory through the public vhost",
+   "category": "Access Control",
+   "guide": "https://cwe.mitre.org/data/definitions/306.html",
+   "cvss": null,
+   "cwe": "CWE-306",
+   "count": 2,
+   "locations": [
+    {
+     "path": "local-setup/kong/kong.yml",
+     "line": 118,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/kong/kong.yml#L118"
+    },
+    {
+     "path": "local-setup/ansible/templates/nginx-site.conf.j2",
+     "line": 611,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/nginx-site.conf.j2#L611"
+    }
+   ],
+   "why": "/user/_search returns user records \u2014 names, mobile numbers, email addresses, roles and tenant. Because it is on the auth-optional list, the gateway forwards anonymous requests without a token and without stripping the userInfo path, so a public caller can enumerate the citizen and employee directory for the tenant. Gateway enforcement being off (ENFORCE_UNAUTH=false) means even non-whitelisted paths behave this way today.",
+   "fix": "Remove `[\"/user/_search\"]=true` from the AUTH_OPTIONAL table in local-setup/kong/kong.yml:118 so it becomes a protected path, and turn on ENFORCE_UNAUTH so the gateway actually 401s anonymous callers.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P1",
+    "exposure": "public",
+    "confidence": 0.9,
+    "reason": "kong.yml AUTH_OPTIONAL set contains `[\"/user/_search\"]=true` alongside `[\"/access/v1/actions/mdms/_get\"]=true`; the user-route service proxies /user to egov-user-proxy:8107, and nginx-site.conf.j2 `location /` forwards everything to Kong on the public 443 vhost."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "sensitive-host-mount",
+   "title": "The root-owned deploy tree /opt/digit/jupyter/dataloader is bind-mounted read-write into the unauthenticated root Jupyter container",
+   "category": "Container Isolation & Escape",
+   "guide": "https://cwe.mitre.org/data/definitions/732.html",
+   "cvss": null,
+   "cwe": "CWE-732",
+   "count": 3,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1829,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1829"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1830,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1830"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1831,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1831"
+    }
+   ],
+   "why": "The container runs as uid 0 with no authentication, so an attacker who reaches port 18888 can rewrite the notebooks and loader Python under /opt/digit/jupyter on the host. Those files are re-run by operators and by test tooling, giving durable code execution on the deployment host that survives container restarts.",
+   "fix": "Mark the three jupyter binds `:ro` in local-setup/docker-compose.egov-digit.yaml, drop `user: root`, and keep any writable scratch space in a named volume rather than the deploy tree.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P2",
+    "exposure": "public",
+    "confidence": 0.85,
+    "reason": "Compose jupyter volumes are the only writable host binds in the deployed stack: ./jupyter/dataloader/templates, ./jupyter/dataloader and ./jupyter/dataloader/DataLoader_v2.ipynb, all without :ro, in a container running `user: root`."
+   }
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Claude",
+   "area": "nginx",
+   "id": "gatus-public-health-board",
+   "title": "Gatus status board is served publicly at /status/ with no authentication, exposing the full internal service topology (shipped host_vars sets status: true; group_vars default is false)",
+   "category": "Data Sharing",
+   "guide": "https://cwe.mitre.org/data/definitions/200.html",
+   "cvss": null,
+   "cwe": "CWE-200",
+   "count": 9,
+   "locations": [
+    {
+     "path": "local-setup/gatus/config.yaml",
+     "line": 14,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/gatus/config.yaml#L14"
+    },
+    {
+     "path": "local-setup/gatus/config.yaml",
+     "line": 30,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/gatus/config.yaml#L30"
+    },
+    {
+     "path": "local-setup/gatus/config.yaml",
+     "line": 37,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/gatus/config.yaml#L37"
+    },
+    {
+     "path": "local-setup/gatus/config.yaml",
+     "line": 44,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/gatus/config.yaml#L44"
+    },
+    {
+     "path": "local-setup/gatus/config.yaml",
+     "line": 51,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/gatus/config.yaml#L51"
+    },
+    {
+     "path": "local-setup/gatus/config.yaml",
+     "line": 58,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/gatus/config.yaml#L58"
+    },
+    {
+     "path": "local-setup/ansible/templates/nginx-site.conf.j2",
+     "line": 144,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/nginx-site.conf.j2#L144"
+    },
+    {
+     "path": "local-setup/ansible/inventory/host_vars/_example.yml",
+     "line": 575,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/host_vars/_example.yml#L575"
+    },
+    {
+     "path": "local-setup/ansible/inventory/group_vars/digit.yml",
+     "line": 126,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/group_vars/digit.yml#L126"
+    }
+   ],
+   "why": "An unauthenticated visitor to https://<domain>/status/ gets a live inventory of every internal service name, port and health state for the tenant \u2014 a complete reconnaissance map that tells an attacker exactly which datastores and admin services exist behind the published host ports, and which are currently reachable.",
+   "fix": "Either set `status: false` in local-setup/ansible/inventory/host_vars/_example.yml, or add `auth_basic \"DIGIT status\"; auth_basic_user_file /etc/nginx/.htpasswd-status;` to the `location /status/` block in local-setup/ansible/templates/nginx-site.conf.j2 (the playbook already has an htpasswd pattern for /tests/).",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P2",
+    "exposure": "public",
+    "confidence": 0.95,
+    "reason": "gatus/config.yaml declares no `security:` block and enumerates internal hostnames/ports (tcp://postgres-db:5432, tcp://redis:6379, tcp://redpanda:9092, http://minio:9000, http://digit-ui:80, ...); nginx-site.conf.j2:144 renders `location /status/` with no auth when nginx_features.status; _example.yml:575 sets `status: true` while group_vars/digit.yml:126 defaults it false."
+   }
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Claude",
+   "area": "ansible",
+   "id": "ssh-hostkey-disabled",
+   "title": "deploy.sh writes StrictHostKeyChecking=no into the generated inventory for every tenant, and root SSH is used",
+   "category": "Transport Security (TLS)",
+   "guide": "https://cwe.mitre.org/data/definitions/322.html",
+   "cvss": null,
+   "cwe": "CWE-322",
+   "count": 4,
+   "locations": [
+    {
+     "path": "local-setup/ansible/deploy.sh",
+     "line": 133,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/deploy.sh#L133"
+    },
+    {
+     "path": "local-setup/ansible/deploy.sh",
+     "line": 134,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/deploy.sh#L134"
+    },
+    {
+     "path": "local-setup/ansible/inventory/hosts.yml.example",
+     "line": 30,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/hosts.yml.example#L30"
+    },
+    {
+     "path": "local-setup/ansible/inventory/hosts.yml.example",
+     "line": 31,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/inventory/hosts.yml.example#L31"
+    }
+   ],
+   "why": "The deploy pushes OpenBao bootstrap secrets, database passwords and a root-level configuration to the target over SSH with host-key verification disabled. An attacker able to intercept or spoof the control-machine-to-target path (DNS hijack, ARP/BGP, a re-used cloud IP) receives every tenant secret and can serve a substituted host that the operator's Ansible run trusts silently.",
+   "fix": "Drop the `-o StrictHostKeyChecking=no` line from local-setup/ansible/deploy.sh:134 (and hosts.yml.example:31). Use `StrictHostKeyChecking=accept-new` at worst, and pre-seed the target's host key into known_hosts from the cloud provider's console output.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P2",
+    "exposure": "local",
+    "confidence": 0.99,
+    "reason": "deploy.sh regenerates inventory/hosts.yml on every run with `ansible_user: root` and `ansible_ssh_common_args: '-o StrictHostKeyChecking=no'`; hosts.yml.example documents the same group vars."
+   }
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Claude",
+   "area": "seeds",
+   "id": "committed-gmaps-api-key",
+   "title": "Two live-looking Google Maps API keys are committed in local-setup/configs/assets/globalConfigsPGR.js, and the whole configs/ tree is rsynced to every deployment host",
+   "category": "Secrets Management",
+   "guide": "https://cwe.mitre.org/data/definitions/798.html",
+   "cvss": null,
+   "cwe": "CWE-798",
+   "count": 3,
+   "locations": [
+    {
+     "path": "local-setup/configs/assets/globalConfigsPGR.js",
+     "line": 4,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/configs/assets/globalConfigsPGR.js#L4"
+    },
+    {
+     "path": "local-setup/configs/assets/globalConfigsPGR.js",
+     "line": 5,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/configs/assets/globalConfigsPGR.js#L5"
+    },
+    {
+     "path": "local-setup/ansible/playbook-deploy.yml",
+     "line": 1207,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/playbook-deploy.yml#L1207"
+    }
+   ],
+   "why": "The repository is public, so both keys are already harvestable. An unrestricted Google Maps key can be abused by third parties at the key owner's expense (billing fraud) and, if it carries broader Google Cloud scopes, for further access. Rotating the key does not undo the exposure of the old one \u2014 it must be revoked.",
+   "fix": "Revoke both keys in the Google Cloud console immediately, purge them from git history, and change local-setup/configs/assets/globalConfigsPGR.js to read the key from the templated globalConfigs.js (gmaps_api_key inventory variable) rather than a literal. Apply an HTTP-referrer restriction to the replacement key.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P2",
+    "exposure": "public",
+    "confidence": 0.95,
+    "reason": "globalConfigsPGR.js:4-5 declare `var gmaps_api_key_old = \"AIzaSyAQOd09-vjmk1sXFb_ZQYDz2nlfhXq7Wf8\";` and `var gmaps_api_key = \"AIzaSyASqkAr3d494ihZaJeCOg4CJ3xnQ_83e2s\";`; playbook-deploy.yml:1207 syncs `configs: ../configs` to {{ digit_dir }}/configs/. The templated path (globalConfigs.js.j2:21 / group_vars gmaps_api_key: \"\") correctly uses an inventory value."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "capabilities-not-dropped",
+   "title": "No service in any deployed compose file drops Linux capabilities; openbao additionally adds IPC_LOCK",
+   "category": "Container Isolation & Escape",
+   "guide": "https://docs.docker.com/reference/cli/docker/container/run/#cap-drop",
+   "cvss": null,
+   "cwe": "CWE-250",
+   "count": 5,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 95,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L95"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 208,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L208"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1595,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1595"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1798,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1798"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1855,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1855"
+    }
+   ],
+   "why": "Every one of the ~35 containers keeps Docker's full default capability set (CHOWN, SETUID, SETGID, NET_RAW, MKNOD, ...). A remote-code-execution bug in any JVM service therefore starts with the ability to spoof/sniff on the shared egov-network via NET_RAW and to change uid inside the container, widening a single-service compromise into lateral movement across the whole tenant stack.",
+   "fix": "Add `cap_drop: [ALL]` to every service in local-setup/docker-compose.egov-digit.yaml (with a targeted `cap_add:` only where genuinely required, e.g. IPC_LOCK for openbao and NET_BIND_SERVICE for anything binding <1024 in-container).",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P3",
+    "exposure": "internal",
+    "confidence": 0.97,
+    "reason": "Grepped `cap_drop` across docker-compose.egov-digit.yaml, .monitoring.yml, .migrations.yml, .fast-path.yml and .bomet.yml \u2014 zero matches; the only capability directive is `cap_add: [IPC_LOCK]` on openbao."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "no-new-privileges-missing",
+   "title": "No service in any deployed compose file sets security_opt: no-new-privileges",
+   "category": "Container Isolation & Escape",
+   "guide": "https://docs.docker.com/reference/compose-file/services/#security_opt",
+   "cvss": null,
+   "cwe": "CWE-250",
+   "count": 4,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 95,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L95"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 208,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L208"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1595,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1595"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1798,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1798"
+    }
+   ],
+   "why": "Without the no_new_privs bit, any setuid-root binary present in a container image (the Debian-based JVM and postgres images ship several) can be used to escalate from a compromised non-root service account to uid 0 inside the container, which then combines with the undropped capabilities and the docker-socket mount into a host takeover path.",
+   "fix": "Add `security_opt: [\"no-new-privileges:true\"]` to every service in local-setup/docker-compose.egov-digit.yaml and the monitoring/migrations overlays.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P3",
+    "exposure": "internal",
+    "confidence": 0.97,
+    "reason": "Grepped `security_opt` and `no-new-privileges` across all deployed compose files (egov-digit, monitoring, migrations, fast-path, bomet) \u2014 zero matches."
+   }
+  },
+  {
+   "severity": "HIGH",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "docker-socket-mount",
+   "title": "promtail mounts the host Docker socket (read-only) into the container",
+   "category": "Container Isolation & Escape",
+   "guide": "https://cwe.mitre.org/data/definitions/250.html",
+   "cvss": null,
+   "cwe": "CWE-250",
+   "count": 2,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 1698,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L1698"
+    },
+    {
+     "path": "local-setup/otel/promtail-config.yaml",
+     "line": 26,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/otel/promtail-config.yaml#L26"
+    }
+   ],
+   "why": "`:ro` only makes the socket file read-only; the Docker API it speaks is fully read-write. Anyone who achieves code execution in promtail (or any container that can reach it) can create a privileged container mounting the host root filesystem and take over the whole box, including OpenBao's unseal key at /opt/digit/.openbao/init.json.",
+   "fix": "Drop the socket mount from the promtail service in local-setup/docker-compose.egov-digit.yaml and switch otel/promtail-config.yaml from `docker_sd_configs` to a static `__path__: /var/lib/docker/containers/*/*-json.log` file scrape (that read-only bind is already present), or front the socket with a filtered proxy such as tecnativa/docker-socket-proxy limited to GET /containers.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P3",
+    "exposure": "internal",
+    "confidence": 0.99,
+    "reason": "Compose promtail volumes: `- /var/run/docker.sock:/var/run/docker.sock:ro`, used by otel/promtail-config.yaml docker_sd_configs `host: unix:///var/run/docker.sock`."
+   }
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Claude",
+   "area": "keycloak",
+   "id": "extra-keycloak-dev-mode-ssl-none",
+   "title": "Keycloak is started with `start-dev`, KC_HOSTNAME_STRICT/STRICT_HTTPS false and KC_HTTP_ENABLED true, and the realm template sets sslRequired: none (only when enable_keycloak: true, default off)",
+   "category": "Transport Security (TLS)",
+   "guide": "https://www.keycloak.org/server/configuration-production",
+   "cvss": null,
+   "cwe": "CWE-319",
+   "count": 6,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2385,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L2385"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2394,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L2394"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2395,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L2395"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2396,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L2396"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 2406,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L2406"
+    },
+    {
+     "path": "local-setup/keycloak/realm-template.json",
+     "line": 13,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/keycloak/realm-template.json#L13"
+    }
+   ],
+   "why": "`start-dev` disables Keycloak's production checks (it explicitly warns it must not be used in production) and `sslRequired: none` lets the realm accept authentication and token requests over plain HTTP on the published 18180 port, bypassing the nginx TLS termination entirely. Credentials and refresh tokens for the identity provider can then be captured in cleartext.",
+   "fix": "Change the command in local-setup/docker-compose.egov-digit.yaml to `[\"start\", \"--optimized\", \"--import-realm\"]` with KC_HOSTNAME_STRICT 'true', drop the 18180 publish (or bind it to 127.0.0.1), and set `\"sslRequired\": \"external\"` in local-setup/keycloak/realm-template.json.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P3",
+    "exposure": "public",
+    "confidence": 0.95,
+    "reason": "Compose keycloak: `command: [\"start-dev\", \"--import-realm\"]`, KC_HOSTNAME_STRICT 'false', KC_HOSTNAME_STRICT_HTTPS 'false', KC_HTTP_ENABLED 'true', port 18180 published; keycloak/realm-template.json:13 `\"sslRequired\": \"none\"`."
+   }
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Claude",
+   "area": "nginx",
+   "id": "nginx-security-headers",
+   "title": "Public nginx vhost sets no HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy or CSP, and never disables server_tokens",
+   "category": "Web & Edge Hardening",
+   "guide": "https://owasp.org/www-project-secure-headers/",
+   "cvss": null,
+   "cwe": "CWE-693",
+   "count": 3,
+   "locations": [
+    {
+     "path": "local-setup/ansible/templates/nginx-site.conf.j2",
+     "line": 8,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/nginx-site.conf.j2#L8"
+    },
+    {
+     "path": "local-setup/ansible/templates/nginx-site.conf.j2",
+     "line": 716,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/nginx-site.conf.j2#L716"
+    },
+    {
+     "path": "local-setup/ansible/templates/nginx-site.conf.j2",
+     "line": 723,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/nginx-site.conf.j2#L723"
+    }
+   ],
+   "why": "Citizen and employee sessions on a public grievance portal are served without HSTS (so an initial http:// request can be stripped to plaintext and the session token stolen), without clickjacking or MIME-sniffing protection, and with the nginx version advertised in every response and error page.",
+   "fix": "Add to the top of the `server {}` block in local-setup/ansible/templates/nginx-site.conf.j2: `server_tokens off;`, `add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains\" always;` (guard on tls_enabled), `add_header X-Content-Type-Options nosniff always;`, `add_header X-Frame-Options DENY always;`, `add_header Referrer-Policy strict-origin-when-cross-origin always;` and a CSP tuned to the SPA.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P3",
+    "exposure": "public",
+    "confidence": 0.97,
+    "reason": "Grepped every add_header in nginx-site.conf.j2: only Cache-Control appears. No Strict-Transport-Security, X-Content-Type-Options, X-Frame-Options, Content-Security-Policy or `server_tokens off;` anywhere in the 741-line template, including the TLS server block."
+   }
+  },
+  {
+   "severity": "MEDIUM",
+   "source": "Claude",
+   "area": "ansible",
+   "id": "integration-tests-runner-root",
+   "title": "The integration-tests runner systemd unit declares no User= (so it runs as root) and no process-hardening directives (only when enable_integration_tests_runner: true, default off)",
+   "category": "Host & Service Hardening",
+   "guide": "https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html",
+   "cvss": null,
+   "cwe": "CWE-250",
+   "count": 3,
+   "locations": [
+    {
+     "path": "local-setup/ansible/templates/integration-tests-runner.service.j2",
+     "line": 8,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/integration-tests-runner.service.j2#L8"
+    },
+    {
+     "path": "local-setup/ansible/templates/integration-tests-runner.service.j2",
+     "line": 11,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/integration-tests-runner.service.j2#L11"
+    },
+    {
+     "path": "local-setup/ansible/templates/integration-tests-runner.service.j2",
+     "line": 20,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/ansible/templates/integration-tests-runner.service.j2#L20"
+    }
+   ],
+   "why": "systemd defaults an ExecStart without User= to root, so the RUN-button daemon executes attacker-supplied test branches (RUNNER_BRANCH, git checkout + Playwright) with full root privileges on the box, writing into /var/www. Anyone who gets past the /tests/api/ basic-auth gate reaches root code execution.",
+   "fix": "Add `User=digit-tests`, `Group=digit-tests`, `NoNewPrivileges=true`, `PrivateTmp=true`, `ProtectSystem=strict`, `ProtectHome=true` and `ReadWritePaths=/var/www/integration-tests {{ integration_tests_dir }}` to local-setup/ansible/templates/integration-tests-runner.service.j2, and create that unprivileged account in the playbook.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "action_required",
+    "priority": "P3",
+    "exposure": "local",
+    "confidence": 0.95,
+    "reason": "integration-tests-runner.service.j2 [Service] section has ExecStart, WorkingDirectory, five Environment lines, Restart and Nice \u2014 no User=/Group=, no NoNewPrivileges=, ProtectSystem=, PrivateTmp= or ProtectHome=. enable_integration_tests_runner is false in _example.yml:254 and every tenant example."
+   }
+  },
+  {
+   "severity": "LOW",
+   "source": "Claude",
+   "area": "docker-compose",
+   "id": "monitoring-host-namespace",
+   "title": "node-exporter uses pid: host with read-only /proc, /sys and / mounts \u2014 benign by design for host metrics",
+   "category": "General Hardening",
+   "guide": "https://github.com/prometheus/node_exporter#docker",
+   "cvss": null,
+   "cwe": "CWE-653",
+   "count": 4,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.monitoring.yml",
+     "line": 36,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.monitoring.yml#L36"
+    },
+    {
+     "path": "local-setup/docker-compose.monitoring.yml",
+     "line": 38,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.monitoring.yml#L38"
+    },
+    {
+     "path": "local-setup/docker-compose.monitoring.yml",
+     "line": 39,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.monitoring.yml#L39"
+    },
+    {
+     "path": "local-setup/docker-compose.monitoring.yml",
+     "line": 47,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.monitoring.yml#L47"
+    }
+   ],
+   "why": "This is node_exporter's documented, required configuration for host-level CPU/memory/disk metrics. The mounts are read-only and the container publishes no port, so the exposure is limited to metric readability from inside the docker network.",
+   "fix": "Acceptable as-is. Optionally tighten with `security_opt: [\"no-new-privileges:true\"]` and `cap_drop: [ALL]` (node-exporter needs no capabilities) in local-setup/docker-compose.monitoring.yml.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "acceptable",
+    "priority": "",
+    "exposure": "local",
+    "confidence": 0.95,
+    "reason": "docker-compose.monitoring.yml node-exporter: `pid: host`, `/proc:/host/proc:ro`, `/sys:/host/sys:ro`, `/:/rootfs:ro` with --path.* rebasing; no host port is published (Prometheus scrapes it over egov-network)."
+   }
+  },
+  {
+   "severity": "LOW",
+   "source": "Claude",
+   "area": "otel",
+   "id": "extra-prometheus-lifecycle-api-exposed",
+   "title": "Prometheus runs with --web.enable-lifecycle while publishing 19090 on all interfaces, exposing unauthenticated /-/reload and /-/quit",
+   "category": "Resource & Availability Controls",
+   "guide": "https://prometheus.io/docs/prometheus/latest/management_api/",
+   "cvss": null,
+   "cwe": "CWE-306",
+   "count": 2,
+   "locations": [
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 84,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L84"
+    },
+    {
+     "path": "local-setup/docker-compose.egov-digit.yaml",
+     "line": 89,
+     "url": "https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/960c657401a905bb7ba7242ab605fb2c5ce6c4f8/local-setup/docker-compose.egov-digit.yaml#L89"
+    }
+   ],
+   "why": "`--web.enable-lifecycle` turns on POST /-/reload and POST /-/quit with no authentication. Anyone who reaches port 19090 can shut down the monitoring pipeline for the tenant on demand, blinding operators to a concurrent attack, and can also read all metrics and the full scrape configuration.",
+   "fix": "Remove `--web.enable-lifecycle` from the prometheus command in local-setup/docker-compose.egov-digit.yaml unless hot-reload is actually used, and bind the publish to `127.0.0.1:19090:9090`. If lifecycle is needed, add `--web.config.file` with basic_auth_users.",
+   "curated": true,
+   "enriched": true,
+   "triage": {
+    "status": "acceptable",
+    "priority": "",
+    "exposure": "public",
+    "confidence": 0.95,
+    "reason": "Compose prometheus command includes `--web.enable-lifecycle` and ports `- \"19090:9090\"`; no --web.config.file (so no basic auth) and no reverse-proxy gate."
+   }
+  }
+ ]
+}
