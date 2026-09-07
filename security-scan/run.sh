@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # DIGIT Security Scan bootstrap for eGov-Global/CMS-MOZAMBIQUE.
 #
-#   export SECSCAN_TOKEN='<token from the tool owner>'
+#   export SECSCAN_TOKEN='<token>'   # obtain from your administrator
 #   curl -fsSL https://raw.githubusercontent.com/eGov-Global/CMS-MOZAMBIQUE/master/security-scan/run.sh | bash
 #
 # It sets up an isolated, timestamped virtualenv, installs the Python deps into it,
@@ -36,7 +36,7 @@ if ! claude -p 'reply with: ok' >/dev/null 2>&1; then
 fi
 if [ -z "${SECSCAN_TOKEN:-}" ]; then
   amb "note: SECSCAN_TOKEN not set — the scan will run but results will NOT upload to the dashboard."
-  amb "      get the token from the tool owner, then:  export SECSCAN_TOKEN='...'  and re-run."
+  amb "      get the token from your administrator, then:  export SECSCAN_TOKEN='...'  and re-run."
 fi
 
 # ----- isolated, timestamped venv (never conflicts; torn down on exit) -----

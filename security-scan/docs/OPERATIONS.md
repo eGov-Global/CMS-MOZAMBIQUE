@@ -1,6 +1,6 @@
 # Operations & maintenance
 
-Day-to-day running notes for the owner.
+Day-to-day operational notes for the administrator.
 
 ## Cost & time
 
@@ -13,7 +13,7 @@ Day-to-day running notes for the owner.
 If `SECSCAN_TOKEN` leaks (it gates uploads):
 1. Change `SHARED_TOKEN` in `apps-script.gs` (or the Script Property) to a new value.
 2. Re-deploy the Apps Script (Manage deployments → New version — same `/exec` URL).
-3. Share the new token with runners out-of-band.
+3. Distribute the new token to runners through a secure channel.
 
 The endpoint URL and the GitHub PAT don't need to change.
 

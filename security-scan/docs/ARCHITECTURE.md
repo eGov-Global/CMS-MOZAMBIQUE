@@ -17,12 +17,15 @@ far more accurate, and a deterministic scoring layer on top makes the labels rep
 
 | File | Role |
 | --- | --- |
-| `run.sh` | `curl … \| bash` bootstrap: prereq checks, timestamped venv, fetch+run, teardown |
+| `run.sh` | `curl … \| bash` bootstrap: prerequisite checks, timestamped venv, fetch+run, teardown |
 | `scan.py` | the scanner: TUI, clone, Claude scan, deterministic scoring, upload |
+| `scripts/build_audit_xlsx.py` | builds the Excel audit workbook from a run |
 | `requirements.txt` | `certifi`, `openpyxl` (installed into the throwaway venv) |
 | `apps-script.gs` | upload endpoint → Google Drive **and** the repo's gh-pages dashboard |
 | `dashboard-index.html` | the single-repo dashboard served from gh-pages |
-| `README.md` | runner instructions | `SETUP.md` | one-time owner setup |
+| `README.md` | runner instructions |
+| `SETUP.md` | one-time administrator setup |
+| `docs/` | this documentation set |
 
 ## End-to-end flow
 
@@ -39,10 +42,10 @@ far more accurate, and a deterministic scoring layer on top makes the labels rep
               │     stacks + mounted config trees + tests)
               ├─ claude -p  (Write/Read/Grep/Glob)  → writes findings.json in the clone
               ├─ build_run(): deterministic scoring + grouping + summary
-              ├─ build Excel via the repo's .github/scripts/build_audit_xlsx.py
+              ├─ build Excel via scripts/build_audit_xlsx.py
               └─ POST {token, repo, branch, base, runJson, xlsx}  →  Apps Script
                                                                         │
- Apps Script (owner's Google account, one deployment)                  ▼
+ Apps Script (administrator's Google account, one deployment)                  ▼
    doPost:
      ① Drive:  create  CMS-Security-Scan/<owner>/<repo>/<label>.{json,xlsx}
      ② gh-pages (GitHub Contents API, token in Script Properties):
@@ -62,9 +65,8 @@ far more accurate, and a deterministic scoring layer on top makes the labels rep
   on exit (EXIT/INT/TERM trap).
 - **Claude writes `findings.json` to a file, not stdout.** Large results wrapped in prose/fences
   used to break stdout parsing; a file write is robust (a hardened text parser is the fallback).
-- **The token is never committed.** The endpoint URL is public and harmless alone; the
-  `SECSCAN_TOKEN` gate is supplied at runtime (see `docs/CONSISTENCY.md` is scoring; token model is
-  in `SETUP.md`).
+- **The token is never committed.** The endpoint URL is public and harmless on its own; the
+  `SECSCAN_TOKEN` gate is supplied at runtime by the runner (token model in `SETUP.md`).
 - **Apps Script holds the GitHub write token.** Runners never touch it; the script only ever
   creates/updates under `security_scan/` and never deletes.
 

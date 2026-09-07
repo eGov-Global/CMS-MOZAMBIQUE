@@ -7,7 +7,7 @@ by the Claude CLI. Results are published to the dashboard at
 ## Run it
 
 ```bash
-export SECSCAN_TOKEN='<ask the tool owner>'
+export SECSCAN_TOKEN='<token>'      # obtain from your administrator
 curl -fsSL https://raw.githubusercontent.com/eGov-Global/CMS-MOZAMBIQUE/master/security-scan/run.sh | bash
 ```
 
@@ -28,10 +28,10 @@ Everything else (`certifi`, `openpyxl`) is installed automatically into a throwa
 
 ## The token (`SECSCAN_TOKEN`)
 
-Uploads are gated by a shared token so only the team can post to the dashboard. It is **never
-committed** to this public repo — the owner shares it out-of-band (Slack / password manager). Set
-it in your shell before running (the `export …` line above). Without it, the scan still runs but
-results won't upload.
+Uploads are gated by a shared token so only authorized team members can post to the dashboard. It
+is **never committed** to this public repo — your administrator provides it through a secure
+channel (e.g. your password manager). Set it in your shell before running (the `export …` line
+above). Without it, the scan still runs but results are not uploaded.
 
 ## Options
 
@@ -58,12 +58,12 @@ bash run.sh          # then run
 - **[docs/CONSISTENCY.md](docs/CONSISTENCY.md)** — the scoring model: what's deterministic, what varies, how to read a run.
 - **[docs/ADDING-A-REPO.md](docs/ADDING-A-REPO.md)** — drop the scanner into another CMS repo.
 - **[docs/OPERATIONS.md](docs/OPERATIONS.md)** — token rotation, clearing history, pinning, retiring the old CI pipeline.
-- **[SETUP.md](SETUP.md)** — one-time owner setup (Apps Script + PAT + Pages).
+- **[SETUP.md](SETUP.md)** — one-time administrator setup (Apps Script + PAT + Pages).
 
 ## Troubleshooting
 
 - **`missing required tool: claude`** — install the Claude CLI and sign in (`claude`).
 - **`CERTIFICATE_VERIFY_FAILED`** — handled automatically (the tool uses `certifi`); if it persists,
   `python3 -m pip install --user certifi`.
-- **`unauthorized` on upload** — your `SECSCAN_TOKEN` is missing/wrong; ask the owner.
+- **`unauthorized` on upload** — your `SECSCAN_TOKEN` is missing or incorrect; check with your administrator.
 - **arrow keys don't work** — run in a real terminal (Terminal/iTerm), not inside another pipe.

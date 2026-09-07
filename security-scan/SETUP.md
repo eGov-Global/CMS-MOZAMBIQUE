@@ -1,7 +1,8 @@
-# Owner setup (one-time) — Apps Script + gh-pages
+# Administrator setup (one-time) — Apps Script + gh-pages
 
-This is for the **tool owner** (whoever holds the Drive + the GitHub write token). Runners
-don't need this — they just use `run.sh` (see README.md).
+This is for the **administrator** — the person who maintains the Google Drive account and the
+GitHub write token for the scan dashboard. Runners do not need this; they use `run.sh` (see
+README.md).
 
 ## 1. GitHub token (write to gh-pages)
 
@@ -32,8 +33,8 @@ Repo → Settings → Pages → Source = **Deploy from a branch**, Branch = **gh
 
 ## 4. Give runners the token
 
-Share `SHARED_TOKEN` out-of-band (Slack/password manager). Each runner does
-`export SECSCAN_TOKEN='<that value>'` before running. **Never commit it.**
+Distribute `SHARED_TOKEN` to runners through a secure channel (e.g. a shared password manager).
+Each runner sets `export SECSCAN_TOKEN='<that value>'` before running. **Never commit it.**
 
 ## 5. First run
 
