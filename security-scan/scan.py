@@ -580,7 +580,7 @@ def prepare_artifacts(run, runid, clone_dir):
     runfile = os.path.join(outdir, f"{runid}.json")
     json.dump(run, open(runfile, "w"), indent=1)
     xlsx = os.path.join(outdir, f"{runid}.xlsx")
-    builder = os.path.join(clone_dir, ".github", "scripts", "build_audit_xlsx.py")
+    builder = os.path.join(TOOL_HOME, "build_audit_xlsx.py")   # bundled alongside this script
     if os.path.isfile(builder):
         r = sh(["python3", builder], env=dict(os.environ, RUN_JSON=runfile, OUT_XLSX=xlsx))
         if r.returncode != 0 or not os.path.isfile(xlsx):

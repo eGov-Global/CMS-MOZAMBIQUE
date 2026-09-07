@@ -53,8 +53,9 @@ source "$VENV/bin/activate"
 python -m pip install -q --upgrade pip >/dev/null 2>&1 || true
 
 # ----- fetch the tool + install deps into the venv -----
-curl -fsSL "${RAW}/requirements.txt" -o "$WORK/requirements.txt" || die "could not fetch requirements.txt @ ${REF}"
-curl -fsSL "${RAW}/scan.py"          -o "$WORK/scan.py"          || die "could not fetch scan.py @ ${REF}"
+curl -fsSL "${RAW}/requirements.txt"      -o "$WORK/requirements.txt"      || die "could not fetch requirements.txt @ ${REF}"
+curl -fsSL "${RAW}/scan.py"               -o "$WORK/scan.py"               || die "could not fetch scan.py @ ${REF}"
+curl -fsSL "${RAW}/build_audit_xlsx.py"   -o "$WORK/build_audit_xlsx.py"   || die "could not fetch build_audit_xlsx.py @ ${REF}"
 python -m pip install -q -r "$WORK/requirements.txt"
 
 # ----- run (interactive). '</dev/tty' re-attaches the keyboard, since our own stdin
