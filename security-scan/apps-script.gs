@@ -51,10 +51,10 @@ function doPost(e) {
     if (b.xlsxBase64) {
       var xf = folder.createFile(Utilities.newBlob(Utilities.base64Decode(b.xlsxBase64),
                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", b.base + ".xlsx"));
-      // The dashboard's "Export audit" link points here; the dashboard is already public,
-      // so make the workbook openable by anyone with the link (view-only). Wrapped in try
-      // because a Workspace admin may block link-sharing outside the org (see SETUP.md).
-      try { xf.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
+      // The dashboard's "Export audit" link points here. Share the workbook with anyone in the
+      // egovernments.org domain who has the link (view-only) — the full audit stays internal even
+      // though the dashboard is public. Wrapped in try in case Workspace policy blocks it (see SETUP.md).
+      try { xf.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
       xlsxUrl = xf.getUrl();
     }
 
@@ -156,7 +156,7 @@ function shareExistingPublic() {
     while (files.hasNext()) {
       var f = files.next();
       if (f.getName().slice(-5).toLowerCase() !== ".xlsx") continue;
-      try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); n++; }
+      try { f.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW); n++; }
       catch (e) { failed++; Logger.log("could not share: " + f.getName() + " — " + e); }
     }
     var subs = folder.getFolders();
