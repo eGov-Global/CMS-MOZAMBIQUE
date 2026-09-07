@@ -70,7 +70,7 @@ CMS Mozambique — **Fala Cidadão** — is the Mozambique implementation of the
 | **Configuration / MDMS** | New masters: complaint dispatcher & templates, extended-attribute schemas (IGE/IGSAE), landing page, analytics providers, privacy policy, tenant banner · all new backend settings opt-in with safe defaults |
 | **Roles** | 13 new roles (CMS officer chain, scope roles, permission roles) + ~2,180 grant lines |
 | **Localization** | Full pt_PT packs seeded per tenant · pt_PT default honoured on first load · configurator localized |
-| **Deployment** | gzip + no-cache on the UI bundle · unified migration runner · testing entrance · default-data-handler retired (seeds moved to the DB dump) · one-command Claude-powered security scanner + findings dashboard (replaces the earlier report-only scanning CI) |
+| **Deployment** | gzip + no-cache on the UI bundle · unified migration runner · testing entrance · default-data-handler retired (seeds moved to the DB dump) · one-command Claude-powered security scanner + findings dashboard (replaces the earlier report-only scanning CI) · observability Grafana locked to login (no anonymous, role-based access, admin password from OpenBao, log-token scrubbing) |
 
 All new capabilities are **opt-in with off/empty defaults** — a stock deployment is unaffected until each feature is deliberately enabled.
 
@@ -99,6 +99,19 @@ CMS Mozambique ships a **self-contained, Claude-powered security scanner** for t
 - **Safe by construction** — uploads are gated by a shared token that is never committed; the GitHub write credential lives only in the publishing script; the dashboard is append-only.
 
 The scanner is a repository/operator tool — it does not run in, or change, the production deployment ([`b69f97e0`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/b69f97e0), [`e15e1677`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/e15e1677); PR #69).
+
+---
+
+## Grafana Access Control
+
+The observability Grafana (`/grafana/` on each tenant) previously allowed **anonymous Admin access** — anyone could open it without signing in, query logs and edit dashboards, and the login form was disabled with no admin password set. This release locks it down: **login is required, anonymous access is off, and the standard Grafana role model applies** — Viewer sees dashboards, Editor also gets Explore, Admin manages.
+
+- **No anonymous access** — unauthenticated requests are redirected to the login page (the API returns 401).
+- **Admin password fail-closed** — no default; generated and stored in OpenBao, then applied to the running instance at deploy time.
+- **Reverse-proxy only** — Grafana binds to loopback; nginx fronts `/grafana/`.
+- **Log tokens scrubbed** — the log pipeline redacts `access_token`/`Bearer` before shipping to Loki, so signed-in viewers of the logs dashboard never see live session tokens.
+
+Anonymous stays off unless a tenant explicitly opts in (`grafana_anonymous_enabled`, default false) ([`d6e5e1e1`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/d6e5e1e1); PR #75).
 
 ---
 
@@ -144,6 +157,7 @@ The scanner is a repository/operator tool — it does not run in, or change, the
 - [Escalation enablement runbook](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/pgr-escalation/RUNBOOK.md)
 - [HTTPS with Let's Encrypt](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/enabling-https-with-letsencrypt.md)
 - [Security scanner](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/security-scan/README.md) — one-command deployment security scan; [live dashboard](https://egov-global.github.io/CMS-MOZAMBIQUE/security_scan/)
+- [Grafana access control](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/local-setup/docker-compose.egov-digit.yaml) — login-only observability Grafana, role-based access, token scrubbing
 - [PRD / solution design](https://github.com/eGov-Global/CMS-MOZAMBIQUE/tree/master/docs/superpowers/specs/mozambique-prd)
 - [Mobile app configuration](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/mobile/assets/config/app_config.json) — portal URL, branding
 

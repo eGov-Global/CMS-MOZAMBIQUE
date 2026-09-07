@@ -26,6 +26,7 @@ Every commit reference below is a working link into this repository.
 16. [Known Limitations & Product Decisions](#16-known-limitations--product-decisions)
 17. [Documentation](#17-documentation)
 18. [Security Scanning](#18-security-scanning)
+19. [Grafana Access Control](#19-grafana-access-control)
 
 ---
 
@@ -331,6 +332,7 @@ Approximately 2,180 lines of role-to-permission grants accompany them. (`CMS_SCR
 | 47 | Docs | Product docs | PRD/design, migration guides, runbooks, analytics guide | `docs/` (32 files) | [`ab8c3a2c`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/ab8c3a2c), [`48e4bc08`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/48e4bc08) |
 | 48 | Tests | Postal-code test specs | Retired with the feature; 19 test files touched repo-wide (8 added, 10 modified, 1 deleted) | `tests/`, per-module tests | [`4aa5aa3b`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/4aa5aa3b), [`ac4ce48a`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/ac4ce48a) |
 | 49 | Classification | Fixed 2-level type/subtype | N-level hierarchy as data (core product, built under the Mozambique programme) + routed-department stamping, localized labels, tenant-correct fetch | `ComplaintHierarchy*` masters, `ComplaintHierarchyComponent.js` | [`0c1123c8`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/0c1123c8), [`3289ac3f`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/3289ac3f) |
+| 50 | Deployment / Security | Observability Grafana open to anyone as **Admin** (anonymous org role Admin, login form off, no admin password, bound to `0.0.0.0`) | Login required, no anonymous; roles Viewer/Editor/Admin; admin password fail-closed from OpenBao; Grafana bound to loopback; log pipeline scrubs `access_token`/`Bearer` (see [§19](#19-grafana-access-control)) | `local-setup/` (compose, `promtail-config.yaml`, `digit.env.j2`, `playbook-deploy.yml`) | [`d6e5e1e1`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/d6e5e1e1) |
 | 50 | Classification | One department per complaint type (1-1) | One-to-many department mapping (`departments`, `ComplaintTypeDepartments`) and full operation with **no** department mapped | ServiceDefs schema, assignment flow | [`394e6136`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/394e6136), [`af818c2d`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/af818c2d) |
 
 ---
@@ -406,6 +408,7 @@ Changing the bootstrap secrets away from the defaults causes deployment failures
 | [PRD / solution design](https://github.com/eGov-Global/CMS-MOZAMBIQUE/tree/master/docs/superpowers/specs/mozambique-prd) | Product requirements and solution design |
 | [Mobile app](https://github.com/eGov-Global/CMS-MOZAMBIQUE/tree/master/mobile) | Flutter WebView wrapper (configuration: [`app_config.json`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/mobile/assets/config/app_config.json)) |
 | [Security scanner](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/security-scan/README.md) | One-command deployment security scan (§18); [live dashboard](https://egov-global.github.io/CMS-MOZAMBIQUE/security_scan/) |
+| [Grafana access control](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/local-setup/docker-compose.egov-digit.yaml) | Login-only observability Grafana, role-based access, token scrubbing (§19) |
 
 ---
 
@@ -439,3 +442,32 @@ One deliberative pass that reads the configuration catches application-level pro
 The live findings dashboard is at **https://egov-global.github.io/CMS-MOZAMBIQUE/security_scan/** — a left-nav module switch (Ansible / Kubernetes), a per-run severity breakdown and a trend line across runs. Reference docs: [README](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/security-scan/README.md), [architecture](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/security-scan/docs/ARCHITECTURE.md), [consistency & scoring](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/security-scan/docs/CONSISTENCY.md), [operations](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/security-scan/docs/OPERATIONS.md), [administrator setup](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/security-scan/SETUP.md).
 
 **Key commits:** scanner [`b69f97e0`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/b69f97e0); legacy pipeline removed [`e15e1677`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/e15e1677); merged via PR #69 [`866a0b69`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/866a0b69).
+
+---
+
+## 19. Grafana Access Control
+
+The observability Grafana (the `/grafana/` dashboard on each tenant) shipped **open to the public as Admin**: anonymous access was enabled with the Admin org role, the login form was disabled, no admin password was set, and the container published on `0.0.0.0`. Anyone who reached the URL could query logs through Explore and edit or delete dashboards without signing in. This release closes that — **login is required, anonymous access is off, and the standard Grafana role model applies.**
+
+### What changed
+
+| Before | After |
+|---|---|
+| Anonymous org role **Admin**; login form disabled | Anonymous **off** — unauthenticated requests redirect to `/login` (API returns 401) |
+| No admin password (default `admin` reachable) | `GF_ADMIN_PASSWORD` **fail-closed** (no default) — generated and stored in OpenBao, then applied to the running instance via `grafana cli reset-admin-password` |
+| Published on `0.0.0.0:13000` | Bound to `127.0.0.1:13000`; nginx fronts `/grafana/` |
+| Logs shipped verbatim | Log pipeline redacts `access_token` / `Bearer` before shipping to Loki |
+
+### Roles
+
+| Role | Access |
+|---|---|
+| Viewer | View dashboards |
+| Editor | View + Explore (ad-hoc log/metric/trace querying) |
+| Admin | Editor + manage users, datasources, org settings |
+
+Anonymous stays off unless a tenant explicitly opts in (`grafana_anonymous_enabled`, default false). On Grafana OSS a signed-in Viewer can still read the logs dashboard, so the token scrub keeps live session credentials out of the stored logs regardless.
+
+**Validation:** `ansible-playbook --syntax-check` and `ansible-lint` (production profile) pass; `docker compose config` fails closed when `GF_ADMIN_PASSWORD` is unset and renders correctly when set; verified live on cms-pilot and prod (unauthenticated → login/401; Viewer/Editor/Admin sign in with the expected access).
+
+**Key commits:** [`d6e5e1e1`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/d6e5e1e1) (PR #75). Files: `local-setup/docker-compose.egov-digit.yaml`, `local-setup/otel/promtail-config.yaml`, `local-setup/ansible/templates/digit.env.j2`, `local-setup/ansible/playbook-deploy.yml`.
