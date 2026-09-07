@@ -1,1 +1,30 @@
-{"runs":[]}
+{
+ "runs": [
+  {
+   "file": "data/Shivam---7th-Sep-2026-17-34-IST.json",
+   "label": "Shivam - 7th Sep 2026, 17:34 IST",
+   "repo": "eGov-Global/CMS-MOZAMBIQUE",
+   "runner": "Shivam",
+   "branch": "master",
+   "ts": "2026-09-07T12:04:07.774355+00:00",
+   "date": "2026-09-07 12:04 UTC",
+   "shaShort": "960c657",
+   "pr": null,
+   "occurrences": 220,
+   "types": 37,
+   "occBySeverity": {
+    "CRITICAL": 80,
+    "HIGH": 106,
+    "MEDIUM": 28,
+    "LOW": 6
+   },
+   "typesBySeverity": {
+    "CRITICAL": 11,
+    "HIGH": 18,
+    "MEDIUM": 6,
+    "LOW": 2
+   },
+   "xlsxUrl": ""
+  }
+ ]
+}
