@@ -52,6 +52,14 @@ bash run.sh          # then run
 ```
 (When we publish a tag, a SHA-256 checksum will be listed here to `shasum -a 256 -c` against.)
 
+## Docs
+
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — how it all fits together (flow diagram, components, why).
+- **[docs/CONSISTENCY.md](docs/CONSISTENCY.md)** — the scoring model: what's deterministic, what varies, how to read a run.
+- **[docs/ADDING-A-REPO.md](docs/ADDING-A-REPO.md)** — drop the scanner into another CMS repo.
+- **[docs/OPERATIONS.md](docs/OPERATIONS.md)** — token rotation, clearing history, pinning, retiring the old CI pipeline.
+- **[SETUP.md](SETUP.md)** — one-time owner setup (Apps Script + PAT + Pages).
+
 ## Troubleshooting
 
 - **`missing required tool: claude`** — install the Claude CLI and sign in (`claude`).
