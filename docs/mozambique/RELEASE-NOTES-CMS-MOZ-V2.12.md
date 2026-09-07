@@ -46,7 +46,7 @@ CMS Mozambique — **Fala Cidadão** — is the Mozambique implementation of the
 - **Configurable analytics (off by default)** — point the portal at Matomo/GA4/PostHog or a custom destination from the admin screens; one-command self-hosted Matomo provisioning; strict safety rails (host allowlist, PII scrubbing, kill switch)
 - **Admin console improvements** — role-actions editable from the UI, sensitive masters gated by role, translations propagate immediately on save, console boots in the environment's language, testing-tenant flag with guard rails
 - **Hierarchy management & migration** — the complaint classification tree is managed in the admin console (searchable tree view), including a guided migration that upgrades an existing 2-level tenant to the N-level model
-- **Operator tooling** — `ccrs-migrate.cjs` one-command idempotent tenant migration (schemas, hierarchy, localization, CMS roles/workflow, banner, gzip, Matomo); escalation enablement script + runbook; password-gated `/digit-ui-test` entrance (default off); HTTPS/Let's Encrypt guide; CI security scanning with a findings dashboard
+- **Operator tooling** — `ccrs-migrate.cjs` one-command idempotent tenant migration (schemas, hierarchy, localization, CMS roles/workflow, banner, gzip, Matomo); escalation enablement script + runbook; password-gated `/digit-ui-test` entrance (default off); HTTPS/Let's Encrypt guide; a one-command Claude-powered security scanner for the Ansible deployment with a findings dashboard
 - **Notifications for Mozambique's infrastructure** — SMS via the Ozeki gateway; a direct-delivery mode that runs without the Novu stack on small servers; a dedicated OTP delivery pipeline; deep-link placeholders (`{website}`, `{rate_link}`, `{reopen_link}`)
 
 ---
@@ -70,7 +70,7 @@ CMS Mozambique — **Fala Cidadão** — is the Mozambique implementation of the
 | **Configuration / MDMS** | New masters: complaint dispatcher & templates, extended-attribute schemas (IGE/IGSAE), landing page, analytics providers, privacy policy, tenant banner · all new backend settings opt-in with safe defaults |
 | **Roles** | 13 new roles (CMS officer chain, scope roles, permission roles) + ~2,180 grant lines |
 | **Localization** | Full pt_PT packs seeded per tenant · pt_PT default honoured on first load · configurator localized |
-| **Deployment** | gzip + no-cache on the UI bundle · unified migration runner · testing entrance · default-data-handler retired (seeds moved to the DB dump) · security-scanning CI (report-only) |
+| **Deployment** | gzip + no-cache on the UI bundle · unified migration runner · testing entrance · default-data-handler retired (seeds moved to the DB dump) · one-command Claude-powered security scanner + findings dashboard (replaces the earlier report-only scanning CI) · observability Grafana locked to login (no anonymous, role-based access, admin password from OpenBao, log-token scrubbing) |
 
 All new capabilities are **opt-in with off/empty defaults** — a stock deployment is unaffected until each feature is deliberately enabled.
 
@@ -86,6 +86,32 @@ All new capabilities are **opt-in with off/empty defaults** — a stock deployme
 - Login screens no longer double-translate; language selector restored; logout goes to the right screen
 - Notification recipient resolves the newest workflow step; department display no longer errors
 - MDMS caching moved to IndexedDB (fixes browser storage-quota failures); reference data cached between pages
+
+---
+
+## Security Scanning
+
+CMS Mozambique ships a **self-contained, Claude-powered security scanner** for the repository's Ansible remote-server deployment (`security-scan/`). It replaces the earlier report-only Checkov/KICS/Strix CI pipeline with one deliberative pass that reads and verifies every in-scope deployment file, so it catches application-level issues that pattern scanners miss — an OTP pinned to a fixed code, a root notebook with an empty token, an anonymous-admin dashboard, a gateway with access control switched off, seeded default credentials.
+
+- **One command, nothing to maintain** — `curl -fsSL https://raw.githubusercontent.com/eGov-Global/CMS-MOZAMBIQUE/master/security-scan/run.sh | bash` picks a branch and module (Ansible; Kubernetes coming soon), clones it, scans, and publishes. It runs on the operator's own Claude account — no shared/metered API cost.
+- **Deterministic severity/priority** — findings are scored against a fixed check catalogue, so the same code produces the same labels run to run.
+- **Findings dashboard** — results publish to this repo's GitHub Pages dashboard at **https://egov-global.github.io/CMS-MOZAMBIQUE/security_scan/** (and to a Google Drive archive), so trends are visible over time.
+- **Safe by construction** — uploads are gated by a shared token that is never committed; the GitHub write credential lives only in the publishing script; the dashboard is append-only.
+
+The scanner is a repository/operator tool — it does not run in, or change, the production deployment ([`b69f97e0`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/b69f97e0), [`e15e1677`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/e15e1677); PR #69).
+
+---
+
+## Grafana Access Control
+
+The observability Grafana (`/grafana/` on each tenant) previously allowed **anonymous Admin access** — anyone could open it without signing in, query logs and edit dashboards, and the login form was disabled with no admin password set. This release locks it down: **login is required, anonymous access is off, and the standard Grafana role model applies** — Viewer sees dashboards, Editor also gets Explore, Admin manages.
+
+- **No anonymous access** — unauthenticated requests are redirected to the login page (the API returns 401).
+- **Admin password fail-closed** — no default; generated and stored in OpenBao, then applied to the running instance at deploy time.
+- **Reverse-proxy only** — Grafana binds to loopback; nginx fronts `/grafana/`.
+- **Log tokens scrubbed** — the log pipeline redacts `access_token`/`Bearer` before shipping to Loki, so signed-in viewers of the logs dashboard never see live session tokens.
+
+Anonymous stays off unless a tenant explicitly opts in (`grafana_anonymous_enabled`, default false) ([`d6e5e1e1`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/d6e5e1e1); PR #75).
 
 ---
 
@@ -130,6 +156,8 @@ All new capabilities are **opt-in with off/empty defaults** — a stock deployme
 - [Analytics setup & self-hosted Matomo](https://github.com/eGov-Global/CMS-MOZAMBIQUE/tree/master/docs/analytics-guide)
 - [Escalation enablement runbook](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/pgr-escalation/RUNBOOK.md)
 - [HTTPS with Let's Encrypt](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/docs/enabling-https-with-letsencrypt.md)
+- [Security scanner](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/security-scan/README.md) — one-command deployment security scan; [live dashboard](https://egov-global.github.io/CMS-MOZAMBIQUE/security_scan/)
+- [Grafana access control](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/local-setup/docker-compose.egov-digit.yaml) — login-only observability Grafana, role-based access, token scrubbing
 - [PRD / solution design](https://github.com/eGov-Global/CMS-MOZAMBIQUE/tree/master/docs/superpowers/specs/mozambique-prd)
 - [Mobile app configuration](https://github.com/eGov-Global/CMS-MOZAMBIQUE/blob/master/mobile/assets/config/app_config.json) — portal URL, branding
 
