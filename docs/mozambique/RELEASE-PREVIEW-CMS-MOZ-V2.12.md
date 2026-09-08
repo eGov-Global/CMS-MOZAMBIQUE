@@ -203,14 +203,54 @@ Notes:
 
 **New backend settings (all opt-in, safe defaults):** `pgr.department.scope.roles`, `pgr.jurisdiction.scope.roles`, `pgr.escalation.states`, extended `allowed.source`, boundary-relationship lookup settings, six `novu.bridge.*` keys, `egov.ui.app.host.map`.
 
-**Admin console (Configurator):**
+### The admin console (Configurator) — configuration reference
+
+The console has two modes: a **4-phase onboarding wizard** (`/phase/1..4` — tenant + branding, boundaries, common masters + complaint hierarchy, employees) and the **management console** (`/manage/*`). Login requires one of `MDMS_ADMIN`, `SUPERUSER`, `LOC_ADMIN`, `EMPLOYEE`; every role gate in the console is a UX layer — server-side access control remains the authority.
+
+#### What changed in this release
+
 - Visual **Landing Page Builder** — drag-and-drop homepage editing with live preview ([`c2803e7f`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/c2803e7f))
 - **Analytics destinations editor** with URL/host validation and a telemetry kill switch ([`1fd0711e`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/1fd0711e))
 - **Write-role gating** on sensitive masters — only authorized roles see Create/Edit ([`a82a9508`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/a82a9508))
 - **Role-actions editable** from the UI ([`31048d69`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/31048d69), [`6135b38f`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/6135b38f))
 - **Testing-tenant checkbox** with guard rails against flagging a production tenant ([`0cfebb60`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/0cfebb60))
 - Boots in the environment's **default language** ([`833f759d`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/833f759d)); translation edits **propagate immediately** on save ([`3d6fc082`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/3d6fc082))
-- New JSON and object-table form widgets; seven new schema descriptors
+- New JSON and object-table form widgets; **seven new schema descriptors** (AnalyticsProvider, citymodule/banner, SecurityPolicy, EncryptionPolicy, LandingSection, LandingPageConfig, uiHomePage)
+
+#### Build-time configuration (baked at `vite build`; changing any requires a rebuild)
+
+| Variable | Controls | Default when unset | Set by |
+|---|---|---|---|
+| `VITE_STATE_TENANT_ID` | The deployment's state tenant — pre-fills the login tenant code (a city code like `mz.maputo` collapses to its root `mz`) | empty — the operator types the tenant | Ansible host_vars `state_tenant_id` via `configurator-build.sh`; `deploy-pilot-fe.sh` reads it from the server's `globalConfigs.js` |
+| `VITE_CFG_TELEMETRY_KILL` | The **durable** off-switch for the console's own telemetry (see the kill switch below) | unset — telemetry **on** | no deploy path sets it; must be set explicitly for a production build |
+| `VITE_BOUNDARY_SEARCH_LIMIT` | Page size for boundary-service searches | 300 | manual only |
+| `VITE_OVERPASS_URL` | Overpass endpoint for the wizard's one-click OSM boundary fetch | public `overpass-api.de` (rate-limited) | Ansible points it at the on-box proxy when `enable_overpass: true` |
+| `VITE_TURBOPASS_URL` | Place-name autocomplete base for the boundary wizard | same-origin `/turbopass` (served when `enable_turbopass: true`) | manual only |
+
+#### Runtime configuration
+
+- **Same-origin APIs** — the console calls DIGIT services on `window.location.origin`; there is no gateway or context-path variable to configure.
+- **Portal config reuse** — it loads the portal's `/digit-ui/globalConfigs.js` before boot and honours `LOCALE_DEFAULT`/`LOCALE_REGION` (boot language — the same host_vars mechanism as the portal; a user's manual language pick always wins), `HIERARCHY_TYPE` (boundary hierarchy written by the OSM wizard, default `ADMIN`), `CORE_MOBILE_CONFIGS` (phone-validation fallback when the MDMS master is absent) and `MAP_CENTER`.
+- **Session** — persisted in `localStorage` (`crs-auth-state`: token, tenant, wizard progress); cleared on logout or expiry.
+
+#### Feature flags & gates
+
+| Flag / gate | Behaviour | Default |
+|---|---|---|
+| **Telemetry kill switch** | Three channels, most local first: `localStorage['digit.analytics.off']='1'` (per browser, shared with the portal shim) → on-box edit of `telemetry-config.js` to `kill: true` (per environment; **reverted by the next deploy's rsync**) → `VITE_CFG_TELEMETRY_KILL=true` (per build — the durable one). **Fails open**: unset means the console sends its own PostHog + Sentry telemetry (session replay, `sendDefaultPii`) to US-cloud endpoints using repo-committed keys — engage the build flag for production (see Known Limitations) | telemetry **on** |
+| **Testing-tenant toggle** | Writes an additive `isTestingTenant` onto the tenant's `tenant.tenants` record (replaces the old deploy-time pin). Guard rails: the tenant name must contain the word "Testing", only sub-tenants qualify (never a state root), a consequence dialog must be accepted, and a save-time validator refuses the flag if the tenant is later renamed to a production name. Flagged tenants are hidden from the production entrances and shown only on the htpasswd-gated `/digit-ui-test` entrance (itself off by default: `testing_ui_enabled`) | off per tenant |
+| **Write-role gating** (`writeRoles`) | Per-resource role lists hide Create/Edit and block the deep links with a "restricted to: …" panel; fails **closed** while roles are still resolving. Currently set on `DataSecurity.EncryptionPolicy` (`MDMS_ADMIN`/`SUPERUSER`) | ungated resources stay writable by any console user |
+| **Analytics editor gate** | `SUPERUSER`/`MDMS_ADMIN` may write; everyone else gets the same screen read-only with vendor secrets masked. Enabling a **cloud** destination additionally requires a data-residency acknowledgement; rows are never deleted (`enabled: false` is the off switch), and edits from a city tenant shadow-copy the inherited state row instead of rewriting it | read-only for non-holders |
+| **Landing page publication** | Three data-driven layers: `LandingPageConfig.enabled` (master switch — off falls back to the built-in layout) → per-section `enabled` + `status` (the public page renders **PUBLISHED** only; the Builder's Publish promotes drafts) → per-section `roles` (empty = public) | built-in layout until configured |
+| **Public-dashboard toggle** | Flips `publicDashboardEnabled` in the dss `DashboardConfig` and triggers an immediate config refresh in pgr-services (otherwise the change lands within the normal 5-minute cache window) | off |
+| **Dashboard-roles bootstrap** | A default role list is applied **only when creating a brand-new** `DashboardConfig`; an existing record is patched without dropping its roles/timezone/scoping | — |
+| **Role-actions editing** | Create/Edit on `ACCESSCONTROL-ROLEACTIONS` grants is surfaced in the UI with **no client-side role gate** — any logged-in console user sees the buttons; the server-side access-control mapping remains the authority | visible to all console users |
+
+#### What administrators manage from the console
+
+Dedicated editors: tenants (with the testing toggle), departments/designations (+ bulk Excel import), complaint types and the **N-level complaint hierarchy** (collapsible tree view built for 2,500+ nodes, level editor, guided 2-level → N-level migration), employees (+ bulk import and an org chart), users, boundaries (+ overview map), side-by-side **per-locale localization editing** with instant propagation, complaints, workflow definitions (read-only, with notification-coverage validation), a per-transition **notification Configure screen** (writes `NotificationRouting`/`NotificationTemplate`), the landing page group + Builder, analytics destinations, the public dashboard, a **theme editor** with live preview, and map configuration. Everything else is reachable as schema-driven generic CRUD under **Advanced** (branding/StateInfo, city modules incl. banner image, ID formats, workflow masters, SLA config, roles/actions, the four DataSecurity masters, inbox config, HRMS reference masters, cron jobs, UI homepage, mobile-number validation, PGR UI constants).
+
+The onboarding wizard bootstraps a brand-new state root automatically (clones all schema definitions and 18 essential masters from a source tenant, provisions the ADMIN user, registers the encryption key, copies the PGR workflow and six base localization modules — all idempotent). It deliberately does **not** seed dashboards, citymodule/banner rows, analytics rows or the CMS workflow roles — those are `ccrs-migrate.cjs` phases.
 
 ### The migration runner in detail — `ccrs-migrate.cjs`
 
