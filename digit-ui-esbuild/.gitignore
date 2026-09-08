@@ -1,4 +1,6 @@
-node_modules/
+# no trailing slash: also catches a stray SYMLINK named node_modules
+# (a committed one broke every server-side `git pull` + rsync deploy)
+node_modules
 build/
 .DS_Store
 *.log
