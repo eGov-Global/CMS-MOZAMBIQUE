@@ -20,7 +20,7 @@ module.exports = {
       en_IN:
         "Dear Citizen,\n\nWelcome to the Fala Cidadao Whatsapp Chatbot experience 🙏\n\nNow you can file your complaint via WhatsApp.",
       pt_PT:
-        "Estimado(a) Cidadão(ã),\n\nBem-vindo(a) ao chatbot do Fala Cidadão no WhatsApp \n\nJá pode apresentar a sua reclamação através do WhatsApp.",
+        "Estimado(a) Cidadão(ã),\n\nBem-vindo(a) ao chatbot do Fala Cidadão no WhatsApp \n\nJá pode apresentar a sua manifestação através do WhatsApp.",
     },
     onboardingName: {
       question: {
@@ -52,7 +52,7 @@ module.exports = {
       en_IN:
         "Confirm Name : {{name}}?\n\n👉  Type and send *1* to confirm the name.\n\n👉  Type and send *2* to change the name.",
       pt_PT:
-        "Confirmar o nome: {{name}}?\n\n*1.* Confirmar o nome.\n\n*2.* Alterar o nome.",
+        "Confirmar o nome: {{name}}?\n\n*1.* Confirmar o nome.\n*2.* Alterar o nome.",
     },
     onboardingThankYou: {
       code: 'chatbot.pgr.onboarding.thankYou',
@@ -74,7 +74,7 @@ module.exports = {
     en_IN:
       "Dear {{name}},\n\nWelcome to Fala Cidadao WhatsApp chatbot 🙏.\n\nYou can now file your complaint via WhatsApp.\n",
     pt_PT:
-      "Estimado(a) {{name}},\n\nBem-vindo(a) ao chatbot Fala Cidadão no WhatsApp 🙏.\n\nJá pode apresentar a sua reclamação através do WhatsApp.\n",
+      "Estimado(a) {{name}},\n\nBem-vindo(a) ao chatbot Fala Cidadão no WhatsApp 🙏.\n\nJá pode apresentar a sua manifestação através do WhatsApp.\n",
   },
   notAuthorized: {
     en_IN: "Sorry, this number is not yet authorized to use this service.",

@@ -51,6 +51,7 @@ const askDescription = new AskState('description');
 const askForAttachments = new AskState('imageUpload');
 const askConsent = new QuestionState('consent');
 const consentDeclined = new State('consentDeclined');
+const cancelSession = new State('cancelSession');
 const askConfidentiality = new QuestionState('confidentiality');
 const persistComplaint = new ProcessingState('persistComplaint');
 
@@ -72,8 +73,9 @@ const fileComplaintGroup = new Group('fileComplaint')
 
 menu
   .setPrompt(messages.menu.singleOptionQuestion)
-  .setOptions(['fileComplaint'])
-  .setConditionalNext(fileComplaintGroup, (context) => context.intention === 'fileComplaint');
+  .setOptions(['fileComplaint', 'cancel'])
+  .setConditionalNext(fileComplaintGroup, (context) => context.intention === 'fileComplaint')
+  .setConditionalNext(cancelSession, (context) => context.intention === 'cancel');
 
 walkComplaintTypes
   .setPreamble(messages.fileComplaint.complaintType2Step.level.question.preamble)
@@ -137,6 +139,10 @@ consentDeclined
   .setPrompt(messages.fileComplaint.consent.declined)
   .setNext(endstate);
 
+cancelSession
+  .setPrompt(messages.menu.cancelled)
+  .setNext(endstate);
+
 askConfidentiality
   .setPrompt(messages.fileComplaint.confidentiality.question)
   .setFill({ label: messages.fileComplaint.confidentiality.label, hint: messages.fileComplaint.confidentiality.hint })
@@ -165,12 +171,12 @@ const pgrConfig = {
   }
 }),
 
-  ...compile([menu, fileComplaintGroup], 'menu')
+  ...compile([menu, fileComplaintGroup, cancelSession], 'menu')
 };
 
 module.exports = {
   config: pgrConfig,
   states: { menu, complaintType2Step: walkComplaintTypes, boundary: walkBoundaries, institution: askIntitution, description: askDescription, imageUpload: askForAttachments,
-    consent: askConsent, consentDeclined, confidentiality: askConfidentiality, persistComplaint,
+    consent: askConsent, consentDeclined, confidentiality: askConfidentiality, persistComplaint, cancelSession,
     endstate, system_error, fileComplaintGroup, typeGroup, locationGroup, otherGroup }
 };

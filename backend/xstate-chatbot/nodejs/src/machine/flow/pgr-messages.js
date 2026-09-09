@@ -4,15 +4,20 @@ module.exports = {
     question: {
       code: 'chatbot.pgr.menu.question',
       en_IN: 'Please type and send the number for your option 👇\n\n*1.* File a new complaint\n*2.* Track existing complaints\n\n👉 To go back to the main menu, type and send *voltar*.',
-      pt_PT: 'Envie o número da sua opção: \n\n*1.* Apresentar uma nova reclamação\n*2.* Consultar reclamações existentes\n\n  Para voltar ao menu principal, escreva e envie *voltar*.'
+      pt_PT: 'Envie o número da sua opção: \n\n*1.* Apresentar uma nova manifestação\n*2.* Consultar reclamações existentes\n\n  Para voltar ao menu principal, escreva e envie *voltar*.'
     },
     // used by pgr-machine.js, which dropped trackComplaint - no `code`, since
     // the real localization service still has an old translation stored
     // under chatbot.pgr.menu.question (get_message would check that first)
     singleOptionQuestion: {
-      en_IN: 'Please type and send *1* to file a new complaint.',
-      pt_PT: '*Menu* \n\n*1.* Apresentar uma reclamação'
+      en_IN: 'Please type and send *1* to file a new complaint, or *2* to cancel.',
+      pt_PT: '*Menu* \n\n*1.* Apresentar uma manifestação\n*2.* Cancelar'
+    },
+    cancelled: {
+      en_IN: 'Your session has been cancelled.',
+      pt_PT: 'A sua sessão foi cancelada.'
     }
+
   },
   fileComplaint: {
     complaintType2Step: {
@@ -33,7 +38,7 @@ module.exports = {
         preamble: {
           // no `code` - same reason as complaintType2Step's preamble above
           en_IN: 'Please type and send the number to select the {{level}} for your grievance 👇\n',
-          pt_PT: '*{{level}}*\nEnvie o número correspondente ao local da sua reclamação: \n'
+          pt_PT: '*{{level}}*\nEnvie o número correspondente ao local da sua manifestação: \n'
         }
       }
     },
@@ -85,12 +90,12 @@ module.exports = {
       question: {
         code: 'chatbot.pgr.consent.question',
         en_IN: 'Before your grievance is filed, please confirm the following:\n\n{{statements}}\n\n👉 Type and send *1* to accept.\n👉 Type and send *2* to decline.',
-        pt_PT: 'Antes de registarmos a sua reclamação, confirme o seguinte:\n\n{{statements}}\n\n*1.* Aceitar.\n*2.* Rejeitar'
+        pt_PT: 'Antes de registarmos a sua manifestação, confirme o seguinte:\n\n{{statements}}\n\n*1.* Aceitar.\n*2.* Rejeitar'
       },
       declined: {
         code: 'chatbot.pgr.consent.declined',
         en_IN: 'Your grievance has not been filed, as consent is required to process it.\n\nType *voltar* whenever you would like to start again.',
-        pt_PT: 'A sua reclamação não foi registada, pois o consentimento é necessário para o seu tratamento.\n\nEscreva *voltar* quando quiser começar de novo.'
+        pt_PT: 'A sua manifestação não foi registada, pois o consentimento é necessário para o seu tratamento.\n\nEscreva *voltar* quando quiser começar de novo.'
       }
     },
     confidentiality: {
@@ -102,7 +107,7 @@ module.exports = {
       hint: {
         code: 'PGR_EXT_IS_CONFIDENTIAL_HINT',
         en_IN: 'Visibility is enforced once secure handling is enabled; for now this flags the complaint for staff awareness.',
-        pt_PT: 'A visibilidade é garantida assim que o processamento seguro é ativado; por enquanto, isso sinaliza a reclamação para que a equipe esteja ciente.'
+        pt_PT: 'A visibilidade é garantida assim que o processamento seguro é ativado; por enquanto, isso sinaliza a manifestação para que a equipe esteja ciente.'
       },
       question: {
         code: 'chatbot.pgr.confidentiality.question',
@@ -114,7 +119,7 @@ module.exports = {
       question: {
         code: 'chatbot.pgr.institution.question',
         en_IN: 'Which institution is your grievance about?\n\nPlease type and send its name.',
-        pt_PT: 'A que instituição se refere a sua reclamação?\n\nEscreva e envie o nome da instituição.'
+        pt_PT: 'A que instituição se refere a sua manifestação?\n\nEscreva e envie o nome da instituição.'
       },
       tooLong: {
         code: 'chatbot.pgr.institution.tooLong',
@@ -126,19 +131,19 @@ module.exports = {
       question: {
         code: 'chatbot.pgr.description.question',
         en_IN: 'Please describe your grievance in one message, using at least {{minLength}} characters.',
-        pt_PT: 'Descreva a sua reclamação numa única mensagem, com pelo menos {{minLength}} caracteres.'
+        pt_PT: 'Descreva a sua manifestação numa única mensagem, com pelo menos {{minLength}} caracteres.'
       },
       tooShort: {
         code: 'chatbot.pgr.description.tooShort',
         en_IN: 'That description is too short. Please describe your grievance in at least {{minLength}} characters, in a single message.',
-        pt_PT: 'Essa descrição é demasiado curta. Descreva a sua reclamação com pelo menos {{minLength}} caracteres, numa única mensagem.'
+        pt_PT: 'Essa descrição é demasiado curta. Descreva a sua manifestação com pelo menos {{minLength}} caracteres, numa única mensagem.'
       }
     },
     imageUpload: {
       question: {
         code: 'chatbot.pgr.attachment.question',
         en_IN: 'If possible, attach a photo or document of your grievance.\n\nTo continue without attaching, type and send *1*',
-        pt_PT: 'Se possível, anexe uma fotografia ou um documento relativo à sua reclamação.\n\n*1.* Continuar sem anexar.'
+        pt_PT: 'Se possível, anexe uma fotografia ou um documento relativo à sua manifestação.\n\n*1.* Continuar sem anexar.'
       },
       failed: {
         en_IN: "Sorry, we couldn't process your attachment. Continuing without it.",
@@ -152,7 +157,7 @@ module.exports = {
     persistComplaint: {
       code: 'chatbot.pgr.confirmation',
       en_IN: 'Your complaint has been registered successfully.\n\nCategory: {{1}}\nReference: {{2}}\nDate: {{3}}\n\nYour complaint will be reviewed by the responsible institution.\nYou can follow its progress on the *Fala Cidadão Portal* or in the mobile app.\nThank you for helping improve public services.\n\nFala Cidadão\nhttps://www.falacidadao.gov.mz',
-      pt_PT: 'Reclamação registada com sucesso.\n\nCategoria: {{1}}\nReferência: {{2}}\nData: {{3}}\n\nA sua reclamação será analisada pela instituição responsável.\nPode acompanhar o estado no *Portal Fala Cidadão* ou na aplicação móvel.\nObrigado por contribuir para a melhoria dos serviços públicos.\n\nFala Cidadão\nhttps://www.falacidadao.gov.mz'
+      pt_PT: 'Manifestação registada com sucesso.\n\nCategoria: {{1}}\nReferência: {{2}}\nData: {{3}}\n\nA sua manifestação será analisada pela instituição responsável.\nPode acompanhar o estado no *Portal Fala Cidadão* ou na aplicação móvel.\nObrigado por contribuir para a melhoria dos serviços públicos.\n\nFala Cidadão\nhttps://www.falacidadao.gov.mz'
     },
     cityFuzzySearch: {
       question: {
