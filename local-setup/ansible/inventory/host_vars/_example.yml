@@ -628,3 +628,32 @@ bootstrap_secrets:
   keycloak_db_password: ""                  # Keycloak's Postgres connection
   keycloak_google_client_secret: ""         # only if keycloak_google_client_id is set
   token_exchange_system_password: "eGov@123"  # DIGIT system user the exchange impersonates
+
+
+# ────────── REST adapter (citizen portal, backend/rest-adapter) ──────────
+# Standalone Flask API that lets a citizen portal file/search PGR complaints.
+# No published registry image yet, so it's always built locally on the target
+# when enabled (mirrors build_mcp/build_novu_dashboard). Off by default:
+# it's PGR/Mozambique-specific, not something every tenant runs.
+enable_rest_adapter: false
+
+# The only guard on the adapter's API — generate with `openssl rand -hex 32`.
+adapter_api_key: ""
+
+# Employee account the adapter files complaints as. Must hold the
+# CMS_RECEPTION_OFFICER role (legacy equivalent: CSR) and be able to log in
+# with a password.
+reception_officer_username: ""
+reception_officer_password: ""
+
+# Tenants the adapter authenticates/files against. Default to state_tenant_id
+# (this deployment's verified-working value) rather than tenant_id, which may
+# be a different, untested granularity.
+rest_adapter_root_tenant_id: "{{ state_tenant_id }}"
+rest_adapter_city_tenant_id: "{{ state_tenant_id }}"
+
+# Boundary hierarchyType for the localities walk. Leave blank to resolve it
+# dynamically on every request; set it once the deployment's value is known.
+rest_adapter_locality_hierarchy_type: ""
+
+rest_adapter_log_level: INFO

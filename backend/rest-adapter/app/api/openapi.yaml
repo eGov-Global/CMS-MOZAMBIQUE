@@ -1,0 +1,459 @@
+openapi: 3.0.3
+
+info:
+  title: Citizen Portal Adapter
+  version: "1.0.0"
+  description: |
+    Files PGR complaints on behalf of citizens, and reads their status back.
+
+    The portal sends the citizen's phone number and the complaint form. The adapter
+    authenticates as a **reception officer** with static credentials and files as that
+    officer, with the citizen as the complaint's owner. The citizen needs no account
+    and no password — DIGIT creates one from the phone number on first use.
+
+    ## Filing a complaint, end to end
+
+    1. `GET /master-data/complaint-types` — walk the tree until `isLeaf` is `true`.
+       The code chosen there is the `serviceCode`.
+    2. `GET /master-data/localities` — walk the same way for the `locality`.
+    3. `POST /documents` — optional, once per attachment. Keep each `fileStoreId`.
+    4. `POST /complaints` — with the codes, the text, and the `fileStoreId`s.
+    5. `GET /complaints?mobileNumber=…` — status, any time after.
+
+    ## Phone numbers
+
+    Any format is accepted and reduced to the national form: `+258 84 000 0000`,
+    `258840000000` and `840000000` are the same citizen. An unparseable number is
+    rejected with `400` rather than filed.
+
+servers:
+  - url: /
+    description: This deployment
+
+security:
+  - AdapterKey: []
+
+tags:
+  - name: Complaints
+    description: Filing and status
+  - name: Master data
+    description: The lists the portal builds its forms from
+  - name: Documents
+    description: Attachments
+  - name: Service
+    description: Operational
+
+paths:
+
+  /health:
+    get:
+      tags: [Service]
+      summary: Liveness check
+      security: []
+      responses:
+        "200":
+          description: The adapter is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /complaints:
+    post:
+      tags: [Complaints]
+      summary: File a complaint for a citizen
+      description: |
+        Filed by the reception officer, owned by the citizen. `consents` is mandatory
+        and must contain at least one of the allowed values.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewComplaint"
+            examples:
+              minimal:
+                summary: The required fields only
+                value:
+                  mobileNumber: "840000000"
+                  serviceCode: PublicIntegrityBriberyCorruptionRequest
+                  description: Pedido de suborno num balcao de atendimento.
+                  locality: municipio_maputo_katembe
+                  instituteName: INSTITUICAO TESTE
+                  consents: [TRUTHFULNESS, DATA_PROCESSING]
+              full:
+                summary: Confidential, with a witness and an attachment
+                value:
+                  mobileNumber: "+258 84 000 0000"
+                  serviceCode: PublicIntegrityBriberyCorruptionRequest
+                  description: Pedido de suborno num balcao de atendimento.
+                  locality: municipio_maputo_katembe
+                  instituteName: INSTITUICAO TESTE
+                  consents: [TRUTHFULNESS, DATA_PROCESSING]
+                  isConfidential: true
+                  landmark: Marco
+                  complainantName: Antonio Dias
+                  complainantAddress: Endereco do Antonio Dias
+                  email: antonio.dias@example.mz
+                  witnessName: Testemunha
+                  witnessAddress: Endereco Testemunha
+                  witnessNote: Nota Testemunha
+                  documents:
+                    - fileStoreId: c37ee8f5-da6f-44fb-ade0-93aee2b8e72d
+                      documentType: EVIDENCE
+      responses:
+        "201":
+          description: Filed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Complaint" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "502": { $ref: "#/components/responses/UpstreamFailure" }
+
+    get:
+      tags: [Complaints]
+      summary: List a citizen's complaints
+      description: |
+        Every complaint owned by this citizen, whoever filed it — the citizen
+        themselves, this reception officer, or another channel.
+      parameters:
+        - name: mobileNumber
+          in: query
+          required: true
+          schema: { type: string }
+          example: "840000000"
+      responses:
+        "200":
+          description: The citizen's complaints, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  complaints:
+                    type: array
+                    items: { $ref: "#/components/schemas/Complaint" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "502": { $ref: "#/components/responses/UpstreamFailure" }
+
+  /master-data/complaint-types:
+    get:
+      tags: [Master data]
+      summary: Walk the complaint-type tree, one level per call
+      description: |
+        Call with no `path` for the first level. Append each chosen code and call
+        again. When `isLeaf` is `true`, the code chosen at that level is the
+        `serviceCode` to file with.
+      parameters:
+        - $ref: "#/components/parameters/Path"
+        - $ref: "#/components/parameters/Locale"
+      responses:
+        "200":
+          description: One level of the tree
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WalkStep" }
+              examples:
+                firstLevel:
+                  summary: No path — the top level
+                  value:
+                    level: Tipo
+                    path: []
+                    isLeaf: false
+                    options:
+                      - { code: GRIEVANCE, name: Reclamacao }
+                      - { code: SUGGESTION, name: Sugestao }
+                leaf:
+                  summary: path=GRIEVANCE,WATER — stop here
+                  value:
+                    level: Subtipo
+                    path: [GRIEVANCE, WATER]
+                    isLeaf: true
+                    options:
+                      - { code: NO_WATER_SUPPLY, name: Falta de agua }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "502": { $ref: "#/components/responses/UpstreamFailure" }
+
+  /master-data/localities:
+    get:
+      tags: [Master data]
+      summary: Walk the locality tree, one level per call
+      description: |
+        The same walk over the administrative boundary tree. The code chosen at the
+        leaf is the `locality` to file with. This channel has no map, so this
+        replaces it.
+      parameters:
+        - $ref: "#/components/parameters/Path"
+        - $ref: "#/components/parameters/Locale"
+      responses:
+        "200":
+          description: One level of the tree
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WalkStep" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "502": { $ref: "#/components/responses/UpstreamFailure" }
+
+  /master-data/departments:
+    get:
+      tags: [Master data]
+      summary: List departments
+      parameters:
+        - $ref: "#/components/parameters/Locale"
+      responses:
+        "200":
+          description: Departments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  departments:
+                    type: array
+                    items: { $ref: "#/components/schemas/Option" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "502": { $ref: "#/components/responses/UpstreamFailure" }
+
+  /documents:
+    post:
+      tags: [Documents]
+      summary: Upload an attachment
+      description: Upload first, then pass the returned `fileStoreId` to `POST /complaints`.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                documentType:
+                  type: string
+                  default: EVIDENCE
+      responses:
+        "201":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fileStoreId: { type: string, format: uuid }
+                  documentType: { type: string, example: EVIDENCE }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "502": { $ref: "#/components/responses/UpstreamFailure" }
+
+  /documents/{fileStoreId}:
+    get:
+      tags: [Documents]
+      summary: Download an attachment
+      parameters:
+        - $ref: "#/components/parameters/FileStoreId"
+      responses:
+        "200":
+          description: The file, with its original content type
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "502": { $ref: "#/components/responses/UpstreamFailure" }
+
+  /documents/{fileStoreId}/metadata:
+    get:
+      tags: [Documents]
+      summary: Attachment name, size and type, without downloading it
+      parameters:
+        - $ref: "#/components/parameters/FileStoreId"
+      responses:
+        "200":
+          description: Metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fileName: { type: string, nullable: true }
+                  size: { type: integer, nullable: true }
+                  contentType: { type: string, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "502": { $ref: "#/components/responses/UpstreamFailure" }
+
+components:
+
+  securitySchemes:
+    AdapterKey:
+      type: apiKey
+      in: header
+      name: X-Adapter-Key
+      description: The shared secret. Click **Authorize** and paste it to try these calls.
+
+  parameters:
+    Locale:
+      name: locale
+      in: query
+      required: false
+      schema: { type: string, default: pt_PT }
+      description: Language for the `name` labels. Untranslated codes come back as themselves.
+      example: pt_PT
+    Path:
+      name: path
+      in: query
+      required: false
+      schema: { type: string }
+      description: Codes chosen so far, outermost first, comma separated. Omit for the first level.
+      example: GRIEVANCE,WATER
+    FileStoreId:
+      name: fileStoreId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: The request is malformed. `details` names the offending fields.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            missingFields:
+              value:
+                error: Missing required field(s)
+                details: [serviceCode, description, locality]
+            badPhone:
+              value:
+                error: "'12345' is not a valid mobile number: expected 9 digits, optionally prefixed with 258"
+    Unauthorized:
+      description: The `X-Adapter-Key` header is missing or wrong.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: Missing or invalid X-Adapter-Key header
+    UpstreamFailure:
+      description: DIGIT rejected the request or could not be reached.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: PGR rejected the request
+            details: { status: 400 }
+
+  schemas:
+
+    NewComplaint:
+      type: object
+      required: [mobileNumber, serviceCode, description, locality, instituteName, consents]
+      properties:
+        mobileNumber:
+          type: string
+          description: Any format; reduced to the national form.
+          example: "840000000"
+        serviceCode:
+          type: string
+          description: A leaf code from `/master-data/complaint-types`.
+          example: PublicIntegrityBriberyCorruptionRequest
+        description: { type: string }
+        locality:
+          type: string
+          description: A leaf code from `/master-data/localities`.
+          example: municipio_maputo_katembe
+        instituteName:
+          type: string
+          description: The institution the complaint is about.
+        consents:
+          type: array
+          minItems: 1
+          description: At least one. Any other value is rejected.
+          items:
+            type: string
+            enum: [TRUTHFULNESS, DATA_PROCESSING]
+        isConfidential:
+          type: boolean
+          default: false
+          description: Confidential complaints are visible only to cleared staff.
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/DocumentRef" }
+        landmark: { type: string, nullable: true }
+        buildingName: { type: string, nullable: true }
+        street: { type: string, nullable: true }
+        pincode: { type: string, nullable: true }
+        geoLocation:
+          type: object
+          nullable: true
+          properties:
+            latitude: { type: number, format: double }
+            longitude: { type: number, format: double }
+        complainantName: { type: string, nullable: true }
+        complainantAddress: { type: string, nullable: true }
+        email: { type: string, format: email, nullable: true }
+        witnessName: { type: string, nullable: true }
+        witnessAddress: { type: string, nullable: true }
+        witnessNote: { type: string, nullable: true }
+
+    Complaint:
+      type: object
+      properties:
+        complaintNumber: { type: string, example: P-2026-044709 }
+        serviceCode: { type: string }
+        complaintType: { type: string, nullable: true, description: Translated service name, when available. }
+        status: { type: string, example: PENDINGFORASSIGNMENT }
+        filedOn: { type: integer, format: int64, description: Epoch milliseconds. }
+        locality: { type: string, nullable: true }
+        landmark: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        instituteName: { type: string, nullable: true }
+        isConfidential: { type: boolean }
+        citizenName: { type: string, nullable: true }
+        citizenMobileNumber: { type: string, nullable: true }
+        citizenEmail: { type: string, nullable: true }
+        citizenAddress: { type: string, nullable: true }
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/DocumentRef" }
+
+    DocumentRef:
+      type: object
+      properties:
+        fileStoreId: { type: string, format: uuid }
+        documentType: { type: string, example: EVIDENCE }
+
+    WalkStep:
+      type: object
+      properties:
+        level:
+          type: string
+          description: Label for this level, to show above the choices.
+          example: Categoria
+        path:
+          type: array
+          items: { type: string }
+          description: The codes chosen so far.
+        isLeaf:
+          type: boolean
+          description: When true, stop — the code chosen here is the one to file with.
+        options:
+          type: array
+          items: { $ref: "#/components/schemas/Option" }
+
+    Option:
+      type: object
+      properties:
+        code: { type: string, description: The stable value to send back. }
+        name: { type: string, description: The label to show. }
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        details:
+          nullable: true
+          description: Present when the failure names specific fields or an upstream status.

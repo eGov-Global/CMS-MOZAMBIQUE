@@ -171,6 +171,17 @@ endpoints:
     conditions:
       - "[STATUS] == 200"
 
+  # rest-adapter exists only via the per-tenant overlay docker-compose.ige.yml
+  # (enable_rest_adapter: true); the base compose files and the k3s tier have
+  # none, so it carries a toggle rather than being dropped from their catalogues.
+  - name: REST Adapter
+    group: Core Services
+    enabled: ${GATUS_REST_ADAPTER}
+    url: "http://rest-adapter:8090/health"
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+
   # ==================== Optional stacks (profile-gated) ====================
   # These services only exist when their compose profile is active (see
   # docker-compose.egov-digit.yaml), so their checks are gated on a matching
