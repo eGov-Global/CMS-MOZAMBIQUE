@@ -154,6 +154,21 @@ module.exports = {
         pt_PT: 'Esse ficheiro é demasiado grande. Envie um ficheiro com menos de 5MB.'
       }
     },
+    confirmSubmission: {
+      question: {
+        en_IN: 'Please confirm the details:\n\n{{summary}}\n\n*1.* Submit.\n*2.* Cancel.',
+        pt_PT: 'Confirme os dados:\n\n{{summary}}\n\n*1.* Submeter.\n*2.* Cancelar.'
+      },
+      type: { en_IN: 'Type', pt_PT: 'Tipo' },
+      category: { en_IN: 'Category', pt_PT: 'Categoria' },
+      subject: { en_IN: 'Subject', pt_PT: 'Assunto' },
+      location: { en_IN: 'Location', pt_PT: 'Local' },
+      institution: { en_IN: 'Institution', pt_PT: 'Instituição' },
+      description: { en_IN: 'Description', pt_PT: 'Descrição' },
+      confidentiality: { en_IN: 'Confidentiality', pt_PT: 'Confidencialidade' },
+      yes: { en_IN: 'Yes', pt_PT: 'Sim' },
+      no: { en_IN: 'No', pt_PT: 'Não' }
+    },
     persistComplaint: {
       code: 'chatbot.pgr.confirmation',
       en_IN: 'Your complaint has been registered successfully.\n\nCategory: {{1}}\nReference: {{2}}\nDate: {{3}}\n\nYour complaint will be reviewed by the responsible institution.\nYou can follow its progress on the *Fala Cidadão Portal* or in the mobile app.\nThank you for helping improve public services.\n\nFala Cidadão\nhttps://www.falacidadao.gov.mz',

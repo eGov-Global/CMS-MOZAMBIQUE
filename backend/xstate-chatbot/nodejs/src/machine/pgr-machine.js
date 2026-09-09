@@ -41,6 +41,35 @@ const receiptCategory = (context) => {
 // the boundary walk records which city the complaint belongs to, whichever way it finishes
 const recordCity = (context) => { context.slots.pgr.city = context.extraInfo.tenantId; };
 
+const labelForCode = (context, code, prefix = '') => {
+  if (!code) return undefined;
+  const bundle = localisationService.getMessageBundleForCode(prefix + String(code));
+  return (bundle && dialog.get_message(bundle, context.user.locale)) || code;
+};
+
+// the final review shown before the complaint is submitted. Hierarchy levels
+// come from the walked path (deeper hierarchies simply add no extra lines),
+// so this stays correct whether the citizen walked two levels or three.
+const confirmationSummary = (context) => {
+  const fields = messages.fileComplaint.confirmSubmission;
+  const text = (bundle) => dialog.get_message(bundle, context.user.locale);
+  const path = context[walkComplaintTypes.pathSlot] || [];
+  const hierarchy = (code) => labelForCode(context, code && String(code).toUpperCase(), 'COMPLAINT_HIERARCHY.');
+
+  return [
+    [fields.type, hierarchy(path[0])],
+    [fields.category, hierarchy(path[1])],
+    [fields.subject, hierarchy(path[2])],
+    [fields.location, labelForCode(context, context.slots.pgr.locality)],
+    [fields.institution, context.slots.pgr.instituteName],
+    [fields.description, context.slots.pgr.description],
+    [fields.confidentiality, text(context.slots.pgr.isConfidential ? fields.yes : fields.no)]
+  ]
+    .filter(([, value]) => value)
+    .map(([bundle, value]) => `*${text(bundle)}:* ${value}`)
+    .join('\n');
+};
+
 // -- steps ----------------------------------------------------------------
 
 const menu = new QuestionState('menu');
@@ -53,6 +82,7 @@ const askConsent = new QuestionState('consent');
 const consentDeclined = new State('consentDeclined');
 const cancelSession = new State('cancelSession');
 const askConfidentiality = new QuestionState('confidentiality');
+const confirmSubmission = new QuestionState('confirmSubmission');
 const persistComplaint = new ProcessingState('persistComplaint');
 
 // chassis placeholders - real states live in shell-machine.js
@@ -66,7 +96,7 @@ const locationGroup = new Group('location').setStates([walkBoundaries]).setStart
 const otherGroup = new Group('other').setStates([askIntitution, askDescription, askForAttachments]).setStart('institution');
 
 const fileComplaintGroup = new Group('fileComplaint')
-  .setStates([typeGroup, locationGroup, otherGroup, askConsent, consentDeclined, askConfidentiality, persistComplaint])
+  .setStates([typeGroup, locationGroup, otherGroup, askConsent, consentDeclined, askConfidentiality, confirmSubmission, persistComplaint])
   .setStart('type');
 
 // -- wiring -----------------------------------------------------------
@@ -147,8 +177,15 @@ askConfidentiality
   .setPrompt(messages.fileComplaint.confidentiality.question)
   .setFill({ label: messages.fileComplaint.confidentiality.label, hint: messages.fileComplaint.confidentiality.hint })
   .setOptions(['Yes', 'No'])
-  .setConditionalNext(persistComplaint, (context) => context.intention === 'Yes', (context) => { context.slots.pgr.isConfidential = true; })
-  .setNext(persistComplaint, (context) => { context.slots.pgr.isConfidential = false; });
+  .setConditionalNext(confirmSubmission, (context) => context.intention === 'Yes', (context) => { context.slots.pgr.isConfidential = true; })
+  .setNext(confirmSubmission, (context) => { context.slots.pgr.isConfidential = false; });
+
+confirmSubmission
+  .setPrompt(messages.fileComplaint.confirmSubmission.question)
+  .setFill({ summary: confirmationSummary })
+  .setOptions(['Yes', 'No'])
+  .setConditionalNext(persistComplaint, (context) => context.intention === 'Yes')
+  .setNext(cancelSession);
 
 persistComplaint
   .setProcessing((context) => pgrService.persistComplaint(context.user, context.slots.pgr, context.extraInfo))
@@ -177,6 +214,6 @@ const pgrConfig = {
 module.exports = {
   config: pgrConfig,
   states: { menu, complaintType2Step: walkComplaintTypes, boundary: walkBoundaries, institution: askIntitution, description: askDescription, imageUpload: askForAttachments,
-    consent: askConsent, consentDeclined, confidentiality: askConfidentiality, persistComplaint, cancelSession,
+    consent: askConsent, consentDeclined, confidentiality: askConfidentiality, confirmSubmission, persistComplaint, cancelSession,
     endstate, system_error, fileComplaintGroup, typeGroup, locationGroup, otherGroup }
 };
