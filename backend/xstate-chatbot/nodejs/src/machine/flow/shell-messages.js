@@ -76,7 +76,21 @@ module.exports = {
     pt_PT:
       "Estimado(a) {{name}},\n\nBem-vindo(a) ao chatbot Fala Cidadão no WhatsApp 🙏.\n\nJá pode apresentar a sua manifestação através do WhatsApp.\n",
   },
-  notAuthorized: {
+  sessionExpired: {
+    question: {
+      en_IN: 'Your previous session timed out.\n\n*1.* Resume where you left off.\n*2.* Start a new conversation.',
+      pt_PT: 'A sua sessão anterior expirou.\n\n*1.* Continuar de onde terminou.\n*2.* Iniciar uma nova conversa.'
+    },
+    resumed: {
+      en_IN: 'Resuming your previous conversation. Please send your next message.',
+      pt_PT: 'A continuar a sua conversa anterior. Envie a sua próxima mensagem.'
+    },
+    invalid: {
+      en_IN: 'Please reply *1* to resume or *2* to start over.',
+      pt_PT: 'Responda *1* para continuar ou *2* para começar de novo.'
+    }
+  },
+    notAuthorized: {
     en_IN: "Sorry, this number is not yet authorized to use this service.",
     pt_PT: "Lamentamos, este número ainda não está autorizado a utilizar este serviço.",
   },

@@ -75,8 +75,10 @@ class State {
       const send = () => {
         const fill = { ...this.fill, ...extraFill };
         const text = this.renderText(item.bundle, fill, context, event);
+        context.lastPrompt = text;
         dialog.sendMessage(context, text, item.immediate !== false);
       };
+
 
       if (item.delay)
         setTimeout(send, item.delay);

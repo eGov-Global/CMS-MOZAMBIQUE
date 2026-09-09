@@ -117,7 +117,8 @@ class WalkState extends State {
             const goback = this.getPath(context).length > 0;
             const list = dialog.constructListPromptAndGrammer(options || [], messageBundle || {}, context.user.locale, false, goback);
             context[this.grammerSlot] = list.grammer;
-            dialog.sendMessage(context, this.renderPreamble(context) + list.prompt);
+            context.lastPrompt = this.renderPreamble(context) + list.prompt;
+            dialog.sendMessage(context, context.lastPrompt);
           }),
           on: { USER_MESSAGE: 'process' }
         },

@@ -5,6 +5,13 @@ const ChatState = require("./chat-state");
 const telemetry = require("./telemetry");
 const uuid = require("uuid");
 const config = require("../env-variables");
+const dialog = require("../machine/util/dialog");
+const messages = require("../machine/flow/shell-messages");
+
+// Users awaiting a resume-or-restart choice after their session expired -
+// keyed by sessionUserId, holding the expired ChatState to restore if they
+// choose to resume.
+const resumeChoicePending = new Map();
 
 class ChatService {
   constructor(sessionManager) {
@@ -17,7 +24,13 @@ class ChatService {
   async dispatch(session, inboundRequestModel) {
     const sessionUserId = session.userId;
 
-    const chatState = await this.getOrCreateChatState(sessionUserId, session.user);
+    if (resumeChoicePending.has(sessionUserId)) {
+      return this.resolveResumeChoice(session, inboundRequestModel);
+    }
+
+    const chatState = await this.getOrCreateChatState(sessionUserId, session.user, inboundRequestModel);
+    if (!chatState) return; // awaiting the citizen's resume/restart choice
+
     await chatStateRepository.updateSessionId(sessionUserId, config.avgSessionTime);
     telemetry.log(sessionUserId, "from_user", inboundRequestModel);
 
@@ -27,11 +40,12 @@ class ChatService {
     stateMachineService.send(event, inboundRequestModel);
   }
 
+
   /**
    * Retrieves the active chat state for the given user. If no active state exists,
    * a new chat state is created, persisted, and returned.
    */
-  async getOrCreateChatState(sessionUserId, user) {
+  async getOrCreateChatState(sessionUserId, user, inboundRequestModel) {
     const existingState = await chatStateRepository.getActiveStateForUserId(sessionUserId);
     const isExpiredSession = await this.isSessionExpired(sessionUserId);
 
@@ -39,19 +53,50 @@ class ChatService {
       return existingState;
     }
 
-    // come here if virgin dialog, old dialog was inactive, session expired, or reset case
+    if (existingState && isExpiredSession) {
+      resumeChoicePending.set(sessionUserId, existingState);
+      this.sessionManager.toUser(user, [dialog.get_message(messages.sessionExpired.question, user.locale)], inboundRequestModel.extraInfo);
+      return null;
+    }
+
+    // virgin dialog - no existing state at all
     const chatState = this.createChatStateFor(user);
     const timeStamp = new Date().getTime();
-    if (existingState) {
-      // a row already exists for this user (just expired) - overwrite it, don't INSERT
-      await chatStateRepository.updateState(sessionUserId, true, chatState.toPersistableState().state, timeStamp);
-    } else {
-      const sessionId = uuid.v4();
-      await chatStateRepository.insertNewState(sessionUserId, true, chatState.toPersistableState().state, sessionId, timeStamp);
-    }
+    const sessionId = uuid.v4();
+    await chatStateRepository.insertNewState(sessionUserId, true, chatState.toPersistableState().state, sessionId, timeStamp);
     return chatState;
-
   }
+  
+  // Handles the citizen's reply to the resume-or-restart prompt: "1" resumes
+  // the expired state as-is (their next message continues it normally), "2"
+  // discards it and restarts via the same USER_RESET path "voltar" uses.
+  async resolveResumeChoice(session, inboundRequestModel) {
+    const sessionUserId = session.userId;
+    const answer = inboundRequestModel.getMessage().getInputMessage();
+
+    if (answer === '1') {
+      const existingState = resumeChoicePending.get(sessionUserId);
+      resumeChoicePending.delete(sessionUserId);
+      await chatStateRepository.updateState(sessionUserId, true, existingState.toPersistableState().state, new Date().getTime());
+      const lastPrompt = existingState.context.lastPrompt;
+      this.sessionManager.toUser(session.user, [lastPrompt || dialog.get_message(messages.sessionExpired.resumed, session.user.locale)], inboundRequestModel.extraInfo);
+      return;
+    }
+
+
+    if (answer === '2') {
+      resumeChoicePending.delete(sessionUserId);
+      const chatState = this.createChatStateFor(session.user);
+      await chatStateRepository.updateState(sessionUserId, true, chatState.toPersistableState().state, new Date().getTime());
+      await chatStateRepository.updateSessionId(sessionUserId, config.avgSessionTime);
+      const stateMachineService = this.getStateMachineServiceFor(chatState, inboundRequestModel);
+      stateMachineService.send("USER_RESET", inboundRequestModel);
+      return;
+    }
+
+    this.sessionManager.toUser(session.user, [dialog.get_message(messages.sessionExpired.invalid, session.user.locale)], inboundRequestModel.extraInfo);
+  }
+
 
   // Postgres tracks last-activity time_stamp; InMemory doesn't need this
   // feature, so it simply has no getLastActivityTimestamp to call.
