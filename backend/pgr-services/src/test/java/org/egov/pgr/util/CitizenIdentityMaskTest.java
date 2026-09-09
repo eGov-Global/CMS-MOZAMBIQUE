@@ -114,9 +114,12 @@ class CitizenIdentityMaskTest {
     }
 
     @Test
-    void missingUserInfoIsTreatedAsMachineContext() {
-        assertTrue(CitizenIdentityMask.isInternalCaller(null));
-        assertTrue(CitizenIdentityMask.isInternalCaller(new RequestInfo()));
+    void missingUserInfoIsNotInternal_anonymousCallersGetTheMask() {
+        // The gateway strips client-supplied userInfo from token-less requests
+        // and (audit mode) still forwards them: absent identity must fail
+        // CLOSED, never into the machine-caller exemption.
+        assertFalse(CitizenIdentityMask.isInternalCaller(null));
+        assertFalse(CitizenIdentityMask.isInternalCaller(new RequestInfo()));
     }
 
     @Test

@@ -58,13 +58,17 @@ public final class CitizenIdentityMask {
      * Machine callers keep clear data: masking exists to protect the identity
      * from HUMAN viewers on presentation endpoints, while internal consumers
      * (schedulers, service-to-service reads) must never receive the sentinel
-     * where a phone number is expected. A missing userInfo is treated as a
-     * machine context for the same reason — presentation traffic always
-     * carries one.
+     * where a phone number is expected. Internal requires a POSITIVE signal
+     * (SYSTEM type or the internal-microservice role). A MISSING userInfo is
+     * NOT one: the gateway strips client-supplied userInfo from token-less
+     * requests and, in audit mode, still forwards them — treating that as a
+     * machine context would hand the clear identity to anonymous callers.
+     * Genuine service-to-service reads authenticate and carry a resolvable
+     * principal.
      */
     public static boolean isInternalCaller(RequestInfo requestInfo) {
         if (requestInfo == null || requestInfo.getUserInfo() == null)
-            return true;
+            return false;
         if ("SYSTEM".equalsIgnoreCase(requestInfo.getUserInfo().getType()))
             return true;
         if (requestInfo.getUserInfo().getRoles() == null)
