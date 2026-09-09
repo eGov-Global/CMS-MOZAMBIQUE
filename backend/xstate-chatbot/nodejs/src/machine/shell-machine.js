@@ -152,7 +152,7 @@ endNode
 systemErrorNode
   .setPrompt(dialog.global_messages.system_error)
   .setEffect((context, event) => context.chatInterface.system_error(event.data))
-  .setNext(welcomeGroup);
+  .setNext(endNode);
 
 notAuthorized
   .setPrompt(messages.notAuthorized)

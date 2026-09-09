@@ -121,7 +121,7 @@ let global_messages = {
   system_error: {
     code: 'chatbot.pgr.error.system',
     en_IN: 'I am sorry, our system has a problem and I cannot fulfill your request right now. Could you try again in a few minutes please?',
-    pt_PT: 'Lamentamos, o nosso sistema tem um problema e não é possível concluir o seu pedido agora. Pode tentar novamente dentro de alguns minutos?'
+    pt_PT: 'Lamentamos, o nosso sistema tem um problema e não é possível concluir o seu pedido agora. Pode tentar novamente dentro de alguns minutos.'
   },
   [INTENTION_MORE]: {
     code: 'chatbot.pgr.option.more',
