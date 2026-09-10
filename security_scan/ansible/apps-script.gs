@@ -23,7 +23,7 @@ var GH_TOKEN     = "PASTE_GITHUB_FINE_GRAINED_PAT"; // fine-grained PAT, Content
 var DRIVE_ROOT = "CMS-Security-Scan";
 var PAGES_DIR  = "security_scan";                 // gh-pages path that serves the dashboard
 var GH_BRANCH  = "gh-pages";
-var INDEX_RAW  = "https://raw.githubusercontent.com/%REPO%/master/security-scan/dashboard-index.html";
+var INDEX_RAW  = "https://raw.githubusercontent.com/%REPO%/master/security_scan/ansible/dashboard-index.html";
 
 // Domains allowed to open the exported audit workbook (with the link, view-only). The owner's
 // own domain is shared via DriveApp; any EXTRA domains are added via the Drive API and require

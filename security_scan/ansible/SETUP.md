@@ -65,7 +65,7 @@ Each runner sets `export SECSCAN_TOKEN='<that value>'` before running. **Never c
 
 - If the repo's `gh-pages:/security_scan/` already has an old (CI-pipeline) dashboard, clear
   `security_scan/manifest.json` and `security_scan/data/` once so the Claude runs start clean.
-  (The Apps Script seeds a fresh `index.html` from this repo's `security-scan/dashboard-index.html`.)
+  (The Apps Script seeds a fresh `index.html` from this repo's `security_scan/ansible/dashboard-index.html`.)
 - Run a scan from any branch and confirm it appears at
   `https://egov-global.github.io/CMS-MOZAMBIQUE/security_scan/`.
 

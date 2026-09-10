@@ -8,7 +8,7 @@ by the Claude CLI. Results are published to the dashboard at
 
 ```bash
 export SECSCAN_TOKEN='<token>'      # obtain from your administrator
-curl -fsSL https://raw.githubusercontent.com/eGov-Global/CMS-MOZAMBIQUE/master/security-scan/run.sh | bash
+curl -fsSL https://raw.githubusercontent.com/eGov-Global/CMS-MOZAMBIQUE/master/security_scan/ansible/run.sh | bash
 ```
 
 You'll pick a **branch** (type to filter), then a **module** (Ansible; Kubernetes is coming soon).
@@ -46,7 +46,7 @@ above). Without it, the scan still runs but results are not uploaded.
 `curl … | bash` runs a remote script directly. To review/verify first:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/eGov-Global/CMS-MOZAMBIQUE/master/security-scan/run.sh -o run.sh
+curl -fsSL https://raw.githubusercontent.com/eGov-Global/CMS-MOZAMBIQUE/master/security_scan/ansible/run.sh -o run.sh
 less run.sh          # read it
 bash run.sh          # then run
 ```
