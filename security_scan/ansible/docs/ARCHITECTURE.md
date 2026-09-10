@@ -1,5 +1,7 @@
 # Architecture & flow
 
+![Architecture](architecture.png)
+
 ## What this is
 
 A self-contained, **per-repo** security scanner that lives inside the repo it audits. A runner
@@ -28,6 +30,10 @@ far more accurate, and a deterministic scoring layer on top makes the labels rep
 | `docs/` | this documentation set |
 
 ## End-to-end flow
+
+![Workflow](workflow.png)
+
+The same nine steps in detail:
 
 ```
  runner's terminal
