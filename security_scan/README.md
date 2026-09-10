@@ -41,7 +41,7 @@ environment it creates is removed on exit.
 It runs as a **GitHub Action** (`.github/workflows/code-scan.yml`) — no local run needed:
 
 - on **push to `master`** touching code paths, a weekly **schedule**, or **manual dispatch**
-  (Actions → *Source-code dependency scan* → **Run workflow**);
+  (Actions → *Code-Base Security Scan* → **Run workflow**);
 - reads `code-base/code-scan-config.yaml`, runs OSV-Scanner per project, and publishes to the
   **Code Base** dashboard page (`/security_scan/code`).
 

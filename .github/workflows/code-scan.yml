@@ -1,7 +1,7 @@
 # Source-code dependency vulnerability scan (OSV-Scanner) for the application code dirs.
 # Reads security_scan/code-base/code-scan-config.yaml, scans each project, and publishes a per-project
 # report to Drive + the gh-pages "Source Code" dashboard module. Report-only.
-name: Source-code dependency scan
+name: Code-Base Security Scan
 
 on:
   workflow_dispatch:
