@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22lg%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234c1d95%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%237c3aed%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22lh%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%22.18%22%2F%3E%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%220%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Cpath%20d%3D%22M24%203.2%20C24%203.2%2032.5%208%2039.6%208.6%20C40.2%208.65%2040.6%209.1%2040.6%209.7%20V22%20C40.6%2032.6%2033.8%2039.9%2024.7%2043.6%20C24.25%2043.8%2023.75%2043.8%2023.3%2043.6%20C14.2%2039.9%207.4%2032.6%207.4%2022%20V9.7%20C7.4%209.1%207.8%208.65%208.4%208.6%20C15.5%208%2024%203.2%2024%203.2%20Z%22%20fill%3D%22url%28%23lg%29%22%2F%3E%3Cpath%20d%3D%22M24%203.2%20C24%203.2%2032.5%208%2039.6%208.6%20C40.2%208.65%2040.6%209.1%2040.6%209.7%20V22%20C40.6%2032.6%2033.8%2039.9%2024.7%2043.6%20C24.25%2043.8%2023.75%2043.8%2023.3%2043.6%20C14.2%2039.9%207.4%2032.6%207.4%2022%20V9.7%20C7.4%209.1%207.8%208.65%208.4%208.6%20C15.5%208%2024%203.2%2024%203.2%20Z%22%20fill%3D%22url%28%23lh%29%22%2F%3E%3Cpath%20d%3D%22M24%206.4%20C24%206.4%2031.6%2010.6%2037.9%2011.2%20V22%20C37.9%2031%2032%2037.5%2024%2040.9%20C16%2037.5%2010.1%2031%2010.1%2022%20V11.2%20C16.4%2010.6%2024%206.4%2024%206.4%20Z%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-opacity%3D%22.22%22%20stroke-width%3D%221.1%22%2F%3E%3Ccircle%20cx%3D%2218.7%22%20cy%3D%2216.2%22%20r%3D%222.35%22%20fill%3D%22%23F2A23C%22%2F%3E%3Crect%20x%3D%2223.5%22%20y%3D%2213.85%22%20width%3D%228.7%22%20height%3D%224.8%22%20rx%3D%222.4%22%20fill%3D%22%23F2A23C%22%2F%3E%3Ccircle%20cx%3D%2218.5%22%20cy%3D%2223.7%22%20r%3D%222.95%22%20fill%3D%22%233B7DD8%22%2F%3E%3Ccircle%20cx%3D%2226%22%20cy%3D%2223.7%22%20r%3D%222.95%22%20fill%3D%22%233B7DD8%22%2F%3E%3Ccircle%20cx%3D%2222.25%22%20cy%3D%2230.9%22%20r%3D%222.95%22%20fill%3D%22%2354AE5A%22%2F%3E%3C%2Fsvg%3E">
-<title>Security Dashboard ? Ansible Remote Server Deployment</title>
+<title>Security Dashboard — Ansible Remote Server Deployment</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 :root{
@@ -240,8 +240,8 @@ table.area td.r{text-align:right;font-variant-numeric:tabular-nums;font-weight:6
 details.loc{margin-top:9px}
 details.loc>summary{cursor:pointer;color:var(--link);font-size:12.5px;font-weight:600;list-style:none}
 details.loc>summary::-webkit-details-marker{display:none}
-details.loc>summary::before{content:"? ";color:var(--faint)}
-details.loc[open]>summary::before{content:"? "}
+details.loc>summary::before{content:"▸ ";color:var(--faint)}
+details.loc[open]>summary::before{content:"▾ "}
 ul.locs{margin:9px 0 0;padding:0;list-style:none;max-height:340px;overflow:auto}
 ul.locs li{padding:4px 0;border-bottom:1px dashed var(--line)}
 ul.locs code{font-size:12px}
@@ -292,18 +292,18 @@ details.grp>summary .cx{margin-left:auto;color:var(--faint);font-size:12px;font-
    <span class="logo"><svg viewBox="0 0 48 48" width="42" height="42" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4c1d95"/><stop offset="1" stop-color="#7c3aed"/></linearGradient><linearGradient id="lh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".18"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><path d="M24 3.2 C24 3.2 32.5 8 39.6 8.6 C40.2 8.65 40.6 9.1 40.6 9.7 V22 C40.6 32.6 33.8 39.9 24.7 43.6 C24.25 43.8 23.75 43.8 23.3 43.6 C14.2 39.9 7.4 32.6 7.4 22 V9.7 C7.4 9.1 7.8 8.65 8.4 8.6 C15.5 8 24 3.2 24 3.2 Z" fill="url(#lg)"/><path d="M24 3.2 C24 3.2 32.5 8 39.6 8.6 C40.2 8.65 40.6 9.1 40.6 9.7 V22 C40.6 32.6 33.8 39.9 24.7 43.6 C24.25 43.8 23.75 43.8 23.3 43.6 C14.2 39.9 7.4 32.6 7.4 22 V9.7 C7.4 9.1 7.8 8.65 8.4 8.6 C15.5 8 24 3.2 24 3.2 Z" fill="url(#lh)"/><path d="M24 6.4 C24 6.4 31.6 10.6 37.9 11.2 V22 C37.9 31 32 37.5 24 40.9 C16 37.5 10.1 31 10.1 22 V11.2 C16.4 10.6 24 6.4 24 6.4 Z" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="1.1"/><circle cx="18.7" cy="16.2" r="2.35" fill="#F2A23C"/><rect x="23.5" y="13.85" width="8.7" height="4.8" rx="2.4" fill="#F2A23C"/><circle cx="18.5" cy="23.7" r="2.95" fill="#3B7DD8"/><circle cx="26" cy="23.7" r="2.95" fill="#3B7DD8"/><circle cx="22.25" cy="30.9" r="2.95" fill="#54AE5A"/></svg></span>
    <div>
     <h1>Security Dashboard</h1>
-    <div class="scope" id="scope">Ansible Deployment ? Remote Server</div>
+    <div class="scope" id="scope">Ansible Deployment — Remote Server</div>
    </div>
   </div>
   <div class="controls">
-   <span class="posture" id="posture" style="display:none"><span class="pdot"></span><span id="postureTxt">?</span></span>
+   <span class="posture" id="posture" style="display:none"><span class="pdot"></span><span id="postureTxt">—</span></span>
    <label class="toggle"><input type="checkbox" id="fpToggle" checked onchange="renderFindings()"> Hide non-actionable</label>
    <a class="btn primary" id="xlsxBtn" href="#" download style="display:none">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l4-4m-4 4l-4-4M5 21h14"/></svg>Export audit</a>
    <div class="rsel" id="rsel">
     <button class="rsel-btn" id="runBtn" type="button" aria-haspopup="listbox" aria-expanded="false">
      <span class="cap">Report</span>
-     <span class="lab" id="runBtnLabel">?</span>
+     <span class="lab" id="runBtnLabel">—</span>
      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
     </button>
     <div class="rsel-menu" id="runMenu" role="listbox" aria-label="Select a report" hidden></div>
@@ -387,6 +387,10 @@ const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",
 const cap=s=>s?s[0]+s.slice(1).toLowerCase():s;
 const fmtTime=ts=>{try{return ts?new Date(ts).toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'numeric',minute:'2-digit',hour12:true,timeZoneName:'short'}):"";}catch(e){return ts||"";}};
 const fmtShort=ts=>{try{return ts?new Date(ts).toLocaleString(undefined,{month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):"";}catch(e){return ts||"";}};
+// Report label shown in the viewer's own timezone: derive the time from the ISO ts (like the
+// Scanned chip) rather than the frozen label string, whose zone is the scanner host's (UTC in CI).
+const runName=r=>r.runner||((r.label||"").split(" - ")[0])||"";
+const runLabel=r=>{const t=fmtTime(r.ts);return t?`${runName(r)} - ${t}`:(r.label||r.date||"");};
 const PRO={P0:0,P1:1,P2:2,P3:3,"":4};
 const PRICOL ={P0:"#5B21B6",P1:"#C0267E",P2:"#047857",P3:"#5F6673"};  // solid: card border
 const PRISOFT={P0:"#EEE8FB",P1:"#FAE7F2",P2:"#E2F3EC",P3:"#ECEEF1"};  // soft: badge bg
@@ -398,8 +402,8 @@ function selectModule(mod){
   MODULE=mod;
   document.querySelectorAll(".mod").forEach(b=>b.classList.toggle("active", b.dataset.mod===mod));
   $("scope").textContent = mod==="k8s"
-    ? "Kubernetes Deployment ? Coming soon"
-    : ((CUR&&CUR.meta&&CUR.meta.scope)||"Ansible Deployment ? Remote Server");
+    ? "Kubernetes Deployment — Coming soon"
+    : ((CUR&&CUR.meta&&CUR.meta.scope)||"Ansible Deployment — Remote Server");
   renderModulePage();
 }
 // Single source of truth for what the content area shows. Placeholder modules (k8s)
@@ -452,7 +456,7 @@ async function boot(){
   const seg=(location.pathname.replace(/\/+$/,"").split("/").pop()||"").toLowerCase();
   MODULE = seg==="code" ? "code" : (seg==="kubernetes"||seg==="k8s") ? "k8s" : "ansible";
   document.querySelectorAll(".mod").forEach(b=>b.classList.toggle("active", b.dataset.mod===MODULE));
-  if(MODULE==="k8s"){ HASDATA=false; $("scope").textContent="Kubernetes Deployment ? Coming soon"; renderModulePage(); return; }
+  if(MODULE==="k8s"){ HASDATA=false; $("scope").textContent="Kubernetes Deployment — Coming soon"; renderModulePage(); return; }
   DATA_BASE = "";   // each module lives in its own subdir and reads its own manifest.json + data/
   let manifest;
   try{ manifest=await (await fetch(DATA_BASE+"manifest.json",{cache:"no-store"})).json(); }
@@ -470,7 +474,7 @@ function buildSelector(){
       const tag=i===0?`<span class="rsel-tag">Latest</span>`:"";
       const bits=[esc(r.branch),`${r.occurrences} occ`].filter(Boolean);
       return `<button class="rsel-item" role="option" data-i="${i}" aria-selected="${i===0}">
-        <span class="rsel-when">${esc(r.label||fmtTime(r.ts)||r.date)}${tag}</span>
+        <span class="rsel-when">${esc(runLabel(r))}${tag}</span>
         <span class="rsel-sub">${bits.map((b,j)=>`${j?'<span class="rsel-dot"></span>':''}<span>${b}</span>`).join("")}</span>
       </button>`;
     }).join("");
@@ -478,7 +482,7 @@ function buildSelector(){
 }
 function selectRun(i){
   RUNI=i; const r=REPORUNS[i]||{};
-  $("runBtnLabel").textContent=r.label||fmtTime(r.ts)||r.date||"?";
+  $("runBtnLabel").textContent=runLabel(r)||"—";
   CURXLSX=r.xlsxUrl||"";
   $("runMenu").querySelectorAll(".rsel-item").forEach((el,j)=>el.setAttribute("aria-selected",j===i));
   loadRun(r.file);
@@ -502,7 +506,7 @@ async function loadRun(file){
   if(s.occurrences===0){pt.textContent="No issues";p.style.background="#16a34a";}
   else if(highOcc){pt.textContent="Action required";p.style.background="#b91c1c";}
   else{pt.textContent="Review recommended";p.style.background="#b45309";}
-  if(MODULE!=="k8s") $("scope").textContent=m.scope||"Ansible Deployment ? Remote Server";
+  if(MODULE!=="k8s") $("scope").textContent=m.scope||"Ansible Deployment — Remote Server";
   const commit=`<a href="https://github.com/${m.repo}/commit/${m.sha}" target="_blank" rel="noopener"><b>${esc(m.shaShort)}</b></a>`;
   const prLink=m.pr?`<span class="chip"><span class="k">PR</span><a href="${m.pr.url}" target="_blank" rel="noopener"><b>#${m.pr.number}</b></a></span>`:"";
   $("metabar").innerHTML=
@@ -510,7 +514,7 @@ async function loadRun(file){
     `<span class="chip blu"><span class="k">Branch</span><b>${esc(m.branch)}</b></span>`+
     `<span class="chip"><span class="k">Commit</span>${commit}</span>${prLink}`+
     `<span class="chip"><span class="k">Scanned</span><b>${esc(fmtTime(m.ts)||m.date)}</b></span>`+
-    `<span class="chip"><a href="${esc(m.runUrl)}" target="_blank" rel="noopener">source ?</a></span>`;
+    `<span class="chip"><a href="${esc(m.runUrl)}" target="_blank" rel="noopener">source ↗</a></span>`;
   const ew=$("execWrap");
   if(m.executive_summary){$("exec").textContent=m.executive_summary;ew.style.display="";}else ew.style.display="none";
   const pw=$("priWrap");
@@ -523,7 +527,7 @@ async function loadRun(file){
   $("highWrap").innerHTML=showSev.map(sv=>{
     const n=s.typesBySeverity[sv]||0;
     const cats=(d.findings||[]).filter(f=>f.severity===sv).sort((a,b)=>b.count-a.count);
-    let h=`<div class="sevrow"><span class="hdot" style="background:${COL[sv]}"></span><b>${cap(sv)}</b><span class="sevn">? ${n}</span></div>`;
+    let h=`<div class="sevrow"><span class="hdot" style="background:${COL[sv]}"></span><b>${cap(sv)}</b><span class="sevn">· ${n}</span></div>`;
     if(cats.length) h+=`<ul class="catlist">`+cats.map(f=>
       `<li><span class="ct">${esc(f.title)}</span><span class="tag">${esc(f.area)}</span><span class="cn">${f.count}</span></li>`).join("")+`</ul>`;
     return h;
@@ -540,7 +544,7 @@ async function loadRun(file){
   CUR=d; renderFindings();
   HASDATA=true; renderModulePage();   // real data present -> show the Ansible module content
   const eng=m.engine?`labels, severity, priority & remediation are ${esc(m.engine)}-validated (independent assertion pass + fail-safe dual review)`:`remediation is curated`;
-  $("foot").innerHTML=`Report-only mode ? Count = times each rule matched ? file links open the exact line on commit ${esc(m.shaShort)} ? ${eng} ? ?Action required? is tracked in the Excel audit; acceptable &amp; false positives are documented but not tracked ? per-location detail in Security ? Code scanning.`;
+  $("foot").innerHTML=`Report-only mode · Count = times each rule matched · file links open the exact line on commit ${esc(m.shaShort)} · ${eng} · “Action required” is tracked in the Excel audit; acceptable &amp; false positives are documented but not tracked · per-location detail in Security → Code scanning.`;
 }
 
 function renderFindings(){
@@ -551,10 +555,10 @@ function renderFindings(){
     .sort((a,b)=>(PRO[prioOf(a)]-PRO[prioOf(b)])||(SEV.indexOf(a.severity)-SEV.indexOf(b.severity))||(b.count-a.count));
   const nontracked=all.filter(f=>statusOf(f)!=="action_required")
     .sort((a,b)=>(SEV.indexOf(a.severity)-SEV.indexOf(b.severity))||(b.count-a.count));
-  $("prioTitle").innerHTML=`Action required <span class="muted">? ${action.length} issue type${action.length===1?"":"s"}</span>`;
-  $("prio").innerHTML=action.map(f=>card(f,true)).join("")||'<p class="muted">No action-required findings. ?</p>';
+  $("prioTitle").innerHTML=`Action required <span class="muted">— ${action.length} issue type${action.length===1?"":"s"}</span>`;
+  $("prio").innerHTML=action.map(f=>card(f,true)).join("")||'<p class="muted">No action-required findings. 🎉</p>';
   if(nontracked.length && !hideNon){
-    $("hardWrap").innerHTML=`<details class="grp"><summary>Not tracked ? acceptable &amp; false positives<span class="cx">${nontracked.length} issue types</span></summary>${nontracked.map(f=>card(f,false)).join("")}</details>`;
+    $("hardWrap").innerHTML=`<details class="grp"><summary>Not tracked — acceptable &amp; false positives<span class="cx">${nontracked.length} issue types</span></summary>${nontracked.map(f=>card(f,false)).join("")}</details>`;
   } else $("hardWrap").innerHTML="";
 }
 
@@ -563,9 +567,9 @@ function card(f,isAction){
   const first=locs[0];
   const firstLink=first?`<a href="${esc(first.url)}" target="_blank" rel="noopener"><code>${esc(first.path)}:${esc(first.line||"")}</code></a>`:"";
   const list=locs.slice(0,80).map(l=>`<li><a href="${esc(l.url)}" target="_blank" rel="noopener"><code>${esc(l.path)}:${esc(l.line||"")}</code></a></li>`).join("");
-  const more=locs.length>80?`<li class="muted">and ${locs.length-80} more?</li>`:"";
+  const more=locs.length>80?`<li class="muted">and ${locs.length-80} more…</li>`:"";
   const det=locs.length>1?`<details class="loc"><summary>${locs.length} locations</summary><ul class="locs">${list}${more}</ul></details>`:"";
-  const guide=f.guide?`<span class="sep">?</span><a href="${esc(f.guide)}" target="_blank" rel="noopener">reference ?</a>`:"";
+  const guide=f.guide?`<span class="sep">·</span><a href="${esc(f.guide)}" target="_blank" rel="noopener">reference ↗</a>`:"";
   const tr=f.triage||{}, st=tr.status, treason=esc(tr.reason||"");
   const pr = prioOf(f);
   const pri = st==="action_required" ? `<span class="pri" style="background:${PRISOFT[pr]};color:${PRICOL[pr]}" title="Remediation priority">${pr}</span>` : "";
@@ -575,28 +579,28 @@ function card(f,isAction){
   const catT=f.category?`<span class="rtag" title="Category">${esc(f.category)}</span>`:"";
   const expo=(tr.exposure&&tr.exposure!=="unknown")?`<span class="rtag" title="Exposure">${esc(tr.exposure)}</span>`:"";
   const vf=f.verify;
-  const vmark = vf ? (vf.verified ? `<span class="vf ok" title="Passed dual-pass review">? verified</span>`
-                                  : `<span class="vf nr" title="${esc(vf.note||'flagged by a reviewer')}">? needs review</span>`) : "";
-  const aitag = f.enriched?`<span class="sep">?</span><span class="aitag" title="AI-generated remediation">? AI</span>`:'';
+  const vmark = vf ? (vf.verified ? `<span class="vf ok" title="Passed dual-pass review">✓ verified</span>`
+                                  : `<span class="vf nr" title="${esc(vf.note||'flagged by a reviewer')}">⚠ needs review</span>`) : "";
+  const aitag = f.enriched?`<span class="sep">·</span><span class="aitag" title="AI-generated remediation">✨ AI</span>`:'';
   const sx = f.strix || (f.source==="Strix" ? {validated:true,cvss:f.cvss,cwe:f.cwe} : null);
-  const strixTag = sx ? `<span class="sep">?</span><span class="strix" title="Independently validated by Strix AI pentest">? Strix${sx.cvss?` ? CVSS ${sx.cvss}`:''}${sx.cwe?` ? ${esc(sx.cwe)}`:''}</span>` : "";
+  const strixTag = sx ? `<span class="sep">·</span><span class="strix" title="Independently validated by Strix AI pentest">🛡 Strix${sx.cvss?` · CVSS ${sx.cvss}`:''}${sx.cwe?` · ${esc(sx.cwe)}`:''}</span>` : "";
   // LLM validation/assertion pass: show a chip; if the validator re-graded severity, say so.
   const vv = f.validation;
   let valTag = "";
   if (vv){
     if (vv.adjusted && vv.scanner_severity){
-      valTag = `<span class="sep">?</span><span class="valtag adj" title="${esc(vv.note||'')}">? AI-assessed ${cap(vv.severity||f.severity)} (scanner: ${cap(vv.scanner_severity)})</span>`;
+      valTag = `<span class="sep">·</span><span class="valtag adj" title="${esc(vv.note||'')}">⚖ AI-assessed ${cap(vv.severity||f.severity)} (scanner: ${cap(vv.scanner_severity)})</span>`;
     } else if (vv.severity && vv.scanner_severity && vv.severity!==vv.scanner_severity){
-      valTag = `<span class="sep">?</span><span class="valtag" title="${esc(vv.note||'')}">? AI reads ${cap(vv.severity)}; kept scanner ${cap(vv.scanner_severity)}</span>`;
+      valTag = `<span class="sep">·</span><span class="valtag" title="${esc(vv.note||'')}">⚖ AI reads ${cap(vv.severity)}; kept scanner ${cap(vv.scanner_severity)}</span>`;
     } else {
-      valTag = `<span class="sep">?</span><span class="valtag" title="${esc(vv.note||'Label, severity & priority independently validated')}">? validated</span>`;
+      valTag = `<span class="sep">·</span><span class="valtag" title="${esc(vv.note||'Label, severity & priority independently validated')}">⚖ validated</span>`;
     }
   }
   const edge = isAction ? `border-left:3px solid ${PRICOL[prioOf(f)]||'#cbd5e1'}` : "";
   return `<div class="finding${isAction?' fa':''}" style="${edge}">
    <div class="h"><span class="sev" style="background:${SOFT[f.severity]};color:${COL[f.severity]}">${cap(f.severity)}</span>${pri}
-    <span class="t">${esc(f.title)}</span>${stat}<span class="cnt">?${f.count}</span></div>
-   <div class="rule"><code>${esc(f.id)}</code><span class="sep">?</span>${esc(f.source)}<span class="sep">?</span>${esc(f.area)} ${catT}${expo}${guide}${aitag}${strixTag}${valTag}</div>
+    <span class="t">${esc(f.title)}</span>${stat}<span class="cnt">×${f.count}</span></div>
+   <div class="rule"><code>${esc(f.id)}</code><span class="sep">·</span>${esc(f.source)}<span class="sep">·</span>${esc(f.area)} ${catT}${expo}${guide}${aitag}${strixTag}${valTag}</div>
    <div class="wf"><div class="b"><div class="k">Why it matters</div>${esc(f.why)}</div>
     <div class="b"><div class="k">How to fix ${vmark}</div>${esc(f.fix)}</div></div>
    <div class="loc1">First location: ${firstLink}</div>${det}
@@ -608,7 +612,7 @@ const ECOCOL={npm:"#b5372f",Maven:"#7a4ea0",Go:"#1e7f9c"};
 function shortPath(p){const a=String(p).split("/");return a.length>2?".../"+a.slice(-2).join("/"):p;}
 function renderCode(d){
   const m=d.meta||{}, s=d.summary||{}, bySev=s.bySeverity||{};
-  $("scope").textContent = m.scope || "Source Code ? Dependency Vulnerabilities";
+  $("scope").textContent = m.scope || "Source Code — Dependency Vulnerabilities";
   // posture pill
   const p=$("posture"),pt=$("postureTxt"); p.style.display="";
   const high=(bySev.CRITICAL||0)+(bySev.HIGH||0);
@@ -623,7 +627,7 @@ function renderCode(d){
     `<span class="chip"><span class="k">Commit</span>${commit}</span>`+
     `<span class="chip"><span class="k">Engine</span><b>${esc(m.engine||"OSV-Scanner")}</b></span>`+
     `<span class="chip"><span class="k">Scanned</span><b>${esc(fmtTime(m.ts)||m.date)}</b></span>`+
-    `<span class="chip"><a href="${esc(m.runUrl)}" target="_blank" rel="noopener">source ?</a></span>`;
+    `<span class="chip"><a href="${esc(m.runUrl)}" target="_blank" rel="noopener">source ↗</a></span>`;
   // ansible-only chrome hidden for this module
   $("execWrap").style.display="none"; $("priWrap").style.display="none";
   $("xlsxBtn").style.display="none";
@@ -640,17 +644,17 @@ function renderCode(d){
   $("highWrap").innerHTML=showSev.map(sv=>{
     const n=bySev[sv]||0;
     const items=(d.findings||[]).filter(f=>f.severity===sv);
-    let h=`<div class="sevrow"><span class="hdot" style="background:${COL[sv]}"></span><b>${cap(sv)}</b><span class="sevn">? ${n}</span></div>`;
+    let h=`<div class="sevrow"><span class="hdot" style="background:${COL[sv]}"></span><b>${cap(sv)}</b><span class="sevn">· ${n}</span></div>`;
     if(items.length) h+=`<ul class="catlist">`+items.map(f=>{
       const loc=(f.locations||[])[0];
       const ec=`<span class="tag" style="background:${ECOCOL[f.ecosystem]||''};${ECOCOL[f.ecosystem]?'color:#fff;border-color:transparent':''}">${esc(f.ecosystem||"")}</span>`;
       const ref=loc?`<a class="tag" href="${esc(loc.url)}" target="_blank" rel="noopener"><code>${esc(shortPath(loc.path))}${loc.line?":L"+loc.line:""}</code></a>`:"";
-      return `<li><span class="ct">${esc(f.summary)}<span class="muted"> ? ${esc(f.package)}</span></span>${ec}${ref}<span class="cn">${f.count}</span></li>`;
+      return `<li><span class="ct">${esc(f.summary)}<span class="muted"> · ${esc(f.package)}</span></span>${ec}${ref}<span class="cn">${f.count}</span></li>`;
     }).join("")+`</ul>`;
     return h;
   }).join("");
   const sec2=$("prioTitle").closest("section"); if(sec2) sec2.style.display="none";   // hide Ansible action-required section
-  $("foot").innerHTML=`Report-only ? OSV-Scanner dependency vulnerabilities across the code dirs (backend, frontend, digit-ui-esbuild, digit-ui-v2) ? file links open the exact line on commit ${esc(m.shaShort)}.`;
+  $("foot").innerHTML=`Report-only · OSV-Scanner dependency vulnerabilities across the code dirs (backend, frontend, digit-ui-esbuild, digit-ui-v2) · file links open the exact line on commit ${esc(m.shaShort)}.`;
   CUR=d; HASDATA=true; renderModulePage();
 }
 
@@ -660,7 +664,7 @@ function drawDonut(occ){
   const floor=Math.max(1,Math.round(total*0.02));
   const arc=real.map(v=>Math.max(v,floor));  // tiny slices get a visible minimum arc; tooltip/legend keep the true count
   const cols=labels.map(s=>COL[s]);
-  $("donutLegend").innerHTML=labels.map((s,i)=>`<span><i class="dot" style="background:${COL[s]}"></i>${cap(s)} ? <b>${real[i]}</b></span>`).join("");
+  $("donutLegend").innerHTML=labels.map((s,i)=>`<span><i class="dot" style="background:${COL[s]}"></i>${cap(s)} · <b>${real[i]}</b></span>`).join("");
   if(donutChart)donutChart.destroy();
   donutChart=new Chart($("donut"),{type:"doughnut",
     data:{labels:labels.map(cap),datasets:[{data:arc,backgroundColor:cols,borderColor:surfCol(),borderWidth:3,hoverOffset:6}]},
@@ -669,7 +673,7 @@ function drawDonut(occ){
 
 function drawTrend(runs){
   const r=runs.slice(0,20).reverse();               // oldest -> newest, last 20
-  $("trendNote").textContent=`last ${r.length} ? log scale`;
+  $("trendNote").textContent=`last ${r.length} · log scale`;
   const labels=r.map(x=>fmtShort(x.ts)||x.date);
   // most-severe first; keep only severities that ever occur so the log axis stays clean
   const tsev=x=>x.typesBySeverity||x.occBySeverity||{};
