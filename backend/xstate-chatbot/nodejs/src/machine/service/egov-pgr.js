@@ -11,6 +11,7 @@ var FormData = require("form-data");
 const mediaTypes = require("../../media-types");
 var geturl = require("url");
 var path = require("path");
+const userService = require('../../session/user-service');
 require("url-search-params-polyfill");
 
 let pgrCreateRequestBody =
@@ -811,17 +812,21 @@ class PGRService {
   async persistComplaint(user, slots, extraInfo) {
     let requestBody = JSON.parse(pgrCreateRequestBody);
 
-    let authToken = user.authToken;
+    const serviceAccount = await userService.getServiceAccount();
+    let authToken = serviceAccount.authToken;
     let userId = user.userId;
     let complaintType = slots.complaint;
     let locality = slots.locality;
     let city = slots.city;
-    let userInfo = user.userInfo;
+    let userInfo = serviceAccount.userInfo;
 
     requestBody["RequestInfo"]["authToken"] = authToken;
     requestBody["service"]["tenantId"] = city;
+    requestBody["service"]["citizen"] = user.userInfo;
     requestBody["service"]["address"]["city"] = city;
     requestBody["service"]["address"]["locality"]["code"] = locality;
+    requestBody["service"]["accountId"] = userId;
+    requestBody["RequestInfo"]["userInfo"] = userInfo;
 
     // Add localized locality name if available
     if (slots.localityName) {
@@ -867,8 +872,6 @@ class PGRService {
       instituteName: slots.instituteName,
       isConfidential: slots.isConfidential === true,
     };
-    requestBody["service"]["accountId"] = userId;
-    requestBody["RequestInfo"]["userInfo"] = userInfo;
 
     // Handle location coordinates (geocode)
     if (slots.geocode) {

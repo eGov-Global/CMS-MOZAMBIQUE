@@ -19,6 +19,14 @@ const envVariables = {
 
     allowedMobileNumbers: process.env.ALLOWED_MOBILE_NUMBERS || '',
 
+    serviceAccount: {
+        username: process.env.USER_SERVICE_ACCOUNT_USERNAME || '',
+        password: process.env.USER_SERVICE_ACCOUNT_PASSWORD || '',
+        tenantId: process.env.USER_SERVICE_ACCOUNT_TENANT ||  process.env.ROOT_TENANTID || 'mz',
+    },
+
+    citizenPlaceholderPassword: process.env.CITIZEN_PLACEHOLDER_PASSWORD || 'Chatbot@2026',
+
     resetWords: (process.env.RESET_WORDS || 'hello,hi,ola').split(',').map(word => word.trim().toLowerCase()).filter(Boolean),
 
     cancelWords: (process.env.CANCEL_WORDS || 'cancelar,cancele,cancel').split(',').map(word => word.trim().toLowerCase()).filter(Boolean),
@@ -116,6 +124,9 @@ const envVariables = {
         valuefirstNotificationTrackCompliantTemplateid: process.env.VALUEFIRST_NOTIFICATION_TRACK_COMPLAINT_TEMPLATEID || '4052381,4156335',
         valuefirstNotificationLodgeCompliantTemplateid: process.env.VALUEFIRST_NOTIFICATION_LODGE_COMPLAINT_TEMPLATEID || '4052379,4156333',
         valuefirstLoginAuthorizationHeader: process.env.VALUEFIRST_LOGIN_AUTHORIZATION_HEADER || '',
+        userServiceCreateNoValidatePath: process.env.USER_SERVICE_CREATE_NOVALIDATE_PATH || 'user/users/_createnovalidate',
+        userServiceUpdateNoValidatePath: process.env.USER_SERVICE_UPDATE_NOVALIDATE_PATH || 'user/users/_updatenovalidate',
+        userServiceSearchPath: process.env.USER_SERVICE_SEARCH_PATH || 'user/_search',
     },
 
     egovServices: {
@@ -127,6 +138,9 @@ const envVariables = {
         userServiceCreateCitizenPath: process.env.USER_SERVICE_CREATE_CITIZEN_PATH || 'user/citizen/_create',
         userServiceUpdateProfilePath: process.env.USER_SERVICE_UPDATE_PROFILE_PATH || 'user/profile/_update',
         userServiceCitizenDetailsPath: process.env.USER_SERVICE_CITIZEN_DETAILS_PATH || 'user/_details',
+        userServiceCreateNoValidatePath: process.env.USER_SERVICE_CREATE_NOVALIDATE_PATH || 'user/users/_createnovalidate',
+        userServiceUpdateNoValidatePath: process.env.USER_SERVICE_UPDATE_NOVALIDATE_PATH || 'user/users/_updatenovalidate',
+        userServiceSearchPath: process.env.USER_SERVICE_SEARCH_PATH || 'user/_search',
 
         egovlocalizationhost: process.env.LOCALIZATION_SERVICE_HOST || 'https://sandbox.digit.org/',
         mdmsSearchPath: process.env.MDMS_SEARCH_PATH || 'egov-mdms-service/v1/_search',
