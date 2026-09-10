@@ -127,7 +127,7 @@
     },
     {
         "code": "chatbot.pgr.onboarding.welcome",
-        "message": "Dear Citizen,\n\nWelcome to the Fala Cidadao Whatsapp Chatbot experience 🙏\n\nNow you can file your complaint via WhatsApp.",
+        "message": "Dear Citizen,\n\nWelcome to the Fala Cidadao Whatsapp Chatbot experience\nNow you can file your complaint via WhatsApp.\n\nTo cancel at any time, type *Cancel*.",
         "module": "rainmaker-pgr",
         "locale": "en_IN"
     },
@@ -139,7 +139,7 @@
     },
     {
         "code": "chatbot.pgr.welcome",
-        "message": "Dear {{name}},\n\nWelcome to Fala Cidadao WhatsApp chatbot 🙏.\n\nYou can now file your complaint via WhatsApp.\n",
+        "message": "Dear {{name}},\n\nWelcome to Fala Cidadao WhatsApp chatbot.\n\nYou can now file your complaint via WhatsApp.\n\nTo cancel at any time, type *Cancel*.",
         "module": "rainmaker-pgr",
         "locale": "en_IN"
     }

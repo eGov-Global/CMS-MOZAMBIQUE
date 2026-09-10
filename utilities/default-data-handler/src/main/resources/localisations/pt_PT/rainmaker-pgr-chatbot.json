@@ -127,7 +127,7 @@
     },
     {
         "code": "chatbot.pgr.onboarding.welcome",
-        "message": "Estimado(a) Cidadão(ã),\n\nBem-vindo(a) ao chatbot do Fala Cidadão no WhatsApp \n\nJá pode apresentar a sua reclamação através do WhatsApp.",
+        "message": "Estimado(a) Cidadão(ã),\n\nBem-vindo(a) ao chatbot do Fala Cidadão no WhatsApp\nJá pode apresentar a sua manifestação através do WhatsApp.\n\nPara cancelar em qualquer momento, escreva *Cancelar*.",
         "module": "rainmaker-pgr",
         "locale": "pt_PT"
     },
@@ -139,7 +139,7 @@
     },
     {
         "code": "chatbot.pgr.welcome",
-        "message": "Estimado(a) {{name}},\n\nBem-vindo(a) ao chatbot Fala Cidadão no WhatsApp 🙏.\n\nJá pode apresentar a sua reclamação através do WhatsApp.\n",
+        "message": "Estimado(a) {{name}},\n\nBem-vindo(a) ao chatbot Fala Cidadão no WhatsApp.\nJá pode apresentar a sua manifestação através do WhatsApp.\n\nPara cancelar em qualquer momento, escreva *Cancelar*.",
         "module": "rainmaker-pgr",
         "locale": "pt_PT"
     }
