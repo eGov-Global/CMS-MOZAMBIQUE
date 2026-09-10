@@ -174,9 +174,23 @@ class TwilioWhatsAppProvider {
         return requestBody;
     }
 
+    // Checks if the given Twilio number belongs to the served country based on the configured country code.
+    isServedCountry(twillioNumber) { 
+        const digits = String(twillioNumber || '').replace(/\D/g, '');
+        const countryCode = String(config.countryCode).replace(/\D/g, '');
+        return !countryCode || digits.startsWith(countryCode);
+    }
+
     // Validates if the incoming request is a valid Twilio message (text, media, or location)
     async isValid(requestBody) {
         try {
+            
+            // Discard messages from numbers that do not belong to the served country.
+            if (!this.isServedCountry(requestBody.From)) {
+                console.log(`Twilio - Discarding message from out-of-country number: ${requestBody.From}`);
+                return false;
+            }
+
             // Twilio webhook validation
             if (requestBody.From && requestBody.To && requestBody.Body !== undefined) {
                 return true;
