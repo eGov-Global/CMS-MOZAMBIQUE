@@ -387,6 +387,10 @@ const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",
 const cap=s=>s?s[0]+s.slice(1).toLowerCase():s;
 const fmtTime=ts=>{try{return ts?new Date(ts).toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'numeric',minute:'2-digit',hour12:true,timeZoneName:'short'}):"";}catch(e){return ts||"";}};
 const fmtShort=ts=>{try{return ts?new Date(ts).toLocaleString(undefined,{month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):"";}catch(e){return ts||"";}};
+// Report label shown in the viewer's own timezone: derive the time from the ISO ts (like the
+// Scanned chip) rather than the frozen label string, whose zone is the scanner host's (UTC in CI).
+const runName=r=>r.runner||((r.label||"").split(" - ")[0])||"";
+const runLabel=r=>{const t=fmtTime(r.ts);return t?`${runName(r)} - ${t}`:(r.label||r.date||"");};
 const PRO={P0:0,P1:1,P2:2,P3:3,"":4};
 const PRICOL ={P0:"#5B21B6",P1:"#C0267E",P2:"#047857",P3:"#5F6673"};  // solid: card border
 const PRISOFT={P0:"#EEE8FB",P1:"#FAE7F2",P2:"#E2F3EC",P3:"#ECEEF1"};  // soft: badge bg
@@ -470,7 +474,7 @@ function buildSelector(){
       const tag=i===0?`<span class="rsel-tag">Latest</span>`:"";
       const bits=[esc(r.branch),`${r.occurrences} occ`].filter(Boolean);
       return `<button class="rsel-item" role="option" data-i="${i}" aria-selected="${i===0}">
-        <span class="rsel-when">${esc(r.label||fmtTime(r.ts)||r.date)}${tag}</span>
+        <span class="rsel-when">${esc(runLabel(r))}${tag}</span>
         <span class="rsel-sub">${bits.map((b,j)=>`${j?'<span class="rsel-dot"></span>':''}<span>${b}</span>`).join("")}</span>
       </button>`;
     }).join("");
@@ -478,7 +482,7 @@ function buildSelector(){
 }
 function selectRun(i){
   RUNI=i; const r=REPORUNS[i]||{};
-  $("runBtnLabel").textContent=r.label||fmtTime(r.ts)||r.date||"—";
+  $("runBtnLabel").textContent=runLabel(r)||"—";
   CURXLSX=r.xlsxUrl||"";
   $("runMenu").querySelectorAll(".rsel-item").forEach((el,j)=>el.setAttribute("aria-selected",j===i));
   loadRun(r.file);
