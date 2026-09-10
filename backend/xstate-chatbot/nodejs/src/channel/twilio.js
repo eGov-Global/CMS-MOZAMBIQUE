@@ -12,13 +12,6 @@ const INPUT_TYPES = {
     UNKNOWN: 'unknown',
 }
 
-// Twilio's own webhook retry timeout is ~15s; stay under it so a stuck
-// backend degrades to "couldn't attach" instead of a hung HTTP response that
-// Twilio then retries (double-processing the same message).
-const MEDIA_PROCESSING_TIMEOUT_MS = 13000;
-const MAX_MEDIA_SIZE_BYTES = 5 * 1024 * 1024;
-
-
 
 class TwilioWhatsAppProvider {
 
@@ -184,7 +177,7 @@ class TwilioWhatsAppProvider {
     // Validates if the incoming request is a valid Twilio message (text, media, or location)
     async isValid(requestBody) {
         try {
-            
+
             // Discard messages from numbers that do not belong to the served country.
             if (!this.isServedCountry(requestBody.From)) {
                 console.log(`Twilio - Discarding message from out-of-country number: ${requestBody.From}`);
@@ -303,7 +296,7 @@ class TwilioWhatsAppProvider {
                 const fileExtension = this.getExtensionForMimeType(contentType);
                 const fileBuffer = Buffer.from(response.data);
 
-                if (fileBuffer.length > MAX_MEDIA_SIZE_BYTES) {
+                if (fileBuffer.length > config.maxMediaSizeBytes) {
                     return 'FILE_TOO_LARGE';
                 }
 
@@ -315,7 +308,7 @@ class TwilioWhatsAppProvider {
                 );
             };
             const timeout = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('media processing timed out')), MEDIA_PROCESSING_TIMEOUT_MS)
+                setTimeout(() => reject(new Error('media processing timed out')), config.mediaProcessingTimeoutMs)
             );
 
             return await Promise.race([download(), timeout]);

@@ -17,10 +17,6 @@ const sandboxOrgTracker = new SandboxOrgTracker(sandboxOrgCodeTracker);
 const sendQueues = new Map();
 // Per-user chain of pending inbound dispatches - see authenticateAndDispatch() below.
 const dispatchQueues = new Map();
-// Extra grace period after a reply is sent, before the next inbound message
-// from the same user is accepted - gives the citizen time to read the reply
-// instead of racing ahead through several menu steps in one burst.
-const REPLY_COOLDOWN_MS = 2000;
 
 
 
@@ -93,7 +89,7 @@ class SessionManager {
     
     const current = this._authenticateAndDispatch(rawRequestModel)
       .then((userId) => sendQueues.get(userId))
-      .then(() => new Promise((resolve) => setTimeout(resolve, REPLY_COOLDOWN_MS)))
+      .then(() => new Promise((resolve) => setTimeout(resolve, config.replyCooldownMs)))
       .finally(() => dispatchQueues.delete(mobileNumber));
 
     dispatchQueues.set(mobileNumber, current);

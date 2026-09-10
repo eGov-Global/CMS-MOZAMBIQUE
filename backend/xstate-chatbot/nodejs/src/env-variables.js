@@ -53,7 +53,10 @@ const envVariables = {
     dateFormat: process.env.DATEFORMAT || 'DD/MM/YYYY',
     timeZone: process.env.TIMEZONE || 'Asia/Kolkata',
     msgId: process.env.MSG_ID || '20170310130900',
-    avgSessionTime: process.env.AVG_SESSION_TIME || 30, // 30 minutes
+    avgSessionTime: process.env.AVG_SESSION_TIME || 10,
+    replyCooldownMs: parseInt(process.env.REPLY_COOLDOWN_MS || '2000', 10),
+    mediaProcessingTimeoutMs: parseInt(process.env.MEDIA_PROCESSING_TIMEOUT_MS || '13000', 10),
+    maxMediaSizeBytes: parseInt(process.env.MAX_MEDIA_SIZE_MB || '5', 10) * 1024 * 1024,
 
     paytmWnSLink: process.env.PAYTM_WNS_LINK || 'https://stvending.punjab.gov.in/wsbills/',
 
