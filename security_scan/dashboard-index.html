@@ -270,15 +270,15 @@ details.grp>summary .cx{margin-left:auto;color:var(--faint);font-size:12px;font-
   </div>
   <div class="sb-label">Modules</div>
   <nav class="modnav" role="tablist" aria-label="Scan modules">
-   <a class="mod" id="modAnsible" data-mod="ansible" href="ansible">
+   <a class="mod" id="modAnsible" data-mod="ansible" href="../ansible">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
     Ansible
    </a>
-   <a class="mod" id="modK8s" data-mod="k8s" href="kubernetes" title="Coming soon">
+   <a class="mod" id="modK8s" data-mod="k8s" href="../kubernetes" title="Coming soon">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l8 4.6v9.8l-8 4.6-8-4.6V7.1l8-4.6z"/><circle cx="12" cy="12" r="3"/></svg>
     Kubernetes<span class="soon">Soon</span>
    </a>
-   <a class="mod" id="modCode" data-mod="code" href="code">
+   <a class="mod" id="modCode" data-mod="code" href="../code">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
     Code Base
    </a>
@@ -453,7 +453,7 @@ async function boot(){
   MODULE = seg==="code" ? "code" : (seg==="kubernetes"||seg==="k8s") ? "k8s" : "ansible";
   document.querySelectorAll(".mod").forEach(b=>b.classList.toggle("active", b.dataset.mod===MODULE));
   if(MODULE==="k8s"){ HASDATA=false; $("scope").textContent="Kubernetes Deployment — Coming soon"; renderModulePage(); return; }
-  DATA_BASE = MODULE==="code" ? "source_code/" : "";
+  DATA_BASE = "";   // each module lives in its own subdir and reads its own manifest.json + data/
   let manifest;
   try{ manifest=await (await fetch(DATA_BASE+"manifest.json",{cache:"no-store"})).json(); }
   catch(e){ HASDATA=false; renderModulePage(); return; }
