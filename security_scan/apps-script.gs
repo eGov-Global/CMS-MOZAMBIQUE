@@ -94,9 +94,10 @@ function _publishToPages(b, xlsxUrl) {
   // 2b) seed this module's dashboard app once (same template for every module)
   if (!_ghGet(repo, base + "/index.html", ghTok)) {
     try {
-      var html = UrlFetchApp.fetch(INDEX_RAW.replace("%REPO%", repo), { muteHttpExceptions:true }).getContentText();
+      var html = UrlFetchApp.fetch(INDEX_RAW.replace("%REPO%", repo), { muteHttpExceptions:true }).getContentText("UTF-8");
       if (html && html.indexOf("<html") >= 0)
-        _ghPut(repo, base + "/index.html", ghTok, Utilities.base64Encode(html), "security_scan: seed " + sub + " dashboard");
+        // encode the bytes as UTF-8 so non-ASCII glyphs (dashes, arrows, emoji) survive the seed
+        _ghPut(repo, base + "/index.html", ghTok, Utilities.base64Encode(html, Utilities.Charset.UTF_8), "security_scan: seed " + sub + " dashboard");
     } catch (e) {}
   }
   // 2b') seed the root redirect once: /security_scan/ -> /security_scan/ansible/
