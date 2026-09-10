@@ -14,8 +14,13 @@ const config = {
     USER_RESET: [
       { target: '#notAuthorized', cond: (context) => !shell.isWhitelisted(context) },
       { target: '#welcome' }
+    ],
+    USER_CANCEL: [
+      { target: '#notAuthorized', cond: (context) => !shell.isWhitelisted(context) },
+      { target: '#cancelSession' }
     ]
   },
+
   ...shell.config,
   states: { ...shell.config.states, pgr: pgr.config }
 };

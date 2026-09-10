@@ -1,13 +1,17 @@
 const dialog = require("./dialog.js");
+const config = require("../../env-variables.js");
 
-const GREETING_WORDS = ['hi', 'hello', 'hey', 'start', 'help', 'egov', 'voltar'];
 const MESSAGE_TYPES = ['text', 'image', 'document', 'location'];
 const RESET_GRAMMAR = [
   {
     intention: "reset",
-    recognize: ["Hello", "hello", "Hi", "hi", "egov", "start", "Start", "help", "Help", "voltar", "Voltar"],
+    recognize: config.resetWords,
   },
 ];
+const CANCEL_GRAMMAR = [{
+  intention: "cancel",
+  recognize: config.cancelWords,
+}];
 
 class InboundMessage {
   constructor(message) {
@@ -27,11 +31,15 @@ class InboundMessage {
   }
 
   isGreeting() {
-    return GREETING_WORDS.includes(this.input.trim().toLowerCase());
+    return config.resetWords.includes(this.input.trim().toLowerCase());
   }
 
   isReset() {
     return dialog.get_intention(RESET_GRAMMAR, { message: { input: this.input } }, true) === 'reset';
+  }
+
+  isCancel() {
+    return dialog.get_intention(CANCEL_GRAMMAR, { message: { input: this.input } }, true) === 'cancel';
   }
 
   getInputMessage() {

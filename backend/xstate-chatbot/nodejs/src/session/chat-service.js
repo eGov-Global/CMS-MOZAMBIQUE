@@ -36,7 +36,9 @@ class ChatService {
 
     const stateMachineService = this.getStateMachineServiceFor(chatState, inboundRequestModel);
 
-    const event = inboundRequestModel.getMessage().isReset() ? "USER_RESET" : "USER_MESSAGE";
+    const message = inboundRequestModel.getMessage();
+    const event = message.isCancel() ? "USER_CANCEL" : message.isReset() ? "USER_RESET" : "USER_MESSAGE";
+
     stateMachineService.send(event, inboundRequestModel);
   }
 

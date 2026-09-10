@@ -19,6 +19,10 @@ const envVariables = {
 
     allowedMobileNumbers: process.env.ALLOWED_MOBILE_NUMBERS || '',
 
+    resetWords: (process.env.RESET_WORDS || 'hello,hi,ola').split(',').map(word => word.trim().toLowerCase()).filter(Boolean),
+
+    cancelWords: (process.env.CANCEL_WORDS || 'cancelar,cancele,cancel').split(',').map(word => word.trim().toLowerCase()).filter(Boolean),
+
     rootTenantId: process.env.ROOT_TENANTID || 'pg',
 
     supportedLocales: process.env.SUPPORTED_LOCALES || 'en_IN',
