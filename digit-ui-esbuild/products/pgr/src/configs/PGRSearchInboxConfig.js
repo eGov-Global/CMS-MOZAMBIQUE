@@ -177,10 +177,9 @@ const PGRSearchInboxConfig = (visibilityEnabled = true) => {
                         },
                     ],
                     label: "CS_COMMON_HOME_COMPLAINTS",
-                    logoIcon: {
-                        component: "ReceiptInboxIcon",
-                        customClass: "inbox-search-icon--projects"
-                    }
+                    // No logoIcon: "ReceiptInboxIcon" only exists in the legacy
+                    // react-components set, so the v2 resolver never rendered it —
+                    // it just warned "Icon not found" on every render.
                 },
                 children: {},
                 show: true

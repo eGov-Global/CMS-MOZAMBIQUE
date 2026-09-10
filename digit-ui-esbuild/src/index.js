@@ -1,3 +1,7 @@
+// Must run before anything renders: patches removeChild/insertBefore so
+// external DOM mutation (browser translation, extensions) can no longer
+// crash React 17's commit phase. See the module for the full rationale.
+import "./domMutationGuard";
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { initLibraries } from "@egovernments/digit-ui-libraries";
