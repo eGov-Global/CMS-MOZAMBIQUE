@@ -245,6 +245,8 @@ public class PGRConstants {
 
     public static final String ROLE_CONFIDENTIAL_VIEWER = "CONFIDENTIAL_COMPLAINT_VIEWER";
 
+    public static final String ROLE_INTERNAL_MICROSERVICE = "INTERNAL_MICROSERVICE_ROLE";
+
     // Placeholder written over dynamic fields the caller isn't authorized to see in plaintext.
     public static final String MASK_SENTINEL = "****";
 
