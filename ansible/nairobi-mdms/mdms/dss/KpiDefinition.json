@@ -2784,7 +2784,7 @@
             "labelKey": "DASHBOARD_SLA_BREACHED"
           }
         ],
-        "dimensionKey": "ward_code",
+        "dimensionKey": "zone_code",
         "sortBySegment": "breached"
       },
       "rbac": {
@@ -2803,7 +2803,7 @@
           }
         ],
         "dimensions": [
-          "ward_code",
+          "zone_code",
           "sla_status_bucket"
         ]
       },
@@ -3098,7 +3098,7 @@
       "id": "cl_table_ward_open_daily",
       "viz": {
         "pii": false,
-        "kind": "line",
+        "kind": "bar",
         "group": "complaint-landscape",
         "title": "Open complaints by ward (daily)",
         "accent": "teal",
@@ -3106,7 +3106,7 @@
         "compose": null,
         "titleKey": "CMS-DASHBOARD.DASHBOARD_KPI_CL_TABLE_WARD_OPEN_DAILY",
         "valueKey": "open",
-        "dimensionKey": "ward_code"
+        "dimensionKey": "zone_code"
       },
       "rbac": {
         "visibleTo": [
@@ -3132,7 +3132,7 @@
           }
         ],
         "dimensions": [
-          "ward_code"
+          "zone_code"
         ]
       },
       "params": [
