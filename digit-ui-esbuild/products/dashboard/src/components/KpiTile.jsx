@@ -209,7 +209,7 @@ function dimensionColumns(result, viz) {
 function measureColumns(result, viz) {
   const cols = (result.columns || []).filter((c) => c.role === 'measure');
   if (cols.length) return cols;
-  const keys = viz.measureKeys || (viz.measureKey ? [viz.measureKey] : []);
+  const keys = viz.measureKeys || (viz.measureKey ? [viz.measureKey] : (viz.valueKey ? [viz.valueKey] : []));
   return keys.map((name) => ({ name }));
 }
 
