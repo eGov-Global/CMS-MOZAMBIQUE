@@ -208,7 +208,7 @@ function annotateRowsFromThresholds(rows, columns) {
   });
 }
 
-const DashboardTable = ({ columns, rows, emptyMessage }) => {
+const DashboardTable = ({ columns, rows, emptyMessage, officerNames }) => {
   // Subscribes to language/bundle changes; `language` also invalidates the
   // annotation memo so translated tag labels re-resolve on a language switch.
   const { language, i18nTick } = useDashboardT();

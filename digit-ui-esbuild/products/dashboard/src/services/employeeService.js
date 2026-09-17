@@ -51,8 +51,8 @@ export async function fetchEmployeeNamesByUuids(uuids = []) {
         const name = String(employee?.user?.name ?? "").trim();
         if (uuid && name) names[uuid] = name;
       }
-    } catch (error) {
-    // Non-fatal: unresolved uuids fall back to an opaque id in the caller.
+    } catch {
+      // Non-fatal: unresolved uuids fall back to an opaque id in the caller.
     }
   }
 
