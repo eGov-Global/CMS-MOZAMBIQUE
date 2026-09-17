@@ -3451,7 +3451,7 @@
         "measureKeys": [
           "total"
         ],
-        "dimensionKey": "ward_code",
+        "dimensionKey": "zone_code",
         "tableProfile": "wardSubtypeRecurring"
       },
       "rbac": {
@@ -3476,7 +3476,7 @@
           }
         ],
         "dimensions": [
-          "ward_code",
+          "zone_code",
           "service_code"
         ]
       },
