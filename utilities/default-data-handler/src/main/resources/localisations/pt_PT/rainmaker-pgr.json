@@ -721,7 +721,7 @@
     },
     {
         "code": "PGR_LANDING_NAV_TRAINING",
-        "message": "Formação e Ajuda",
+        "message": "Tutorial",
         "module": "rainmaker-pgr",
         "locale": "pt_PT"
     },
@@ -1554,6 +1554,36 @@
         "locale": "pt_PT"
     },
     {
+        "code": "PGR_LANDING_TAB_TITLE",
+        "message": "Fala Cidadão",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_LANDING_TUTORIAL_PAGE_TITLE",
+        "message": "Tutorial",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_LANDING_TUTORIAL_VIDEO_LABEL",
+        "message": "Como Submeter uma Reclamação (Vídeo)",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_LANDING_TUTORIAL_MANUAL_LABEL",
+        "message": "Manual de Uso (PDF)",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_LANDING_TUTORIAL_PENDING",
+        "message": "Conteúdo em preparação.",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
         "code": "COMMON_BOTTOM_NAVIGATION_COMPLAINTS",
         "message": "Fala Cidadão",
         "module": "rainmaker-pgr",
@@ -1694,6 +1724,73 @@
     {
         "code": "CS_COMPLAINT_DETAILS_COMPLAINANT_DETAILS",
         "message": "Dados do Reclamante",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {"code": "ES_PGR_FILTER_ONLY_MY_COMPLAINTS", "message": "Apenas as reclamações que registei", "module": "rainmaker-pgr", "locale": "pt_PT"},
+    {
+        "code": "PGR_RECEIPT_CLASSIFICATION",
+        "message": "Classificação",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_RECEIPT_DOWNLOAD",
+        "message": "Descarregar manifestação",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_RECEIPT_ERROR",
+        "message": "Não foi possível gerar o comprovativo. Por favor, tente novamente.",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_RECEIPT_GENERATED_ON",
+        "message": "Gerado em",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_RECEIPT_NEXT_TITLE",
+        "message": "O que acontece a seguir",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_RECEIPT_NEXT_TRACK",
+        "message": "Guarde este número de manifestação — vai precisar dele para pedir informações sobre a sua manifestação.",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_RECEIPT_NEXT_UPDATE",
+        "message": "Pode acompanhar o estado a qualquer momento em «Minhas manifestações».",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_RECEIPT_SYSTEM_GENERATED",
+        "message": "Documento gerado automaticamente pelo sistema; não requer assinatura.",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_RECEIPT_TITLE",
+        "message": "Comprovativo da Manifestação",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "WF_PGR_AWAITINGINFORMATION",
+        "message": "Aguarda informação",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "WF_PGR_COMMENT",
+        "message": "Comentário",
         "module": "rainmaker-pgr",
         "locale": "pt_PT"
     }

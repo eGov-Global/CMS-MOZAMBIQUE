@@ -7,6 +7,7 @@ import PGRAdminSearch from "./pages/employee/AdminSearch";
 import { overrideHooks, updateCustomConfigs } from "./utils";
 import { ProviderContext } from "./utils/context";
 import BoundaryComponent from "./components/BoundaryComponent";
+import OnlyMyComplaintsFilter from "./components/OnlyMyComplaintsFilter";
 import ComplaintHierarchyComponent from "./components/ComplaintHierarchyComponent";
 import PGRDatePicker from "./components/PGRDatePicker";
 import PGRDetails from "./pages/employee/PGRDetails";
@@ -36,6 +37,8 @@ import CreatePGRFlow from "./pages/citizen/Create/CreatePGRFlowV2";
 import PGRLandingEntry from "./pages/citizen/Landing/AppEntry";
 // Public privacy-policy page (shell-free), mounted by core at /<contextPath>/privacy-policy.
 import PGRPrivacyPolicyPage from "./pages/citizen/Landing/PrivacyPolicyPage";
+// Public tutorial page (shell-free), mounted by core at /<contextPath>/tutorial.
+import PGRTutorialPage from "./pages/citizen/Landing/TutorialPage";
 
 
 export const PGRReducers = getRootReducer;
@@ -108,6 +111,7 @@ const componentsToRegister = {
   PGRLinks,
   PGRCard,
   PGRBoundaryComponent: BoundaryComponent,
+  PGROnlyMyComplaintsFilter: OnlyMyComplaintsFilter,
   PGRComplaintHierarchyComponent: ComplaintHierarchyComponent,
   PGRDatePicker,
   PGRComplaintDetails: PGRDetails,
@@ -139,6 +143,7 @@ const componentsToRegister = {
   CreatePGRFlow: CreatePGRFlow,
   PGRLandingPage: PGRLandingEntry,
   PGRPrivacyPolicy: PGRPrivacyPolicyPage,
+  PGRTutorial: PGRTutorialPage,
 };
 
 export const initPGRComponents = () => {

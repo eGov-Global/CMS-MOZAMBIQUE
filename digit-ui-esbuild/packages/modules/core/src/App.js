@@ -10,6 +10,7 @@ import DummyLoaderScreen from "./components/DummyLoader";
 import SignUpV2 from "./pages/employee/SignUp-v2";
 import LoginV2 from "./pages/employee/Login-v2";
 import UnifiedLogin from "./pages/common/Login/index";
+import SessionCollisionNotice from "./components/SessionCollisionNotice";
 
 // The unified `/user/login` + `/user/sign-up` entries (and the contextPath
 // mount below) are the CITIZEN single-sign-on surface. Resolve the citizen
@@ -77,6 +78,8 @@ export const DigitApp = ({ stateCode, modules, appTenants, logoUrl, logoUrlWhite
   const PGRLandingPage = Digit?.ComponentRegistryService?.getComponent?.("PGRLandingPage");
   // Public privacy-policy page — also shell-free; linked from the landing.
   const PGRPrivacyPolicy = Digit?.ComponentRegistryService?.getComponent?.("PGRPrivacyPolicy");
+  // Public tutorial page — also shell-free; linked from the landing header.
+  const PGRTutorial = Digit?.ComponentRegistryService?.getComponent?.("PGRTutorial");
   let sourceUrl = `${window.location.origin}/citizen`;
   const commonProps = {
     stateInfo,
@@ -96,6 +99,8 @@ export const DigitApp = ({ stateCode, modules, appTenants, logoUrl, logoUrlWhite
     initData,
   };
   return (
+    <React.Fragment>
+    <SessionCollisionNotice />
     <Switch>
       {PGRLandingPage && (
         <Route exact path={`/${window?.contextPath}/landing`}>
@@ -105,6 +110,11 @@ export const DigitApp = ({ stateCode, modules, appTenants, logoUrl, logoUrlWhite
       {PGRPrivacyPolicy && (
         <Route exact path={`/${window?.contextPath}/privacy-policy`}>
           <PGRPrivacyPolicy />
+        </Route>
+      )}
+      {PGRTutorial && (
+        <Route exact path={`/${window?.contextPath}/tutorial`}>
+          <PGRTutorial />
         </Route>
       )}
      {allowedUserTypes?.some(userType=>userType=="employee")&& <Route path={`/${window?.contextPath}/employee`}>
@@ -120,6 +130,7 @@ export const DigitApp = ({ stateCode, modules, appTenants, logoUrl, logoUrlWhite
         <Redirect to={`/${window?.contextPath}/${defaultLanding}`} />
       </Route>
     </Switch>
+    </React.Fragment>
   );
 };
 

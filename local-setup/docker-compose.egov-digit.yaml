@@ -43,9 +43,14 @@ services:
     container_name: digit-grafana
     restart: unless-stopped
     environment:
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
-      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      # Login required, no anonymous. Roles: Viewer=view, Editor=+Explore,
+      # Admin=admin. Keep anonymous off (do not set grafana_anonymous_enabled).
+      GF_AUTH_ANONYMOUS_ENABLED: ${GF_ANONYMOUS_ENABLED:-false}
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      # Fail-closed: no default password; seeded from OpenBao by the playbook.
+      GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:?seeded into .env by the playbook}
       # Domain + root URL templated per tenant via /opt/digit/.env
       # (Ansible writes GF_SERVER_DOMAIN there from inventory `domain`).
       GF_SERVER_DOMAIN: ${GF_SERVER_DOMAIN:-api.egov.theflywheel.in}
@@ -55,7 +60,8 @@ services:
       - ./otel/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana
     ports:
-      - "13000:3000"
+      # loopback only; nginx fronts /grafana/ -> 127.0.0.1:13000
+      - "127.0.0.1:13000:3000"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
       interval: 10s
@@ -1651,6 +1657,7 @@ services:
       # Profile-gated stacks: keep these beside COMPOSE_PROFILES in .env.
       # Unset means off -- gatus enables an endpoint when its variable is missing.
       GATUS_PROFILE_OTP: ${GATUS_PROFILE_OTP:-false}
+      GATUS_PROFILE_MATOMO: ${GATUS_PROFILE_MATOMO:-false}
       GATUS_CONFIGURATOR: ${GATUS_CONFIGURATOR:-true}
       GATUS_PROFILE_SEARCH: ${GATUS_PROFILE_SEARCH:-false}
       GATUS_PROFILE_MCP: ${GATUS_PROFILE_MCP:-false}
@@ -2088,11 +2095,23 @@ services:
   # `docker compose up`. Opt in with `COMPOSE_PROFILES=notifications`.
   # The Ansible playbook flips this on when `enable_novu: true` in
   # host_vars.
+  #
+  # Direct mode (no novu-api at all): for deployments where novu-api can't run
+  # (e.g. resource-constrained cloud VMs), these same three services also carry
+  # the `notifications-direct` profile. Set NOVU_BRIDGE_DIRECT_CHANNELS (e.g.
+  # `SMS` or `SMS,EMAIL`) and novu-bridge delivers those channels straight to
+  # Ozeki's HTTP API / SMTP, skipping Novu entirely for them — any channel left
+  # out (and WHATSAPP always) still requires Novu. `COMPOSE_PROFILES=
+  # notifications-direct` starts only digit-config-service +
+  # digit-user-preferences-service + novu-bridge — no novu-api/novu-mongo/
+  # novu-worker/novu-ws/novu-dashboard.
   digit-config-service:
     image: egovio/digit-config-service:2.12-beta-96dcf10
     container_name: digit-config-service
     restart: unless-stopped
-    profiles: ["notifications"]
+    # notifications-direct: this service is also needed when novu-bridge runs in
+    # direct mode (NOVU_BRIDGE_DIRECT_CHANNELS) without novu-api at all.
+    profiles: ["notifications", "notifications-direct"]
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -2147,7 +2166,8 @@ services:
     image: egovio/digit-user-preferences-service:2.12-beta-96dcf10
     container_name: digit-user-preferences-service
     restart: unless-stopped
-    profiles: ["notifications"]
+    # notifications-direct: also needed for novu-bridge's direct mode (no novu-api).
+    profiles: ["notifications", "notifications-direct"]
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -2185,7 +2205,9 @@ services:
     image: ${NOVU_BRIDGE_IMAGE:-egovio/novu-bridge:2.12-beta-96dcf10}
     container_name: novu-bridge
     restart: unless-stopped
-    profiles: ["notifications"]
+    # notifications-direct: lets novu-bridge run direct-channel delivery
+    # (NOVU_BRIDGE_DIRECT_CHANNELS) without novu-api at all — see depends_on below.
+    profiles: ["notifications", "notifications-direct"]
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -2195,8 +2217,13 @@ services:
         condition: service_healthy
       digit-user-preferences-service:
         condition: service_healthy
+      # required: false — under "notifications" (novu-api included), this still
+      # waits for it healthy exactly as before. Under "notifications-direct" alone
+      # (novu-api not part of the active profile set), Compose skips the wait
+      # instead of erroring, since novu-api never starts in that profile.
       novu-api:
         condition: service_healthy
+        required: false
       otel-collector:
         condition: service_started
     volumes:
@@ -2279,6 +2306,19 @@ services:
       # to the compose .env).
       NOVU_BASE_URL: ${NOVU_BASE_URL:-http://novu-api:3000}
       NOVU_API_KEY: ${NOVU_API_KEY:-changeme}
+      # Direct delivery (bypass Novu entirely) — comma-separated channels, e.g. SMS
+      # or SMS,EMAIL. Empty (default) = no channel is direct, behavior unchanged.
+      # For deployments where novu-api can't run at all (e.g. resource-constrained
+      # cloud VMs). See novu-bridge's NovuBridgeConfiguration#isDirectChannel.
+      NOVU_BRIDGE_DIRECT_CHANNELS: ${NOVU_BRIDGE_DIRECT_CHANNELS:-}
+      OZEKI_BASE_URL: ${OZEKI_BASE_URL:-}
+      OZEKI_USERNAME: ${OZEKI_USERNAME:-}
+      OZEKI_PASSWORD: ${OZEKI_PASSWORD:-}
+      NOVU_BRIDGE_DIRECT_EMAIL_FROM: ${NOVU_BRIDGE_DIRECT_EMAIL_FROM:-}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc

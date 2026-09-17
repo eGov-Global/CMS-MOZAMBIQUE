@@ -24,6 +24,7 @@ import ComplaintPhotos from "../../components/ComplaintPhotos";
 import ComplaintLocationMap from "../../components/ComplaintLocationMap";
 import { buildExtendedAttributeRows, useExtendedAttributeOrder } from "../../components/PgrExtendedAttributesView";
 import StarRated from "../../components/timelineInstances/StarRated";
+import DownloadReceiptButton from "../../components/DownloadReceiptButton";
 
 // Terminal (non-active) states across standard PGR *and* the mz.igsae CMS workflow.
 // CANCELLED / CLOSEDAFTER* are CMS terminals; without them CANCELLED wrongly showed
@@ -141,7 +142,12 @@ function WorkflowComponent({ complaintDetails, id }) {
   // mz.igsae CMS workflow) with no hardcoded status list, replacing the legacy
   // status-ordered <TimeLine>.
   const { isLoading: isWorkFlowLoading, data: workflowData, revalidate } = Digit.Hooks.useCustomAPIHook({
-    url: "/egov-workflow-v2/egov-wf/process/_search",
+    // CRQ v2 AC-03: read the chronology through pgr-services' filtered
+    // endpoint — same response shape, but employee comments/attachments and
+    // identities are stripped SERVER-SIDE for citizens instead of only being
+    // hidden by this page. (The raw workflow API returned everything to the
+    // citizen's token.)
+    url: "/pgr-services/v2/request/_chronology",
     params: { tenantId, history: true, businessIds: id },
     changeQueryName: id,
   });
@@ -167,7 +173,11 @@ function WorkflowComponent({ complaintDetails, id }) {
   // COMMENT is excluded (no citizen page for it); REOPEN honors the idle-window.
   const current = workflowData?.ProcessInstances?.[0];
   const lastModifiedTime = complaintDetails?.service?.auditDetails?.lastModifiedTime;
-  const maxIdle = typeof complainMaxIdleTime === "number" ? complainMaxIdleTime : 3600000;
+  // Tenants with no ComplainClosingTime configured fall back to 72h, not the 1h this
+  // carried before: an hour expires while the citizen is still reading the resolution,
+  // and pgr-services' own backstop (pgr.complain.idle.time, 240h by default) is far
+  // wider — so the UI was hiding a REOPEN the backend would still have accepted.
+  const maxIdle = typeof complainMaxIdleTime === "number" ? complainMaxIdleTime : 72 * 60 * 60 * 1000;
   const reopenWindowOpen =
     typeof lastModifiedTime === "number" && Number.isFinite(lastModifiedTime) && Date.now() - lastModifiedTime < maxIdle;
   const citizenActions = (current?.nextActions || [])
@@ -220,6 +230,16 @@ function WorkflowComponent({ complaintDetails, id }) {
       // QA #19 part 1 (sheet v4): the citizen must not see which employee
       // handled the complaint — employee name + contact lines are omitted.
       hideEmployeeContacts
+      // Comments and attachments exchanged BETWEEN officers (assignment,
+      // escalation, internal notes) stay internal; the citizen sees the
+      // closing entry and their own submissions (CRQ v2 §3).
+      hideInternalNotes
+      // CRQ v2: the citizen's OWN name/number in the chronology are shown on a
+      // non-confidential complaint and masked on a confidential one.
+      maskConfidential={complaintDetails?.service?.extendedAttributes?.isConfidential === true}
+      // Who the complainant IS — the actor/complainant split matches on this
+      // uuid, not on the CITIZEN role (officers can hold it too).
+      complainantUuid={complaintDetails?.service?.citizen?.uuid || complaintDetails?.service?.accountId}
     />
   );
 }
@@ -322,6 +342,13 @@ const ComplaintDetailsPage = () => {
 
   const status = complaintDetails?.service?.applicationStatus;
 
+  // Shared by the Additional Details card and the receipt, so the printed
+  // document and the screen can never list different rows.
+  const extAttrRows = React.useMemo(
+    () => buildExtendedAttributeRows(complaintDetails?.service?.extendedAttributes, t, extAttrOrder),
+    [complaintDetails?.service?.extendedAttributes, t, extAttrOrder]
+  );
+
   return (
     <div
       className="v2-scope"
@@ -355,6 +382,11 @@ const ComplaintDetailsPage = () => {
           {tr(`${LOCALIZATION_KEY.CS_HEADER}_COMPLAINT_SUMMARY`, "Complaint Summary")}
         </h1>
         {status ? <StatusPill status={status} t={t} /> : null}
+        {!isLoading && complaintDetails?.service ? (
+          <div style={{ marginLeft: "auto" }}>
+            <DownloadReceiptButton complaintDetails={complaintDetails} />
+          </div>
+        ) : null}
       </header>
       <div
         style={{
@@ -459,7 +491,6 @@ const ComplaintDetailsPage = () => {
             {(() => {
               // Read-only "Additional Details" — just fetch service.extendedAttributes
               // and show it; the backend already returns masked ("****") values.
-              const extAttrRows = buildExtendedAttributeRows(complaintDetails?.service?.extendedAttributes, t, extAttrOrder);
               return extAttrRows.length > 0 ? (
                 <Card style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "12px" }}>
                   <SectionTitle>{tr("CS_COMPLAINT_DETAILS_ADDITIONAL_DETAILS", "Additional Details")}</SectionTitle>

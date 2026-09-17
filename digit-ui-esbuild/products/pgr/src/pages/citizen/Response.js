@@ -24,6 +24,8 @@ import { useTranslation } from "react-i18next";
 import { CheckCircle2, AlertCircle, Eye } from "lucide-react";
 import { Button, Card } from "@egovernments/digit-ui-components-v2";
 
+import DownloadReceiptButton from "../../components/DownloadReceiptButton";
+
 // PGR `_update` returns `ResponseInfo` (capital R); accept either casing.
 const hasUpdatePayload = (complaints) =>
   !!complaints?.response &&
@@ -120,6 +122,22 @@ const Response = () => {
   const wrapper = success ? complaints.response.ServiceWrappers[0] : null;
   const action = wrapper?.workflow?.action;
   const complaintId = wrapper?.service?.serviceRequestId;
+
+  // /response is ONE route serving four different outcomes — canonicalise the
+  // URL to /response/{created|reopened|rated|failed} (history.replace, once)
+  // so the outcome is an ordinary tracked pageview and a real location. A
+  // virtual pageview here double-counted the page (outcome + bare /response
+  // in the visits log); the replace coalesces to one. The flows await the
+  // update before navigating here, so the first render's redux slice is
+  // already the settled outcome. No id, no complaint data in the URL.
+  const outcome = !success ? "failed" : action === "REOPEN" ? "reopened" : action === "RATE" ? "rated" : "created";
+  React.useEffect(() => {
+    const base = `/${window?.contextPath}/citizen/pgr/response`;
+    if (history.location?.pathname === base || history.location?.pathname === `${base}/`) {
+      history.replace(`${base}/${outcome}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const headlineKey = success
     ? getActionMessageKey(action)
@@ -233,6 +251,13 @@ const Response = () => {
               <Button variant="outline" onClick={() => history.push(retryFlow)}>
                 {tr("CS_COMMON_TRY_AGAIN", "Try Again")}
               </Button>
+            ) : null}
+            {success && action !== "RATE" && complaintId ? (
+              // Only the created ServiceWrapper is in redux here, and printing
+              // that alone yields a receipt with nothing but the ID — so hand
+              // over the id and let the button load the same full record the
+              // detail page shows.
+              <DownloadReceiptButton complaintId={complaintId} tenantId={wrapper?.service?.tenantId} />
             ) : null}
             <Link to={goHome} style={{ textDecoration: "none" }}>
               <Button>{tr("CORE_COMMON_GO_TO_HOME", "Go to Home")}</Button>

@@ -8,6 +8,8 @@ import { convertEpochFormateToDate } from "../../utils";
 import TimelineWrapper from "../../components/TimeLineWrapper";
 import PGRWorkflowModal from "../../components/PGRWorkflowModal";
 import ComplaintLocationMap from "../../components/ComplaintLocationMap";
+import { useQuery } from "react-query";
+import { Request } from "@egovernments/digit-ui-libraries";
 import Urls from "../../utils/urls";
 import ComplaintPhotos from "../../components/ComplaintPhotos";
 import { buildExtendedAttributeRows, useExtendedAttributeOrder } from "../../components/PgrExtendedAttributesView";
@@ -15,6 +17,8 @@ import { buildComplaintPath } from "../../utils/complaintHierarchyPath";
 import { selectServiceDefsFromComplaintHierarchy } from "../../utils";
 import useReopenWindow from "../../hooks/pgr/useReopenWindow";
 import { findLatestAssigneeUuidByRole } from "../../utils/workflowAssignee";
+import { returnToHandlerRole } from "../../utils/returnToHandler";
+import { EV, trackE } from "../../utils/analytics";
 
 // CCSD-2167 (employee side) — route-back / terminal actions derive their
 // assignee from the complaint's OWN workflow history, exactly like the citizen
@@ -57,7 +61,7 @@ const parseAdditionalDetail = (ad) => {
   return {};
 };
 
-const buildActionFormConfig = ({ action, assigneeRoles = [], isTerminal = false, docUploadRequired = false, assigneeMandatory }) => {
+const buildActionFormConfig = ({ action, fromState, assigneeRoles = [], isTerminal = false, docUploadRequired = false, assigneeMandatory }) => {
   const body = [];
   // QA #23 (sheet v4 follow-up): the REJECT modal carries NO dropdowns at all —
   // no assignee (below) and no rejection-reason picker (removed per product
@@ -71,7 +75,12 @@ const buildActionFormConfig = ({ action, assigneeRoles = [], isTerminal = false,
   // complaint waits on the CITIZEN, so picking a "next level user" makes no
   // sense and mis-assigned it to another case manager. No assignee here either.
   const NO_ASSIGNEE_ACTIONS = ["REJECT", "AWAITINGINFORMATION"];
-  if (!NO_ASSIGNEE_ACTIONS.includes(action) && !isTerminal && (assigneeRoles?.length || 0) > 0) {
+  // FC-0002: recording the citizen's answer (INFOFROMCITIZEN -> INVESTIGATION)
+  // returns the case to the case manager who asked — no picker; the assignee is
+  // derived from history on submit (see returnToHandler.js). Comment and
+  // attachment fields are untouched.
+  const returnsToHandler = !!returnToHandlerRole(action, fromState);
+  if (!NO_ASSIGNEE_ACTIONS.includes(action) && !returnsToHandler && !isTerminal && (assigneeRoles?.length || 0) > 0) {
     body.push({
       type: "component",
       // Callers pass assigneeMandatory (dept-mapping + actor aware); default
@@ -201,10 +210,33 @@ const PGRDetails = () => {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const searchCreatedBy = queryParams.get("createdBy");
-  const { isLoading, isError, error, data: pgrData, revalidate: pgrSearchRevalidate } = Digit.Hooks.pgr.usePGRSearch(
+  // Arrived from the admin search? That endpoint is cross-department while the
+  // default /v2/request/_search is scoped to the viewer, so a result outside
+  // their own scope would resolve to nothing here. Query the same endpoint the
+  // row came from. AdminSearch stamps `src=admin` on the link it builds.
+  const fromAdminSearch = queryParams.get("src") === "admin";
+
+  // Signature is (searchparams, tenantId, filters, config) — the react-query
+  // config is the FOURTH arg; passing it third would land in `filters`.
+  const pgrSearch = Digit.Hooks.pgr.usePGRSearch(
     { serviceRequestId: id, ...(searchCreatedBy ? { createdBy: searchCreatedBy } : {}) },
-    tenantId
+    tenantId,
+    undefined,
+    { enabled: !fromAdminSearch }
   );
+
+  const adminSearch = useQuery(
+    ["pgr-admin-detail", tenantId, id],
+    () => Request({ url: Urls.pgr.adminSearch, method: "POST", auth: true, userService: true, useCache: false,
+                    params: { tenantId, serviceRequestId: id } }),
+    { enabled: fromAdminSearch, retry: false, staleTime: 0, cacheTime: 0 }
+  );
+
+  const isLoading = fromAdminSearch ? adminSearch.isLoading : pgrSearch.isLoading;
+  const isError = fromAdminSearch ? adminSearch.isError : pgrSearch.isError;
+  const error = fromAdminSearch ? adminSearch.error : pgrSearch.error;
+  const pgrData = fromAdminSearch ? adminSearch.data : pgrSearch.data;
+  const pgrSearchRevalidate = fromAdminSearch ? adminSearch.refetch : pgrSearch.revalidate;
   // CCSD-2123: schema x-order for the Additional Details rows (complainantName
   // pinned first inside buildExtendedAttributeRows regardless).
   const extAttrOrder = useExtendedAttributeOrder(pgrData?.ServiceWrappers?.[0]?.service?.extendedAttributes);
@@ -361,7 +393,11 @@ const PGRDetails = () => {
     // the assignee from the complaint's workflow history by role — the person
     // who previously handled it — unless the officer explicitly picked someone.
     const pickedUuid = _data?.SelectedAssignee?.uuid || null;
-    const derivedRole = HISTORY_DERIVED_ASSIGNEE_ROLE[selectedAction.action];
+    // FC-0002: on the return from INFOFROMCITIZEN there is no picker at all, so
+    // the case manager who asked the question is always derived from history.
+    const derivedRole =
+      HISTORY_DERIVED_ASSIGNEE_ROLE[selectedAction.action] ||
+      returnToHandlerRole(selectedAction.action, selectedAction.fromState);
     let assigneeUuid = pickedUuid;
     if (!pickedUuid && derivedRole) {
       // Search history at the COMPLAINT's tenant: its process instances live
@@ -402,13 +438,21 @@ const PGRDetails = () => {
   // Handle response after updating complaint
   const handleResponseForUpdateComplaint = async (payload) => {
     setOpenModal(false);
+    // Analytics label: the workflow ACTION code only (ASSIGN/RESOLVE/…) — a
+    // bounded vocabulary, never the comment, assignee or complaint id.
+    const actionCode = payload?.workflow?.action || "";
     await UpdateComplaintMutation(payload, {
-      onError: () => setToast({ show: true, label: t("FAILED_TO_UPDATE_COMPLAINT"), type: "error" }),
+      onError: () => {
+        trackE(EV.WORKFLOW_FAILED, actionCode);
+        setToast({ show: true, label: t("FAILED_TO_UPDATE_COMPLAINT"), type: "error" });
+      },
       onSuccess: async (responseData) => {
         const msg = payload.workflow.action || "RESOLVE";
         if (responseData?.ResponseInfo?.Errors) {
+          trackE(EV.WORKFLOW_FAILED, actionCode);
           setToast({ show: true, label: t("FAILED_TO_UPDATE_COMPLAINT"), type: "error" });
         } else {
+          trackE(EV.WORKFLOW_COMPLETED, actionCode);
           setToast({ show: true, label: t(`${msg}_SUCCESSFULLY`), type: "success" });
           await refreshData();
           clearSessionFormData();
@@ -513,6 +557,10 @@ const PGRDetails = () => {
             // timeline labels ("Rejected"), which read as states in an action menu.
             name: action.action,
             roles: action.roles,
+            // The state this action leaves FROM: some actions (COMMENT) exist in
+            // several states with different meanings, so the modal and the
+            // submit need the origin, not just the action name.
+            fromState: matchingState.state,
             nextState: action.nextState,
             assigneeRoles: computeAssigneeRoles(action.nextState, businessServiceResponse),
             isTerminal: !!nextStateData?.isTerminateState,
@@ -578,7 +626,13 @@ const PGRDetails = () => {
   // Same sentinel the backend emits, so masked rows look identical whichever
   // side did the masking.
   const CONFIDENTIAL_MASK = "****";
-  const maskIfConfidential = (value) => (isConfidentialComplaint ? CONFIDENTIAL_MASK : value);
+  // CRQ v2 AC-07: a CONFIDENTIAL_COMPLAINT_VIEWER sees the complainant's
+  // identity in clear even on a confidential complaint (display layer; the
+  // API-level gate on extendedAttributes already honours the same role).
+  const isConfidentialViewer = (Digit.UserService.getUser()?.info?.roles || []).some(
+    (r) => (r?.code || r) === "CONFIDENTIAL_COMPLAINT_VIEWER"
+  );
+  const maskIfConfidential = (value) => (isConfidentialComplaint && !isConfidentialViewer ? CONFIDENTIAL_MASK : value);
 
   return (
     <div className="v2-pgr-details v2-scope">
@@ -803,12 +857,12 @@ const PGRDetails = () => {
                         businessId={id}
                         labelPrefix="WF_PGR_"
                         tenantId={complaintTenantId}
-                        // CCSD-1971 (B4): confidential complaints hide the
-                        // citizen's identity from the employee timeline.
+                        // CRQ v2 §4: the citizen's identity in the chronology
+                        // follows the confidentiality flag (viewer role sees it
+                        // in clear); employee identities render in clear on the
+                        // employee timeline (supersedes QA #19's masking).
                         maskConfidential={!!pgrData?.ServiceWrappers?.[0]?.service?.extendedAttributes?.isConfidential}
-                        // QA #19: employee-side timeline masks employee names +
-                        // contact numbers (mask, not remove).
-                        maskEmployeeContacts
+                        complainantUuid={pgrData?.ServiceWrappers?.[0]?.service?.citizen?.uuid || pgrData?.ServiceWrappers?.[0]?.service?.accountId}
                       />
                     ),
                   },
@@ -838,7 +892,6 @@ const PGRDetails = () => {
               key="action-button"
               label={t("ES_COMMON_TAKE_ACTION")}
               onOptionSelect={(selected) => {
-                console.log("*** Log ===> selected", selected);
                 if (selected.action === "REOPEN") {
                   const lastModifiedTime = pgrData?.ServiceWrappers?.[0]?.service?.auditDetails?.lastModifiedTime;
                   if (reopenWindowMs && lastModifiedTime && Date.now() - lastModifiedTime > reopenWindowMs) {
@@ -852,6 +905,7 @@ const PGRDetails = () => {
                 }
                 setSelectedAction(selected);
                 setOpenModal(true);
+                trackE(EV.WORKFLOW_OPENED, selected?.action || "");
               }}
               options={getNextActionOptions(workflowData, businessServiceData?.BusinessServices?.[0])}
               optionsKey="name"

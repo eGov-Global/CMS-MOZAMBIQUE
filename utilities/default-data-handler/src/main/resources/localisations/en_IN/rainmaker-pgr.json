@@ -7507,7 +7507,7 @@
     },
     {
         "code": "PGR_LANDING_NAV_TRAINING",
-        "message": "Training & Help",
+        "message": "Tutorial",
         "module": "rainmaker-pgr",
         "locale": "en_IN"
     },
@@ -8184,6 +8184,36 @@
         "locale": "en_IN"
     },
     {
+        "code": "PGR_LANDING_TAB_TITLE",
+        "message": "Fala Cidadão",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_LANDING_TUTORIAL_PAGE_TITLE",
+        "message": "Tutorial",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_LANDING_TUTORIAL_VIDEO_LABEL",
+        "message": "How to Submit a Complaint (Video)",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_LANDING_TUTORIAL_MANUAL_LABEL",
+        "message": "User Manual (PDF)",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_LANDING_TUTORIAL_PENDING",
+        "message": "Content coming soon.",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
         "code": "PGR_CONSENT_SECTION_MANDATORY",
         "message": "MANDATORY",
         "module": "rainmaker-pgr",
@@ -8258,6 +8288,73 @@
     {
         "code": "CS_COMPLAINT_DETAILS_COMPLAINANT_DETAILS",
         "message": "Complainant Details",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {"code": "ES_PGR_FILTER_ONLY_MY_COMPLAINTS", "message": "Only complaints I created", "module": "rainmaker-pgr", "locale": "en_IN"},
+    {
+        "code": "PGR_RECEIPT_CLASSIFICATION",
+        "message": "Classification",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_RECEIPT_DOWNLOAD",
+        "message": "Download Application",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_RECEIPT_ERROR",
+        "message": "Could not generate the receipt. Please try again.",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_RECEIPT_GENERATED_ON",
+        "message": "Generated on",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_RECEIPT_NEXT_TITLE",
+        "message": "What happens next",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_RECEIPT_NEXT_TRACK",
+        "message": "Keep this complaint number — you need it to ask about your complaint.",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_RECEIPT_NEXT_UPDATE",
+        "message": "You can track the status any time under My Complaints.",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_RECEIPT_SYSTEM_GENERATED",
+        "message": "This is a system-generated document and does not require a signature.",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_RECEIPT_TITLE",
+        "message": "Complaint Receipt",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "WF_PGR_AWAITINGINFORMATION",
+        "message": "Awaiting Information",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "WF_PGR_COMMENT",
+        "message": "Comment",
         "module": "rainmaker-pgr",
         "locale": "en_IN"
     }

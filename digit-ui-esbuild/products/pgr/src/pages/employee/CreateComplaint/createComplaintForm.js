@@ -18,7 +18,6 @@ import { useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
 import { formPayloadToCreateComplaint } from "../../../utils";
 import { fieldsFromSchema, deriveCaseRelatedTo } from "../../../utils/extendedAttributes";
-import { isPostalCodeValid, getPostalCodeErrorMessage } from "../../../utils/postalCode";
 
 const CreateComplaintForm = ({
   createComplaintConfig,      // Form configuration for Create Complaint screen
@@ -104,9 +103,17 @@ const CreateComplaintForm = ({
   // token doesn't carry the department, so look it up from HRMS by the
   // current user's uuid (same source AssigneeComponent uses).
   const hrmsContext = window?.globalConfigs?.getConfig?.("HRMS_CONTEXT_PATH") || "egov-hrms";
+  // Same rationale as AssigneeComponent: this is the logged-in user's own
+  // record, which cannot change mid-session, so the 1s/5s defaults only cost
+  // repeat fetches on every remount of the create form.
   const { data: currentEmployeeData } = Digit.Hooks.useCustomAPIHook({
     url: `/${hrmsContext}/employees/_search`,
     params: { tenantId, uuids: user?.info?.uuid },
+    changeQueryName: `hrms-current-employee-${user?.info?.uuid}`,
+    options: {
+      staleTime: 5 * 60 * 1000,
+      cacheTime: 10 * 60 * 1000,
+    },
     config: { enabled: !!user?.info?.uuid },
   });
   // All departments the logged-in employee is actively assigned to. A user
@@ -369,21 +376,6 @@ const CreateComplaintForm = ({
               disable: disabledFields[field.populators.name],
             }];
           }
-          if (fname === "postalCode") {
-            // Show the SAME dynamic, length-aware message the citizen flows
-            // show ("Please enter a valid 4-digit postal code" on a 4-digit
-            // tenant) instead of the static generic key the raw config
-            // carries. getPostalCodeErrorMessage(t) returns final localized
-            // text; FieldV1 passes it through t() again, which echoes an
-            // unknown key back verbatim, so the text survives untouched.
-            return [{
-              ...field,
-              populators: {
-                ...field.populators,
-                error: getPostalCodeErrorMessage(t),
-              },
-            }];
-          }
           return [field];
         }),
       };
@@ -458,14 +450,15 @@ const CreateComplaintForm = ({
   // actually changes — preventing the infinite render loop that trigger() causes
   // (trigger → errors change → re-render → watch() new ref → useEffect fires → loop).
   const mobileErrorRef = useRef(null);
-  // Same guard for the postal-code field's real-time validation.
-  const postalErrorRef = useRef(null);
 
   // Track whether every isMandatory field in the live config has a
   // non-empty value, so we can gate the SUBMIT button. FormComposerV2
   // doesn't auto-disable submit on its own — earlier the button was
   // active even on a completely blank form.
   const [submitDisabled, setSubmitDisabled] = useState(true);
+  // True from the moment a create is fired until it settles, so the
+  // submit button cannot file the same complaint twice.
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const requiredFieldKeys = useMemo(() => {
     const keys = [];
     (updatedConfig?.form ?? []).forEach((section) => {
@@ -531,22 +524,6 @@ const CreateComplaintForm = ({
       mobileErrorRef.current = null;
     }
 
-    // Real-time postal validation, same guarded setError/clearErrors pattern
-    // as the mobile field above (react-hook-form 6 is mode:"onSubmit", so
-    // the field's own `validate` rule only fires on submit — this surfaces
-    // the SAME error while the user types). The message text comes from the
-    // field's populators.error, which updatedConfig set to the dynamic,
-    // length-aware getPostalCodeErrorMessage(t). Optional field: empty is
-    // never an error.
-    const pc = String(formData?.postalCode ?? "").trim();
-    const postalInvalid = pc.length > 0 && !isPostalCodeValid(pc);
-    if (postalInvalid && postalErrorRef.current !== "invalid") {
-      setError?.("postalCode", { type: "validate" });
-      postalErrorRef.current = "invalid";
-    } else if (!postalInvalid && postalErrorRef.current === "invalid") {
-      clearErrors?.("postalCode");
-      postalErrorRef.current = null;
-    }
 
     // The flat Type→Sub-Type cascade only applies to the legacy dropdowns.
     // When the hierarchy component is active it owns both fields, so skip this
@@ -658,6 +635,10 @@ const CreateComplaintForm = ({
   const submittedRef = useRef(false);
 
   const onFormSubmit = (_data) => {
+    // A second submit while the first is still in flight would create a
+    // duplicate complaint — common on slow connections where the button
+    // stays visible for several seconds.
+    if (isSubmitting) return;
     if (!isBoundaryLeaf(_data?.SelectedBoundary)) {
       setToast({
         show: true,
@@ -665,24 +646,6 @@ const CreateComplaintForm = ({
         type: "error",
       });
       return;
-    }
-    // Postal pattern check. Optional field; only enforce format when filled.
-    // Kept as an explicit submit-time check (in addition to the config-level
-    // `validation.pattern`) so a mangled or programmatically-set value can
-    // never slip past field-level validation. Closes
-    // egovernments/CCRS#478 — postal validation message, CSR path.
-    // Pattern + message are both config-driven per tenant (CCRS#722) — see
-    // utils/postalCode.js.
-    if (_data?.postalCode != null && String(_data.postalCode).trim().length > 0) {
-      const pc = String(_data.postalCode).trim();
-      if (!isPostalCodeValid(pc)) {
-        setToast({
-          show: true,
-          label: getPostalCodeErrorMessage(t),
-          type: "error",
-        });
-        return;
-      }
     }
     const payload = formPayloadToCreateComplaint(_data, tenantId, user?.info, {
       caseRelatedTo,
@@ -705,14 +668,19 @@ const CreateComplaintForm = ({
     const dropDraft = () => {
       clearSessionFormData();
     };
+    setIsSubmitting(true);
     await CreateComplaintMutation(payload, {
       onError: async () => {
         dropDraft();
+        // Re-enable: the operator must be able to correct and resubmit.
+        setIsSubmitting(false);
         setToast({ show: true, label: t("FAILED_TO_CREATE_COMPLAINT"), type: "error" });
       },
       onSuccess: async (responseData) => {
         if (responseData?.ResponseInfo?.Errors) {
           dropDraft();
+          // Re-enable: the operator must be able to correct and resubmit.
+          setIsSubmitting(false);
           setToast({ show: true, label: t("FAILED_TO_CREATE_COMPLAINT"), type: "error" });
         } else {
           // Clear both the sessionStorage cache and the in-memory form
@@ -764,7 +732,7 @@ const CreateComplaintForm = ({
         config={updatedConfig?.form}
         className="custom-form"
         onFormValueChange={onFormValueChange}
-        isDisabled={submitDisabled}
+        isDisabled={submitDisabled || isSubmitting}
         label={t("CS_COMMON_SUBMIT")}
       />
 

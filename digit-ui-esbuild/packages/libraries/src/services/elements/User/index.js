@@ -3,6 +3,7 @@ import { Request, ServiceRequest } from "../../atoms/Utils/Request";
 import { Storage } from "../../atoms/Utils/Storage";
 import { getAuthAdapter } from "../../auth/index";
 import { isKeycloakAuth } from "../../auth/authSurface";
+import { rememberSessionExpiry, isSessionExpired } from "../../atoms/Utils/authSession";
 
 export const UserService = {
   authenticate: async (details) => {
@@ -63,19 +64,40 @@ export const UserService = {
     return Digit.SessionStorage.get("User");
   },
   logout: async () => {
+    // Behaviour analytics: ONE central point for every logout button in the
+    // app. The shim (public/analytics.js) is loaded by index.html and may be
+    // absent — never assume it exists, never block logout on it.
+    try {
+      window?.DigitAnalytics?.trackEvent?.("Authentication.LoggedOut", {
+        category: "Authentication",
+        action: "LoggedOut",
+        label: UserService.getType() || "",
+      });
+    } catch (e) {
+      /* analytics must never break logout */
+    }
     if (isKeycloakAuth()) {
       const adapter = getAuthAdapter();
       return adapter.logout();
     }
 
-    const userType = UserService.getType();
-    // Capture userType BEFORE we clear storage. The redirect URL has
-    // to be the explicit `/citizen/login` (not `/citizen`) — landing
-    // on the bare `/citizen` after a localStorage.clear leaves the
-    // App router with no userType to resolve from, and it falls back
-    // to the employee language-selection screen, which is the wrong
-    // "you've been logged out" landing for a citizen session.
-    const logoutRedirectURL = window?.globalConfigs?.getConfig("LOGOUT_REDIRECT_URL") || `/${window?.contextPath}/${userType === "citizen" ? "citizen/login" : "employee/user/language-selection"}`;
+    // The destination must come from the app the user is actually in — the
+    // URL — never from the stored "userType". That key is one shared
+    // localStorage entry for both apps on the origin, only some employee
+    // flows ever write it, the citizen app never does, and every logout
+    // wipes it; in practice it routinely holds the OTHER app's value or
+    // nothing at all, which sent employees to the citizen login and
+    // citizens to the employee language-selection screen (reproduced on
+    // UAT: a clean EMP001 session had no userType key, so getType()
+    // defaulted to "citizen" and logout landed on /citizen/login).
+    //
+    // The paths stay explicit (`/citizen/login`, not bare `/citizen`):
+    // after localStorage.clear the App router has no userType to resolve
+    // from and falls back to the employee language-selection screen.
+    const isEmployee = window?.location?.pathname?.split("/").includes("employee");
+    const logoutRedirectURL =
+      window?.globalConfigs?.getConfig("LOGOUT_REDIRECT_URL") ||
+      `/${window?.contextPath}/${isEmployee ? "employee/user/language-selection" : "citizen/login"}`;
     try {
       await UserService.logoutUser();
     } catch (e) {
@@ -95,8 +117,15 @@ export const UserService = {
       params: { tenantId: stateCode },
     }),
   setUser: (data) => {
+    // Record when this session's token dies (oauth expires_in was previously
+    // discarded), so long flows can check BEFORE an expensive submit instead
+    // of discovering the expiry via a failed call.
+    rememberSessionExpiry(data);
     return Digit.SessionStorage.set("User", data);
   },
+  // false when unknown (pre-existing sessions / responses without expires_in) —
+  // callers must treat "expired" as certain and "not expired" as best-effort.
+  isSessionExpired: () => isSessionExpired(),
   setExtraRoleDetails: (data) => {
     const userDetails = Digit.SessionStorage.get("User");
     return Digit.SessionStorage.set("User", { ...userDetails, extraRoleInfo: data });
@@ -138,6 +167,23 @@ export const UserService = {
         ...details,
       },
       auth: true,
+      params: { tenantId: stateCode },
+    }),
+  // Forgot-password reset. The OTP-based endpoint is the only one that fits a
+  // user who cannot log in, so it must not depend on session state: a browser
+  // that held an earlier (often expired) employee session still carries a
+  // `User.info` after boot recovery, which made `changePassword` above pick
+  // the logged-in `/user/password/_update` and fail with 400 on UAT. No auth
+  // token is attached — the route is on the gateway's open whitelist and the
+  // service authenticates the caller with the OTP.
+  changePasswordNoLogin: (details, stateCode) =>
+    ServiceRequest({
+      serviceName: "changePasswordNoLogin",
+      url: Urls.ChangePassword,
+      data: {
+        ...details,
+      },
+      auth: false,
       params: { tenantId: stateCode },
     }),
 

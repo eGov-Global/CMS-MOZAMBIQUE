@@ -22,11 +22,11 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { complaintLabel } from "../../../utils/complaintLabel";
 import { isVisibleOnEntrance } from "../../../utils/testingTenant";
+import { EV, trackE, failureName } from "../../../utils/analytics";
 import PGRDatePicker from "../../../components/PGRDatePicker";
 import PgrFileUpload from "../../../components/PgrFileUpload";
-import { isPostalCodeValid, getPostalCodeErrorMessage, isPostalCodeNumeric } from "../../../utils/postalCode";
 import { useDispatch } from "react-redux";
-import { useHistory } from "react-router-dom";
+import { useHistory, useLocation } from "react-router-dom";
 import { useQueryClient } from "react-query";
 
 import {
@@ -120,7 +120,6 @@ interface FormData {
   SelectSubComplaintType?: ServiceDef | null;
   GeoLocationsPoint?: GeoPoint | null;
   landmark?: string;
-  postalCode?: string;
   SelectedBoundary?: BoundaryNode | null;
   description?: string;
   ComplaintImagesPoint?: string[]; // fileStoreIds
@@ -246,13 +245,20 @@ interface StepShellProps {
 // Consolidated 3-step wizard (was 6 screens). Each step groups what used to be
 // separate screens so the citizen reaches Submit in far fewer taps:
 //   complaint — "what is it about?" (related-to dispatcher) + the complaint type
-//   where     — map pin + ward (auto-cascaded from the pin) + landmark/postal
+//   where     — map pin + ward (auto-cascaded from the pin) + landmark
 //   details   — description + dynamic category fields + photos + consents → submit
 const STEPS = [
   { id: "complaint", title: "Complaint", sub: "Tell us about the issue" },
   { id: "where", title: "Location", sub: "Where did it happen?" },
   { id: "details", title: "Details", sub: "Additional information" },
 ] as const;
+
+// URL segment per step — every tab is a real, unique, deep-linkable route:
+//   /citizen/pgr/create-complaint/complaint-type | /location | /details
+// The URL is the single source of truth for the current step: browser
+// back/forward move between steps, a mid-flow F5 reopens the same step, and
+// analytics sees ordinary route pageviews (no virtual-pageview special case).
+const STEP_SLUGS = ["complaint-type", "location", "details"] as const;
 
 // Session-draft key for the whole wizard. All 3 steps live on ONE route with
 // plain component state, so a refresh (or leaving and re-entering the route)
@@ -389,7 +395,6 @@ function mapFormDataToRequest(formData: FormData, tenantId: string, user: any, d
         landmark: validateString(formData?.landmark),
         buildingName: "",
         street: "",
-        pincode: validateString(formData?.postalCode),
         locality: {
           // SelectedBoundary FIRST: it is the confirmed cascade value (a real
           // boundary-tree code, and the user's manual correction when they
@@ -903,16 +908,12 @@ function Step1Map({ data, patch, t }: StepBodyProps) {
             withoutLabel: true,
             // Map height tuned to balance the Location-details pane once the mz
             // boundary cascade is expanded (Província → Distrito → Município +
-            // postal + landmark + tip ≈ this tall). Citizen flow only; the shared
+            // landmark + tip ≈ this tall). Citizen flow only; the shared
             // component otherwise fills calc(100vh-400px).
             mapHeight: "520px",
           }}
           formData={data}
           onSelect={(_key: string, value: GeoPoint) => {
-            // Postal code is NOT mirrored from the pin: geocoder pincodes come in
-            // foreign formats ("0101-03") that fail the tenant's pattern and block
-            // NEXT with a validation error the citizen never typed. The field is
-            // optional — leave it to manual entry only.
             patch({ GeoLocationsPoint: value });
           }}
         />
@@ -952,14 +953,6 @@ function Step2Location({ data, patch, resolvedTenant, t }: StepBodyProps) {
   const wardHint = data?.GeoLocationsPoint?.ward;
   const wardFromMap = !!(wardHint?.code || wardHint?.name);
 
-  // Optional postal code (master's field, ported to moz's formData model on the
-  // master->moz merge). moz deliberately does NOT mirror it from the map pin
-  // (see the GeoLocationsPoint onSelect note below), so it is purely the manual
-  // entry; validate only when something was typed, via the shared
-  // isPostalCodeValid() so this can't drift from the employee form / payload.
-  const effectivePincode = data?.postalCode ?? "";
-  const showPostalError = effectivePincode.length > 0 && !isPostalCodeValid(effectivePincode);
-
   return (
     <div>
       <SectionHeader
@@ -985,34 +978,12 @@ function Step2Location({ data, patch, resolvedTenant, t }: StepBodyProps) {
         )}
 
         <Field
-          label={t("CS_COMPLAINT_POSTALCODE__DETAILS")}
-          htmlFor="postal-code"
-          error={showPostalError ? getPostalCodeErrorMessage(t) : undefined}
-        >
-          <Input
-            id="postal-code"
-            type="text"
-            // Numeric keyboard hint only when the configured pattern is
-            // digit-only (KE 5, MZ 4, IN 6 — every real deployment today);
-            // alnum/dash tenants (UK / US 5+4 examples in _example.yml) get
-            // the full keyboard their pattern needs. No keystroke filtering
-            // either way — the shared validator is the sole gate, so input
-            // is never mangled before it reaches isPostalCodeValid().
-            inputMode={isPostalCodeNumeric() ? "numeric" : "text"}
-            pattern={isPostalCodeNumeric() ? "[0-9]*" : undefined}
-            maxLength={16}
-            invalid={showPostalError}
-            value={effectivePincode}
-            onChange={(e) => patch({ postalCode: e.target.value })}
-          />
-        </Field>
-
-        <Field
           label={tr(t, "CS_COMPLAINT_LANDMARK__DETAILS", "Landmark") + " " + tr(t, "CS_OPTIONAL_SUFFIX", "(Optional)")}
           htmlFor="landmark"
         >
           <Input
             id="landmark"
+            data-matomo-mask
             placeholder={tr(t, "CS_LANDMARK_PLACEHOLDER", "e.g. Near Jamia Mosque, Next to Central Market")}
             maxLength={64}
             value={data.landmark ?? ""}
@@ -1071,6 +1042,7 @@ function Step3Description({ data, patch, templateFields, t }: StepBodyProps) {
         >
           <Textarea
             id="complaint-description"
+            data-matomo-mask
             placeholder={tr(t, "CS_DESCRIBE_THE_ISSUE_PLACEHOLDER", "Describe the issue in your own words…")}
             maxLength={1000}
             value={data.description ?? ""}
@@ -1118,6 +1090,7 @@ function Step3Description({ data, patch, templateFields, t }: StepBodyProps) {
               {f.dataType === "textarea" ? (
                 <Textarea
                   id={`xf-${f.fieldKey}`}
+                  data-matomo-mask
                   maxLength={f.maxLength}
                   value={val}
                   onChange={(e) => setDyn(f.fieldKey, e.target.value)}
@@ -1142,6 +1115,7 @@ function Step3Description({ data, patch, templateFields, t }: StepBodyProps) {
               ) : (
                 <Input
                   id={`xf-${f.fieldKey}`}
+                  data-matomo-mask
                   type={f.dataType === "number" ? "number" : "text"}
                   maxLength={f.dataType === "number" ? undefined : f.maxLength}
                   value={val}
@@ -1407,6 +1381,7 @@ function ReporterDetailsCard({ data, patch, t }: StepBodyProps) {
       <Field label={tr(t, "CS_REPORTER_FULL_NAME_LABEL", "Full Name")} htmlFor="reporter-name">
         <Input
           id="reporter-name"
+          data-matomo-mask
           maxLength={128}
           value={data.complainantName ?? ""}
           onChange={(e) => patch({ complainantName: e.target.value })}
@@ -1416,6 +1391,7 @@ function ReporterDetailsCard({ data, patch, t }: StepBodyProps) {
       <Field label={tr(t, "CS_REPORTER_ADDRESS_LABEL", "Address")} htmlFor="reporter-address">
         <Input
           id="reporter-address"
+          data-matomo-mask
           maxLength={300}
           value={data.complainantAddress ?? ""}
           onChange={(e) => patch({ complainantAddress: e.target.value })}
@@ -1425,6 +1401,7 @@ function ReporterDetailsCard({ data, patch, t }: StepBodyProps) {
       <Field label={tr(t, "PGR_EXT_EMAIL_LABEL", "Email Address")} htmlFor="reporter-email">
         <Input
           id="reporter-email"
+            data-matomo-mask
           type="email"
           value={data.email ?? ""}
           onChange={(e) => patch({ email: e.target.value })}
@@ -1592,7 +1569,6 @@ const CreatePGRFlowV2: React.FC = () => {
   const stateTenant =
     Digit.ULBService.getStateId() ||
     (baseTenant ? String(baseTenant).split(".")[0] : baseTenant);
-  const tenants: any = Digit.Hooks.pgr.useTenants();
 
   // Seed from the session draft ONLY on a document reload (mid-flow F5) so the
   // citizen doesn't lose their answers to an accidental refresh. Every other
@@ -1615,14 +1591,45 @@ const CreatePGRFlowV2: React.FC = () => {
       savedDraftRef.current = {};
     }
   }
-  const [stepIndex, setStepIndex] = React.useState(() => {
-    // Position restores ONLY right after a document reload (see
-    // RESTORE_STEP_ARMED); every other entry starts on step 1.
-    if (!RESTORE_STEP_ARMED) return 0;
-    RESTORE_STEP_ARMED = false;
-    const saved = Number(savedDraftRef.current.stepIndex);
-    return Number.isInteger(saved) ? Math.min(Math.max(saved, 0), STEPS.length - 1) : 0;
-  });
+  // The step is DERIVED FROM THE URL — each tab is its own route (STEP_SLUGS).
+  // On a document reload the URL itself preserves the position (this
+  // supersedes the old draft.stepIndex restore); a fresh (non-reload) entry
+  // whose URL points past step 1 is normalised back to step 1, because its
+  // answers were just discarded by the draft block above.
+  const location = useLocation();
+  const basePath = `/${window?.contextPath || "digit-ui"}/citizen/pgr/create-complaint`;
+  const urlSlug = location.pathname.startsWith(basePath)
+    ? location.pathname.slice(basePath.length).replace(/^\//, "").split("/")[0] || ""
+    : "";
+  const urlIndex = (STEP_SLUGS as readonly string[]).indexOf(urlSlug);
+  const stepIndex = urlIndex === -1 ? 0 : urlIndex;
+  // Consume the reload flag (the draft block above already read it): later
+  // SPA re-entries within this document must start clean.
+  const freshEntryRef = React.useRef(!RESTORE_STEP_ARMED);
+  RESTORE_STEP_ARMED = false;
+  const goToStep = React.useCallback(
+    (i: number, replace?: boolean) => {
+      const bounded = Math.min(Math.max(i, 0), STEPS.length - 1);
+      const to = `${basePath}/${STEP_SLUGS[bounded]}`;
+      if (replace) history.replace(to);
+      else history.push(to);
+    },
+    [history, basePath]
+  );
+  // Canonicalise: bare /create-complaint (or an unknown segment) becomes step
+  // 1's URL, and a fresh entry may not START past step 1.
+  React.useEffect(() => {
+    if (urlIndex === -1) {
+      goToStep(0, true);
+      return;
+    }
+    if (urlIndex > 0 && freshEntryRef.current) {
+      freshEntryRef.current = false;
+      goToStep(0, true);
+      return;
+    }
+    freshEntryRef.current = false;
+  }, [urlIndex, goToStep]);
   const [formData, setFormData] = React.useState<FormData>(() => savedDraftRef.current.formData || {});
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -1683,11 +1690,11 @@ const CreatePGRFlowV2: React.FC = () => {
   const caseRelatedTo = formData.caseRelatedTo;
 
   // Mount the MDMS validation mirror: fetches common-masters.FormValidations
-  // (and MobileNumberValidation) and publishes the tenant's postalCode rule to
-  // window.__DIGIT_FORM_VALIDATIONS — the channel isPostalCodeValid() /
-  // getPostalCodeErrorMessage() read FIRST. Without this, the v2 flow would
-  // silently keep validating against the globalConfigs fallback while the
-  // employee form honours the (higher-precedence) MDMS row.
+  // (and MobileNumberValidation) and publishes the tenant's rules to
+  // window.__DIGIT_FORM_VALIDATIONS. Mobile validation reads this channel
+  // first; without it the v2 flow would silently keep validating against the
+  // globalConfigs fallback while the employee form honours the
+  // (higher-precedence) MDMS row.
   Digit.Hooks.pgr.useMobileValidation(baseTenant);
 
   // The single RAINMAKER-PGR.ComplaintHierarchy adjacency list (interior nodes
@@ -1818,27 +1825,32 @@ const CreatePGRFlowV2: React.FC = () => {
   const steps = STEPS;
   const curId = steps[stepIndex]?.id;
   const isLast = stepIndex === steps.length - 1;
+  // (No virtual pageview here: every step has its own real route now, so the
+  // analytics shim's ordinary route hook reports each tab by itself.)
 
   // Postal code was removed from the citizen flow (CCRS feedback): geocoder
   // pincodes are unreliable and the value is optional server-side.
 
-  const stepIsValid = React.useMemo(() => {
+  // The step's FIRST blocking requirement, or null when the step is valid.
+  // One source of truth: NEXT's disabled state and the Error/ValidationError
+  // analytics reason both derive from it, so they can never disagree.
+  const stepBlocker = React.useMemo<string | null>(() => {
     switch (curId) {
       case "complaint": {
         // Dispatcher (if seeded) must be answered, then a leaf complaint type.
-        if (hasDispatcher && !formData.caseRelatedTo) return false;
-        if (!isFieldValid(formData, "SelectComplaintType")) return false;
+        if (hasDispatcher && !formData.caseRelatedTo) return "AuthorityRequired";
+        if (!isFieldValid(formData, "SelectComplaintType")) return "ComplaintTypeRequired";
         // Sub-type is conditionally mandatory: if the chosen type has sub-services
         // in the same menuPath, one must be picked (mirrors legacy FormExplorer).
         const mainPath = formData.SelectComplaintType?.menuPath;
         const subTypeOptions = (Array.isArray(serviceDefs) ? serviceDefs : []).filter(
           (s: ServiceDef) => s.menuPath === mainPath
         );
-        if (subTypeOptions.length > 1 && !formData.SelectSubComplaintType) return false;
+        if (subTypeOptions.length > 1 && !formData.SelectSubComplaintType) return "SubTypeRequired";
         // Optional email, but if typed it must be well-formed (reporter card is
         // on this step). Blank passes.
-        if (!isEmailAcceptable(formData.email)) return false;
-        return true;
+        if (!isEmailAcceptable(formData.email)) return "EmailInvalid";
+        return null;
       }
       case "where":
         // A leaf ward is what routing needs; the map pin is the fast path to
@@ -1846,70 +1858,106 @@ const CreatePGRFlowV2: React.FC = () => {
         // and picking the cascade manually is a supported flow, and requiring
         // the pin left NEXT disabled with every dropdown filled. Payload-safe:
         // validateGeoLocation falls back to {} exactly like the employee flow.
-        return isFieldValid(formData, "SelectedBoundary");
+        return isFieldValid(formData, "SelectedBoundary") ? null : "LocationRequired";
       case "details": {
-        if (!isFieldValid(formData, "description")) return false;
+        if (!isFieldValid(formData, "description")) return "DescriptionRequired";
         // Mandatory dynamic fields (dispatcher flow).
         for (const f of templateFields) {
-          if (f.mandatory && !String((formData.dynamicFields || {})[f.fieldKey] ?? "").trim()) return false;
+          if (f.mandatory && !String((formData.dynamicFields || {})[f.fieldKey] ?? "").trim()) return "DynamicFieldRequired";
         }
         // Both consents are required once an authority/template is in play
         // (checkboxes restored at create — CCSD-1979 revisited).
         if (formData.caseRelatedTo && REQUIRED_CONSENTS.some((c) => !(formData.consents || []).includes(c.code))) {
-          return false;
+          return "ConsentRequired";
         }
-        return true;
+        return null;
       }
       default:
-        return true;
+        return null;
     }
-    return true;
     // templateFields/hasDispatcher must be deps: with a restored draft the memo
     // otherwise never recomputes when the catalogue/templates settle AFTER
     // mount, letting a last-step draft submit with empty mandatory dynamic fields.
   }, [stepIndex, formData, serviceDefs, templateFields, hasDispatcher]);
+  const stepIsValid = !stepBlocker;
 
-  function pincodeAllowlistOk(): boolean {
-    const wardResolved =
-      !!formData?.GeoLocationsPoint?.ward?.code || !!formData?.SelectedBoundary?.code;
-    if (wardResolved) return true; // ward routing supersedes pincode allowlist (CCRS#469)
-    if (!formData.postalCode || String(formData.postalCode).length === 0) return true;
-    // Case-fold (postal codes may be alnum now, e.g. "sw1a 1aa" vs the
-    // seeded "SW1A 1AA") and strip leading zeros only for purely numeric
-    // values — "0100" ≡ "100" for a numeric pincode, but a leading zero in
-    // an alnum code is significant.
-    const norm = (v: unknown) => {
-      const s = String(v ?? "").trim().toUpperCase();
-      return /^[0-9]+$/.test(s) ? s.replace(/^0+/, "") || "0" : s;
-    };
-    const list = norm(formData.postalCode);
-    const configured =
-      Array.isArray(tenants) &&
-      tenants.some((tnt: any) => Array.isArray(tnt?.pincode) && tnt.pincode.length > 0);
-    if (!configured) return true;
-    return tenants.some(
-      (tnt: any) =>
-        Array.isArray(tnt?.pincode) &&
-        tnt.pincode.some((p: unknown) => norm(p) === list)
-    );
-  }
+  // ── Behaviour analytics (catalogue events; the steps themselves are real
+  //    pageviews, so no per-step "reached" events — see utils/analytics.js) ──
+  // Started: once per FRESH entry into the flow — not on a mid-flow F5 restore
+  // and not on step navigation (the component stays mounted across steps).
+  const enteredFreshRef = React.useRef(freshEntryRef.current);
+  React.useEffect(() => {
+    if (enteredFreshRef.current) trackE(EV.COMPLAINT_STARTED);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Type/location selections: fire only on a USER change — the refs start at
+  // the (possibly draft-restored) current value, so a restore replay or a
+  // re-render emits nothing.
+  //
+  // The reported label is the MDMS master NAME ("Rude behavior"), not the
+  // UI-localised t() string: the master name is readable AND identical for
+  // every user of the tenant regardless of language, so one type stays ONE
+  // row in reports. A t() label would split each type per locale and break
+  // totals/trends (same principle as the shim's non-localised page titles;
+  // language is already its own dimension). Master data, never PII.
+  const selectedTypeCode = formData.SelectComplaintType?.serviceCode;
+  const selectedTypeName = formData.SelectComplaintType?.name || selectedTypeCode;
+  const prevTypeRef = React.useRef(selectedTypeCode);
+  React.useEffect(() => {
+    if (selectedTypeCode && selectedTypeCode !== prevTypeRef.current) {
+      trackE(EV.COMPLAINT_TYPE_SELECTED, `Type:${selectedTypeName}`);
+    }
+    prevTypeRef.current = selectedTypeCode;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTypeCode]);
+
+  const selectedBoundaryCode = formData.SelectedBoundary?.code;
+  const prevBoundaryRef = React.useRef(selectedBoundaryCode);
+  React.useEffect(() => {
+    // Only the none→selected transition: every cascade level updates the
+    // boundary, so change-based tracking fired once PER LEVEL (seen as double
+    // events in the visits log). "Citizen picked a location" is one action;
+    // refinements are not. Clearing and re-picking counts again.
+    if (selectedBoundaryCode && !prevBoundaryRef.current) {
+      // Name stays "Location" — never the ward/boundary code, which combined
+      // with a timestamp could narrow down to a person in a small ward.
+      trackE(EV.COMPLAINT_LOCATION_SELECTED, "Location");
+    }
+    prevBoundaryRef.current = selectedBoundaryCode;
+  }, [selectedBoundaryCode]);
+
 
   function handleContinue() {
+    // Guard the handler as well as the button: a fast double-tap can fire
+    // twice before React re-renders the disabled state, and Enter on the
+    // form would bypass the button entirely.
+    if (submitting) return;
     if (!stepIsValid) {
       setError(t("CORE_COMMON_REQUIRED_ERRMSG"));
+      trackE(EV.VALIDATION_ERROR, stepBlocker || curId || "");
       return;
     }
     if (isLast) {
-      if (!pincodeAllowlistOk()) {
-        setError(t("CS_COMMON_PINCODE_NOT_SERVICABLE"));
+      // The whole form runs on auth-optional endpoints, so a session that
+      // expired while the citizen typed goes unnoticed until this submit —
+      // previously surfacing as a hung create and a dead end. Check first:
+      // the draft (answers + step) is already persisted, so after re-login
+      // the citizen returns here and continues. Only a KNOWN-expired session
+      // redirects; sessions without expiry info submit as before.
+      if (Digit.UserService.isSessionExpired?.()) {
+        const from = encodeURIComponent(window.location.pathname + window.location.search);
+        history.push(`/${window?.contextPath || "digit-ui"}/citizen/login?from=${from}`);
         return;
       }
       setSubmitting(true);
+      trackE(EV.COMPLAINT_SUBMITTED);
       const user = Digit.UserService.getUser();
       const payload = mapFormDataToRequest(formData, resolvedTenant, user?.info ?? user, evidenceDocType);
       createMutation(payload, {
-        onError: () => {
+        onError: (err: any) => {
           dispatch({ type: "CREATE_COMPLAINT", payload: { responseInfo: { status: "failed" } } });
+          trackE(EV.COMPLAINT_FAILED, failureName(err));
           setSubmitting(false);
           history.push(`/${window?.contextPath || "digit-ui"}/citizen/pgr/response`);
         },
@@ -1917,6 +1965,10 @@ const CreatePGRFlowV2: React.FC = () => {
           // Create is done — drop the session draft so the next visit starts fresh.
           Digit.SessionStorage.del(CREATE_DRAFT_KEY);
           dispatch({ type: "CREATE_COMPLAINT", payload: responseData });
+          // Name carries the complaint TYPE (master name, same rationale as
+          // the Selected event — never the complaint id): conversions become
+          // segmentable by type without any identifying data.
+          trackE(EV.COMPLAINT_CREATED, formData.SelectComplaintType?.name || formData.SelectComplaintType?.serviceCode || "");
           await client.refetchQueries(["complaintsList"]);
           setSubmitting(false);
           history.push(`/${window?.contextPath || "digit-ui"}/citizen/pgr/response`);
@@ -1924,15 +1976,18 @@ const CreatePGRFlowV2: React.FC = () => {
       });
       return;
     }
-    setStepIndex((i) => i + 1);
+    goToStep(stepIndex + 1);
   }
 
   function handleBack() {
     if (stepIndex === 0) {
+      // Backing out of step 1 is the one EXPLICIT abandon signal (later-step
+      // abandonment shows up as pageview drop-off between the step routes).
+      trackE(EV.COMPLAINT_CANCELLED);
       history.goBack();
       return;
     }
-    setStepIndex((i) => i - 1);
+    goToStep(stepIndex - 1);
   }
 
   // NOTE: catalogue/dispatcher loading is handled INLINE inside the "complaint"
@@ -2010,22 +2065,37 @@ const CreatePGRFlowV2: React.FC = () => {
             </span>
           )}
         </Button>
-        <Button
-          variant="primary"
-          onClick={handleContinue}
-          loading={submitting}
-          disabled={!stepIsValid}
-          type="button"
+        {/* The button is DISABLED while the step is invalid, so a click never
+            reaches handleContinue — but the click ATTEMPT is exactly the
+            "citizen is stuck: on what?" signal behaviour analytics needs. The
+            v2 Button sets disabled:pointer-events-none, so hit-testing falls
+            through the button to this wrapper (which must render a real box —
+            inline-flex — for that; display:contents would generate none). */}
+        <span
+          style={{ display: "inline-flex" }}
+          onClick={() => {
+            if (!stepIsValid) trackE(EV.VALIDATION_ERROR, stepBlocker || curId || "");
+          }}
         >
-          {isLast ? (
-            tr(t, "CS_SUBMIT_COMPLAINT", "Submit Complaint")
-          ) : (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>
-              <span>{t("NEXT")}</span>
-              {ArrowRightIcon}
-            </span>
-          )}
-        </Button>
+          <Button
+            variant="primary"
+            onClick={handleContinue}
+            loading={submitting}
+            // Also disabled while the create is in flight: a second tap on a
+            // slow connection would file a duplicate complaint.
+            disabled={!stepIsValid || submitting}
+            type="button"
+          >
+            {isLast ? (
+              tr(t, "CS_SUBMIT_COMPLAINT", "Submit Complaint")
+            ) : (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>
+                <span>{t("NEXT")}</span>
+                {ArrowRightIcon}
+              </span>
+            )}
+          </Button>
+        </span>
       </FormFooter>
     </ScreenContainer>
   );
