@@ -240,6 +240,11 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COMMON_OFFICER",
+    "message": "Funcionário",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COMMON_UNKNOWN",
     "message": "Desconhecido",
     "module": "rainmaker-dashboard"

@@ -98,7 +98,6 @@ const CELL_RENDERERS = {
   rating: (value) => formatRating(value),
   trend: (value) => <TrendCell value={value} />,
   tags: (value) => value,
-  officer: (value) => formatOfficerLabel(value),
   department: (value) =>
     !value || value === "null" || value === "undefined"
       ? "—"
@@ -283,9 +282,11 @@ const DashboardTable = ({ columns, rows, emptyMessage }) => {
               const content =
                 col.type === "tags"
                   ? renderStatusTags(row, styles)
-                  : col.type === "trend"
-                    ? render(raw)
-                    : render(raw, col);
+                  : col.type === "officer"
+                    ? formatOfficerLabel(raw, officerNames)
+                    : col.type === "trend"
+                      ? render(raw)
+                      : render(raw, col);
               const labelText = typeof raw === "string" ? raw : String(raw ?? "");
               const toneKey = col.thresholdKey ?? col.id;
               const tone = row.cellTones?.[toneKey];
