@@ -1,15 +1,72 @@
 # The xstate-chatbot module, top to bottom
 
-A guide for someone who has never opened this code. It starts at the outermost
-boundary — a WhatsApp message arriving over HTTP — and works inward to the
-individual guard conditions that decide where a conversation goes next. Read it
-in order; each part assumes the one before it. Budget 30–40 minutes.
+A guide to the current architecture. It starts at the outermost boundary — a
+WhatsApp message arriving over HTTP — and works inward to the individual guard
+conditions that decide where a conversation goes next.
+
+Parts 1–11 cover what you need to read or change a conversation. Parts 12–15
+explain how the machine is built underneath, and can wait until a state path
+confuses you. Budget 30–40 minutes for the whole thing.
 
 Paths are relative to `backend/xstate-chatbot/nodejs/`.
 
 ---
 
+## Contents
+
+
+**Orientation**
+
+1. [What this module is](#part-1--what-this-module-is)
+2. [The path of a single message](#part-2--the-path-of-a-single-message)
+3. [Why a state machine](#part-3--why-a-state-machine)
+
+**Authoring a conversation**
+
+4. [The machine from the top](#part-4--the-machine-from-the-top)
+5. [How a flow is written](#part-5--how-a-flow-is-written)
+6. [What each state class does](#part-6--what-each-state-class-does)
+7. [The filing journey](#part-7--the-filing-journey)
+
+**Data through the flow**
+
+8. [Slots: the answer bag](#part-8--slots-the-answer-bag)
+9. [Text and translation](#part-9--text-and-translation)
+10. [Understanding what the citizen typed](#part-10--understanding-what-the-citizen-typed)
+11. [The tree walks](#part-11--the-tree-walks)
+
+**Under the hood**
+
+12. [XState v4, from zero](#part-12--xstate-v4-from-zero)
+13. [Keys, ids and nesting](#part-13--keys-ids-and-nesting)
+14. [The compiler](#part-14--the-compiler)
+15. [The triplet: the core idiom](#part-15--the-triplet-the-core-idiom)
+
+**Runtime**
+
+16. [The session layer](#part-16--the-session-layer)
+17. [Saving and resuming a conversation](#part-17--saving-and-resuming-a-conversation)
+18. [Channels](#part-18--channels)
+19. [The backend services](#part-19--the-backend-services)
+
+**Operating it**
+
+20. [Tenants](#part-20--tenants)
+21. [Configuration](#part-21--configuration)
+22. [What fails at boot, and why that is good](#part-22--what-fails-at-boot-and-why-that-is-good)
+23. [Tests](#part-23--tests)
+24. [Retained dead code](#part-24--retained-dead-code)
+
+**Working in it**
+
+25. [Recipes](#part-25--recipes)
+26. [Gotchas worth knowing in advance](#part-26--gotchas-worth-knowing-in-advance)
+
+---
+
 ## Part 1 — What this module is
+
+
 
 This is a conversational front end for filing citizen grievances. A citizen sends
 WhatsApp messages; the bot replies with numbered menus; at the end a complaint row
@@ -54,6 +111,8 @@ everything else in this document follows from that one fact.
 ---
 
 ## Part 2 — The path of a single message
+
+
 
 A citizen types "1" and presses send. WhatsApp delivers it to Twilio, Twilio POSTs
 a form-encoded body to a public URL, and that URL routes to
@@ -142,6 +201,8 @@ dialog.sendMessage(context, questionText);       // immediate: flushes BOTH as o
 
 ## Part 3 — Why a state machine
 
+
+
 Consider filing a complaint: pick a category, pick a sub-category, name the
 institution, describe the problem, optionally attach a photo, pick a city, pick a
 ward, accept two consent statements, choose confidentiality. Nine questions, each
@@ -169,17 +230,507 @@ here are v4 idioms and some look dated. They are correct for 4.38.3.
 "xstate": "4.38.3"
 
 // and this is the only Machine() call in the module:
-//   src/machine/seva.js  ->  const sevaMachine = Machine(sevaConfig);
+//   src/machine/state-machine.js  ->  const stateMachine = Machine(config);
 ```
 
 ---
 
-## Part 4 — XState v4, from zero
+## Part 4 — The machine from the top
+
+
+
+Three small files assemble the machine, and reading them in order takes a few
+minutes. `shell-machine.js` builds onboarding and the chassis: the start gate,
+welcome, language menu, end state, system error, the not-authorized notice, and a
+placeholder node named `pgr`. It ends by calling `compile()` with its top-level
+states and the key it starts at. `pgr-machine.js` builds complaint filing the same
+way. Neither file knows about the other, so you can read either one on its own and
+understand the journey it describes.
+
+`citizen-service-machine.js` joins them. It spreads the shell's config, then
+replaces the placeholder `pgr` entry with the filing config, producing one tree.
+It also declares two root-level handlers. `USER_RESET` fires when the citizen
+sends a greeting or restart word, and `USER_CANCEL` when they send a cancel word.
+Both are declared at the root so they work from any state, which is the escape
+hatch that keeps a citizen from getting stuck. Both check the whitelist first, so
+a reset word cannot be used to walk past the gate.
+
+```js
+// src/machine/citizen-service-machine.js - the whole assembly
+const config = {
+  id: 'citizenService',
+  on: {
+    USER_RESET: [
+      { target: '#notAuthorized', cond: (context) => !shell.isWhitelisted(context) },
+      { target: '#welcome' }
+    ],
+    USER_CANCEL: [
+      { target: '#notAuthorized', cond: (context) => !shell.isWhitelisted(context) },
+      { target: '#cancelSession' }
+    ]
+  },
+  ...shell.config,
+  states: { ...shell.config.states, pgr: pgr.config }
+};
+```
+
+`state-machine.js` is fourteen lines: it takes that config and calls `Machine()`.
+The session layer imports this file and nothing deeper, so the whole flow is
+swappable behind one export. If you are tracing a bug from the outside in, this is
+the order to read: `state-machine.js` tells you where the config comes from,
+`citizen-service-machine.js` tells you how the two journeys fit together, and the
+two machine files tell you what each step does.
+
+## Part 5 — How a flow is written
+
+
+
+A flow is a list of state objects. Each object is one step in the conversation:
+it knows its own key, the message it sends when entered, and which state comes
+next. You build the list in plain JavaScript, then hand it to `compile()`, which
+turns it into the XState config the machine runs. Only `compile()` and the state
+classes know XState exists. Everything you write when adding a question, a menu
+or a service call is ordinary object construction, so you can read a flow
+top to bottom without knowing the state-chart library underneath.
+
+> Snippets from here on show compiled output containing XState terms such as
+> `assign`, `always` and `entry`. You do not need them to author a flow. Part 12
+> explains them from zero when you want to read what a state becomes.
+
+Every state inherits from `State` in `flow/flow-state.js` and is configured
+through fluent setters, each returning the object so calls chain. `setPrompt`
+sets the message sent on entry. `setNext(state)` says where to go afterwards,
+and takes the **state object**, not its name — a typo is a crash at startup
+rather than a dead end discovered in production. `setConditionalNext(state, cond)`
+adds a guarded branch; chain as many as you need and close with an unguarded
+`setNext`. Guards are tried in order, so the first match wins.
+
+Six classes cover the kinds of step a conversation needs:
+
+| Class | Use it when |
+|---|---|
+| `State` | you only need to send a message and move on |
+| `QuestionState` | you show a fixed list of options and match the reply |
+| `AskState` | you accept free input, validate it, and store it |
+| `ProcessingState` | you call a backend service and branch on success or failure |
+| `WalkState` | you walk a tree one level at a time, such as an MDMS hierarchy |
+| `GateState` | you branch immediately on context, sending no message |
+
+Each class adds setters for its own job. `AskState` has `setAccept` (the input
+type it will take), `setValidate`, `setOnValid` and `setRetryMessage`.
+`ProcessingState` has `setProcessing` for the async call plus `setOnError`.
+`WalkState` has `setFetch` for one level of the tree, and three outcomes —
+`setOnLeaf`, `setOnEmpty`, `setOnError` — so the flow reacts to what the tree
+actually returned. The setters are the whole contract: if a behaviour is not
+reachable through them, it belongs in a new class rather than a special case.
+
+```js
+// src/machine/pgr-machine.js - a question, an answer, and where each goes
+const consent = new QuestionState('consent');
+const description = new AskState('description');
+
+consent
+  .setPrompt(messages.fileComplaint.consent.question)
+  .setOptions(['Yes', 'No'])
+  .setConditionalNext(consentDeclined, (context) => context.consent === 'No')
+  .setNext(description);
+```
+
+`Group` nests states under a shared parent. You give it a key, `setStates` with
+the list, and `setStart` with the key it begins at; `setOnEntry` runs a
+context-mutating function each time the group is entered, which is how scratch
+answers get cleared on re-entry. A group compiles to a compound node carrying its
+key as an XState `id`, so other states can target it absolutely with `#key`.
+That is how a step deep inside the filing journey jumps to a shared chassis state
+such as `#endstate` without knowing where it sits in the tree.
+
+The journeys themselves live in two files. `shell-machine.js` holds onboarding
+and the chassis — welcome, language menu, cancel, end, error. `pgr-machine.js`
+holds complaint filing. `citizen-service-machine.js` splices the filing config
+into the shell's `pgr` slot so both run as one machine, and `state-machine.js`
+wraps that for the session layer. To add a step you construct a state in the
+right file, wire it with `setNext`, and add it to the list passed to `compile()`.
+Nothing else needs to change.
+
+## Part 6 — What each state class does
+
+
+
+`State` is the base. On entry it sends its prompt, if it has one, then immediately
+resolves its branches and moves on. It never waits for the citizen. Use it for
+anything read but not answered: the welcome, the thank-you, the notice shown when
+consent is declined. If you want to send a message from inside a transition, add a
+`State` instead — the flow stays readable when every message the citizen sees has
+a state of its own.
+
+`QuestionState` sends a prompt, waits for a reply, and matches it against options.
+Options come from `setOptions`, either a fixed array or a function of context when
+the list depends on data. An unrecognised reply sends the retry message and asks
+again, unless `setOnUnknown` routes it elsewhere. `AskState` handles free input
+instead: `setAccept` declares the input type, `setValidate` checks it, `setOnValid`
+writes it into context, and an invalid answer triggers the retry message. Both
+loop on the same state rather than advancing, so a bad answer never skips a step.
+
+`ProcessingState` calls a backend service. `setProcessing` supplies a function
+returning a promise; resolution follows the normal branches, rejection follows
+`setOnError`. It sends no prompt and waits for nothing, so it is the right place
+for every network call — keeping them out of the states that talk to the citizen.
+`setOutcomeMessage` sends a message that depends on the result, such as a
+complaint number returned by the create call.
+
+`WalkState` walks a tree one level at a time and is what makes the hierarchy
+menus work. `setFetch` receives the path chosen so far and returns that level's
+options plus whether it is a leaf. Three outcomes cover what the tree can do:
+`setOnLeaf` when the citizen reaches the bottom, `setOnEmpty` when a level has no
+options, `setOnError` when the fetch fails. `setTrail` shows the chosen path above
+the menu and `setPreamble` adds text before it. Depth is never hardcoded, so the
+same state serves a three-level and a five-level hierarchy.
+
+`GateState` branches on context without sending anything, which the start step
+uses to decide between onboarding and the main menu. `Group` nests states under a
+shared parent, described in Part 5.
+
+## Part 7 — The filing journey
+
+
+
+`pgr-machine.js` is the product: the path a citizen walks to file a complaint.
+It starts at `menu`, a question with two options — file a complaint, or cancel.
+Choosing to file enters `fileComplaint`, a group holding the whole journey, so
+every step inside it shares one parent and one entry action. The group begins at
+`type`. Reading the file top to bottom gives you the journey in order, because
+the states are declared first and wired immediately below.
+
+Filing collects four things, in three groups. `type` walks the complaint
+hierarchy from MDMS with a `WalkState`, descending one level per reply until it
+reaches a leaf. `location` walks the boundary hierarchy the same way. `other`
+holds three questions in sequence: which institution the complaint is about, a
+free-text description, then optional attachments. Each walk hands its result to
+the next group through `setOnLeaf`, naming the slot the answer lands in. The
+boundary walk also wires `setOnEmpty` to the same place, so a tenant with no
+boundary data configured still reaches the rest of the flow instead of stalling.
+
+```js
+// src/machine/pgr-machine.js - the three collecting groups
+const typeGroup = new Group('type').setStates([walkComplaintTypes]).setStart('complaintType2Step');
+const locationGroup = new Group('location').setStates([walkBoundaries]).setStart('boundary');
+const otherGroup = new Group('other')
+  .setStates([askIntitution, askDescription, askForAttachments])
+  .setStart('institution');
+```
+
+The last four steps are about consent and confirmation. `consent` asks whether
+the citizen agrees to their data being processed; answering no goes to
+`consentDeclined` and ends the session, collecting nothing further.
+`confidentiality` asks whether the complaint should be confidential and records
+the answer either way. `confirmSubmission` shows a summary of everything
+gathered, built by a fill function, and asks for a final yes. Answering no goes
+to `cancelSession`. Only a yes reaches `persistComplaint`.
+
+`persistComplaint` is the single `ProcessingState` in the journey. It calls the
+PGR service, and on success sends an outcome message containing the complaint
+number returned by the create call, then moves to `endstate`. A rejected promise
+follows `setOnError` to the shared system-error state. Because every network call
+in filing lives in this one state, there is exactly one place to look when a
+complaint fails to save, and the states that talk to the citizen stay free of
+service code.
+
+Groups shape the state paths you will see in logs and in stored sessions. A
+citizen answering the description question is at
+`pgr.fileComplaint.other.description`. That path is worth reading as a sentence:
+journey, group, sub-group, step.
+
+## Part 8 — Slots: the answer bag
+
+
+
+Answers accumulate in `context.slots.pgr`, a flat object: `complaint`,
+`instituteName`, `description`, `image`, `city`, `locality`, `isConfidential`, plus
+`hierarchyPath` and `boundaryPath`, which are the walks' working state rather than
+answers as such. This bag is what becomes a complaint at the end, and it is cleared
+whenever the citizen re-enters the grievance menu, so a new complaint never inherits
+an old one.
+
+A step writes to it by naming a `slot`. The generator does the assignment, so step
+data never touches `context` directly for the common case. A `choose` step can also
+transform the value on the way in: the confidentiality question stores a real boolean
+rather than the string "Yes", which is what the backend expects and what the receipt
+logic reads.
+
+```js
+// as written in pgr-machine.js / shell-machine.js
+slot: 'instituteName'                            // -> context.slots.pgr.instituteName
+
+slot: 'isConfidential',                          // with a transform on the way in
+value: (intention) => intention === 'Yes'
+
+set: (context, locale) => {                      // anywhere OUTSIDE the pgr bag
+  context.user.locale = locale;
+  context.onboarding.locale = locale;
+}
+```
+
+For anything outside that bag — the citizen's locale, the onboarding name — a step
+supplies a `set` function instead, receiving the context and the captured value. Two
+mechanisms rather than one, but both are trivial and neither needs a path resolver.
+Prefer `slot` whenever it fits, and reach for `set` only when the destination really
+lives elsewhere.
+
+The consumer is `persistComplaint` in `src/machine/service/egov-pgr.js`. It reads the
+bag and builds the PGR request body, including an `extendedAttributes` object
+carrying the institution name, the confidentiality flag and a deployment-level case
+category. If you add a slot, that function is where it must be read — writing a slot
+nobody reads is the easiest silent mistake here.
+
+```js
+// flow-state.js - a branch's optional `set` is what writes the answer
+resolveBranches() {
+  return this.branches.map((branch) => ({
+    target: '#' + branch.state.key,
+    cond: branch.cond || undefined,
+    ...(branch.set ? { actions: assign(branch.set) } : {})   // -> the answer bag, or anywhere else
+  }));
+}
+
+// flow-state-walk.js - a walk writes its own slot when it lands on a leaf
+if (this.onLeaf.slot) context.slots.pgr[this.onLeaf.slot] = context.intention;
+
+// egov-pgr.js persistComplaint - the other end of the contract
+requestBody.service.description = slots.description ?? '';
+requestBody.service.extendedAttributes = {
+  caseRelatedTo:  config.caseRelatedTo,
+  instituteName:  slots.instituteName,
+  isConfidential: slots.isConfidential === true
+};
+```
+
+There is no schema. Nothing stops a typo in a slot name from producing a complaint
+with a missing field. The mitigation is a test asserting the exact set of slot keys
+after a happy path, so a rename fails on the same commit that introduces it. Treat
+that test as the contract, because it is the only one there is.
+
+---
+
+## Part 9 — Text and translation
+
+
+
+All outbound text lives in message bundles: objects keyed by locale — `en_IN`,
+`pt_PT` — with an optional `code`. Onboarding and chassis copy sits in
+`flow/shell-messages.js`; filing copy sits in `flow/pgr-messages.js`. They are
+ordinary data and safe to edit, kept next to the flow they serve rather than in a
+separate translation tree.
+
+`dialog.get_message(bundle, locale)` resolves one. If the bundle has a `code` it
+first asks the localisation service for a live translation of that code; if that
+yields nothing usable it falls back to the bundle's own text for the locale, and
+failing that to `en_IN`. So translations can change in DIGIT without a deploy, while
+the code still runs standalone.
+
+```js
+// flow/pgr-messages.js (filing) and flow/shell-messages.js (onboarding) hold these.
+// A bundle: a localisation code plus per-locale fallback literals.
+institution: {
+  question: {
+    code: 'chatbot.pgr.institution.question',    // asked of the platform FIRST
+    en_IN: 'Which institution is your grievance about?',
+    pt_PT: 'A que instituicao se refere a sua reclamacao?'
+  }
+}
+
+// resolution order, from dialog.get_message:
+//   1. live translation for `code` in the citizen's locale
+//   2. this bundle's entry for that locale
+//   3. this bundle's en_IN
+```
+
+`src/machine/util/localisation-service.js` fetches those translations once at module
+load and caches them. It queries two tenants — the state root and the deployment
+tenant — because the localisation search API returns rows from the first tenant in
+the chain that matches and then stops rather than merging. That detail has cost real
+debugging time.
+
+Which languages the menu offers is decided in `flow/offered-locales.js`. A locale is
+offered only if the platform declares it *and* every bundle in the journey has a
+fallback literal for it. The platform side is weaker than it looks: the service's
+coverage check proves only that a locale has some row at that tenant, not that the
+chatbot has translations.
+
+Placeholders use double braces: `{{maxLength}}`, `{{statements}}`, `{{name}}`,
+`{{options}}`, and positional `{{1}}` `{{2}}` `{{3}}` in the filing receipt. The
+generator substitutes them from the step's `fill` map, and a `choose` step gets
+`{{options}}` for free. A placeholder with no matching entry is left in the text —
+visible, which is the point.
+
+```js
+// flow-state.js - substitution. Two behaviours worth noting, both deliberate.
+renderText(bundle, fill, context, event) {
+  let text = dialog.get_message(bundle, context.user.locale);
+  for (const token of Object.keys(fill || {})) {
+    const marker = `{{${token}}}`;
+    if (!text.includes(marker)) continue;                        // absent -> never evaluated
+    const raw = fill[token];
+    const value = typeof raw === 'function' ? raw(context, event)
+      : (raw && typeof raw === 'object' ? dialog.get_message(raw, context.user.locale) : raw);
+    text = text.split(marker).join(String(value ?? ''));         // nullish -> empty string
+  }
+  return text;
+}
+
+// and a `choose` step gets {{options}} for free:
+const fill = step.options ? { options: () => renderOptions(optionsOf(step)), ...step.fill } : step.fill;
+```
+
+Two rules about substitution, both learned the hard way. A `fill` value resolving to
+nothing renders as an empty string, not the word "undefined" and not a stray comma.
+And a `fill` entry whose placeholder does not appear in the text is never evaluated,
+so a function that would throw on missing data does not get the chance.
+
+Reused platform keys are worth knowing. The consent statements and the
+confidentiality label point at the same localisation codes the web portal uses, so
+the bot and the portal cannot drift apart in wording. When you add citizen-facing
+text, check whether the portal already has a key for it before inventing one.
+
+---
+
+## Part 10 — Understanding what the citizen typed
+
+
+
+The bot recognises replies by *grammar*: a list of `{ intention, recognize }` pairs,
+where `recognize` is an array of accepted strings and `intention` is the symbol the
+machine reasons about. `dialog.get_intention(grammar, event, true)` returns the
+matching intention or a sentinel meaning "not understood". The third argument selects
+exact matching, and every live call uses it.
+
+```js
+// what choiceGrammer builds from options: ['Yes', 'No']
+[
+  { intention: 'Yes', recognize: ['1', 'yes'] },
+  { intention: 'No',  recognize: ['2', 'no'] }
+]
+
+// get_intention lowercases and trims the input, then matches exactly (strict = true)
+context.intention = dialog.get_intention(grammer, event, true);   // or INTENTION_UNKOWN
+```
+
+The product is deliberately numbers-first. A menu of three options accepts "1", "2",
+"3". This is not laziness: it works on every handset, needs no translation, and
+avoids the ambiguity of free text in a language the bot may not have been tested in.
+Confirmations additionally accept the word forms, so "yes" works as well as "1".
+
+For a `choose` step the grammar is derived from the step's `options`, so the prompt's
+numbering and the recognition come from the same list and cannot disagree. This
+matters more than it sounds: two hand-written confirmation grammars had once drifted,
+so "yes" was accepted at the name confirmation and rejected at the consent question
+for no reason anybody intended.
+
+A step may extend the accepted spellings with `recognize`. The language menu uses it
+to accept the option's label as well as its number, including a diacritic-stripped
+form — so a citizen typing `portugues` selects `PORTUGUÊS`. Without that, generating
+that step from its options alone would have accepted only the number and the locale
+code.
+
+There is an important asymmetry in where grammars live. A static option set is a
+compile-time constant held in the emitter's closure. A runtime list — the language
+menu, or a fetched tree level — must survive to the next HTTP request, so it is
+stored in `context.grammer`. Storing a constant there would add a way to fail for no
+benefit.
+
+```js
+// flow-state-question.js - options are resolved on entry, into a per-state slot
+get optionsSlot() { return this.key + 'Options'; }
+
+question: {
+  entry: [
+    assign((context) => { context[this.optionsSlot] = this.resolveOptions(context); }),
+    (context) => this.enter(context, { options: () => this.renderOptionsList(context[this.optionsSlot] || []) })
+  ],
+  on: { USER_MESSAGE: 'process' }
+},
+process: {
+  entry: assign((context, event) => {
+    context.intention = this.matchReply(context, event);   // null when not understood
+  }),
+  });
+}
+```
+
+`validateInputType(event, accepted)` is the separate question of *kind*: was this
+text, an image, a document, a location, or a button reply? Text questions accept text
+and interactive button replies. The attachment question accepts images and documents.
+This check always runs before interpretation, in every class that reads a reply, so
+an image sent where text was expected becomes a retry rather than a crash.
+
+---
+
+## Part 11 — The tree walks
+
+
+
+Two questions in the product are not really questions but descents through a tree of
+unknown shape: the complaint category and the administrative area. Both are driven
+entirely by backend data. Neither the depth nor the labels appear in the code, which
+is why a deployment can restructure its categories without anyone touching this
+module.
+
+A walk is five states. `fetch` invokes the backend for the current level. `evaluate`
+looks at what came back and decides whether there is anything to ask. `question`
+renders the numbered list and waits. `process` interprets the choice. `error`
+retries. The cycle repeats one level per pass until a level announces itself as the
+last.
+
+The path so far lives in a slot — `hierarchyPath` or `boundaryPath` — as an array of
+codes. Descending pushes the chosen code; going back pops it. The fetch function
+receives that array and returns the level below it, along with the labels to display
+and a flag saying whether this level is a leaf.
+
+`process`'s guard order is the subtlety, and the generator fixes it for good reason.
+Go-back is tested first, because "Go Back" is a real grammar entry and would
+otherwise satisfy the later guards — choosing it at a leaf level would have filed a
+complaint whose category was literally "goback". Leaf is tested before descend, or
+the leaf's own code gets pushed and the next fetch runs against nothing.
+
+```js
+// flow-state-walk.js process - the order is fixed by the class, not the author
+always: [
+  { target: 'fetch',                     cond: (c) => c.intention === INTENTION_GOBACK,
+                                         actions: <pop the path> },            // 0: go back first
+  { target: '#' + onLeaf.state.key,      cond: (c) => recognised(c) && c[stepSlot].isLeafLevel,
+                                         actions: <push, write the slot> },    // 1: leaf BEFORE descend
+  { target: 'fetch',                     cond: (c) => recognised(c),
+                                         actions: <push> },                    // 2: descend
+  { target: 'retry' }                                                          // 3: not understood
+]
+```
+
+Missing fetched data is handled by structure rather than by a guard. A walk's first
+child is `fetch`, so a conversation resumed mid-walk re-enters there, fetches the
+level again from the path it still holds, and re-asks. That costs the citizen one
+prompt and removes the case where the leaf flag is read off `undefined`.
+
+`evaluate` exists for the case of a level with no options. For the boundary walk that
+means the citizen has descended as far as the data goes, so it records what it has
+and moves on. The category walk has no such escape, deliberately: there is no sound
+complaint to file without a category.
+
+The backend side lives in `src/machine/service/egov-pgr.js`.
+`fetchComplaintHierarchyStep` reads the MDMS category definition and rows, orders any
+"Other" option last, and returns exactly one level. `fetchBoundaryStep` does the
+equivalent against the boundary hierarchy. Both return the same shape — options,
+labels, a level name and a leaf flag — which is precisely why one emitter can serve
+both walks.
+
+---
+
+## Part 12 — XState v4, from zero
+
+
 
 A **machine** is a description of states and the transitions between them. It is
 inert data — creating one runs no logic. `Machine({ id, initial, states })` returns
 that description. In this codebase there is exactly one machine, assembled in
-`src/machine/seva.js`, and everything else is a fragment merged into it before it is
+`src/machine/state-machine.js`, and everything else is a fragment merged into it before it is
 constructed.
 
 A **state node** is one entry in `states`. A node with no children is a leaf, and
@@ -283,7 +834,7 @@ promises do not restart.
 One more v4 detail that has already caused a real bug here. Eventless transitions
 are resolved under the *null event*, so inside an `always` transition's action
 `event.data` is `undefined` — the payload that triggered the transition is not
-visible. Only **entry** actions see the real event. Part 9 explains where that
+visible. Only **entry** actions see the real event. Part 6 explains where that
 matters.
 
 ```js
@@ -296,926 +847,119 @@ onEntry: assign((c, event) => report(event.data))
 
 ---
 
-## Part 5 — Four layers: states, transitions, layout, generator
+## Part 13 — Keys, ids and nesting
 
-The conversation is not written as XState. It is written as two tables per journey:
-**states** say what each step *is*, and **transitions** say where each step *goes*.
-A **generator** turns the joined result into state nodes. A **layout** says where
-each step sits in the tree. Only the generator knows XState exists.
 
-This split exists because the concerns change at different rates and for different
-reasons. The graph changes when the product changes: a new question, a different
-order. What a question asks changes when the copy or the validation changes. The tree
-changes almost never, and when it does it moves persisted conversation positions and
-telemetry strings. Separating them means editing one cannot disturb the others.
 
-So a state says what it *is* and nothing about where it leads. Read one entry and you
-know what the citizen sees, what counts as a valid answer, and which slot the answer
-lands in. Here is the institution question in full; note that it names no destination
-anywhere, not even a fallback:
+Every state is constructed with a key, and that key becomes its XState state name.
+Groups also carry their key as an `id`, which is what makes absolute targets work:
+a state anywhere in the tree can jump to `#endstate` without knowing how deeply it
+sits. You write keys, never `#` prefixes, except in the few places a target
+deliberately crosses journeys.
+
+Wiring is by object reference. `setNext(description)` takes the state itself, so a
+misspelled name is an undefined variable that throws when the file loads, not a
+transition that silently goes nowhere. This is the main safety property of the
+class model, and it is why there is no separate target-resolution table.
+
+Crossing between journeys needs one trick. `pgr-machine.js` declares placeholder
+states for `endstate` and `system_error` so its own steps can target them by
+reference, but leaves them out of the list passed to `compile()`. Because they are
+never compiled into the filing subtree, `#endstate` resolves to the real chassis
+state in the shell instead of a same-named node nested inside `pgr`. If you add a
+shared chassis state, follow that pattern: declare the placeholder, wire to it,
+and keep it out of the compile list.
+
+## Part 14 — The compiler
+
+
+
+`flow/flow-state-compiler.js` is twelve lines. `compile(states, initialKey)`
+walks the list, calls `compileNode()` on each state, and returns an XState config
+with those states and the given initial key. That is all it does. There is no
+emitter per step kind and no shared helper layer, because each class emits its own
+node — the knowledge of what an ask step becomes lives in `AskState`, next to the
+setters that configure it.
 
 ```js
-// src/machine/flow/pgr-states.js
-{ key: 'institution', kind: 'ask', accept: 'text',
-  prompt: messages.fileComplaint.institution.question,
-  fill: { maxLength: config.instituteNameMaxLength },
-  validate: (name) => name.length ? (name.length <= 300 ? true : m.institution.tooLong) : false,
-  slot: 'instituteName' }
-```
+// src/machine/flow/flow-state-compiler.js - the whole file
+function compile(states, initialKey) {
+  const config = { initial: initialKey, states: {} };
 
-The graph lives in the companion file, and it reads like a table of contents. Every
-exit form the generator already accepted survives: a bare string is unconditional, an
-array of `[target, guard]` pairs is tried in order with the last entry unguarded, and
-an object keyed by option or outcome name routes a branch each. Guards live here,
-because a guard is a condition on an edge.
+  for (const state of states) {
+    config.states[state.key] = state.compileNode();
+  }
 
-```js
-// src/machine/flow/pgr-transitions.js - the whole filing graph
-exits: {
-  menu:            { fileComplaint: 'fileComplaint', trackComplaint: 'trackComplaint' },
-  institution:     'description',                 // unconditional
-  description:     'imageUpload',
-  consent:         { Yes: 'confidentiality', No: 'consentDeclined' },  // by option
-  boundary:        { onLeaf: 'consent', onEmpty: 'consent' },          // by walk outcome
-  trackComplaint:  { hasRecords: 'endstate', noRecords: 'endstate' }   // by call outcome
+  return config;
 }
 ```
 
-A pure function called `join` folds the two tables together before the generator sees
-them, producing exactly the step objects the emitters already read. That boundary
-matters: the *authoring* contract is two files, the *generator* contract is one joined
-step. It is also what lets the generator's own tests construct a step inline, without
-inventing a transitions table for each case.
+This is the practical difference from a central generator. To learn what a step
+compiles into, open its class and read `compileNode()`; you are never tracing
+through a large file that handles every kind at once. To add a kind, write a class
+with the setters it needs and a `compileNode()` that returns its node — no file
+outside that class changes. The cost is that the XState knowledge is spread across
+six small files rather than one large one, which is the trade the class model
+makes deliberately.
+
+`Group.compileNode()` works the same way, returning a compound node with its own
+`id`, `initial` and nested states, and attaching an entry action when
+`setOnEntry` was used.
+
+## Part 15 — The triplet: the core idiom
+
+
+
+Any state that waits for a reply compiles into three children, and once you see
+the pattern the machine becomes easy to read. They are `question`, `process` and
+`retry`, nested under a compound node named after the step. `QuestionState` and
+`AskState` both emit this shape from their own `compileNode()`, so a menu and a
+free-text question behave the same way even though what counts as a valid answer
+differs. States that never wait — `State`, `ProcessingState`, `GateState` — emit
+a single node instead.
+
+`question` is the only child with an `on` handler. On entry it sends the prompt,
+then waits for `USER_MESSAGE`, which moves it to `process`. Nothing else happens
+here: no validation, no branching. Keeping the wait in a state of its own is what
+makes a conversation resumable, because a stored session that points at
+`…description.question` is precisely a conversation waiting for that answer.
 
 ```js
-// src/machine/pgr.js - the two tables become the steps generate() has always taken
-const flow = join(buildStates({ messages, pgrService, localisationService, config }),
-                  transitions, layout.pgr);
-pgr.initial = flow.layout.initial[layout.pgr.root];   // 'menu', declared in the graph
-mergeStates(pgr.states, generate(flow.steps, flow.layout));
-```
-
-A state never mentions `path`, `#id`, `onEntry`, `always`, `cond`, `assign`, or a
-transition, and neither does the graph. Where a step sits lives in
-`src/machine/flow/layout.js`: the journey's root name, a table of group nodes with
-the ids others target them by, and a map from step key to the group path it belongs
-in. Nothing else.
-
-Message text is not written in either table. A state points at a *bundle* — an object
-of locale-keyed strings — and the bundles live in `flow/messages-seva.js` for
-onboarding and near the bottom of `pgr.js` for filing. So adding a question touches
-the states file, the transitions file and the copy — unless it belongs inside a group,
-in which case `layout.place` needs a line too.
-
-Two files hold code that is unreachable but kept deliberately:
-`flow/legacy-location.js` (the old GPS and fuzzy-search location flow) and
-`flow/legacy-organization.js` (onboarding by organisation code). Both still compile
-and are still merged into the machine, so their internal `#id` references resolve,
-but nothing routes into them. Part 22 explains why they stay.
-
----
-
-## Part 6 — The machine from the top
-
-`src/machine/seva.js` is 43 lines and assembles the one machine, id `mseva`. Read it
-in full first — it is short. It declares a root config with `initial: 'start'`, a
-root-level `USER_RESET` handler, and a `states` map containing exactly one
-hand-written entry: `pgr`. Everything else is merged in below it, which is why the
-file reads as assembly rather than as a machine.
-
-That root `USER_RESET` rule is worth pausing on. Because it sits at the root it
-applies from anywhere, which is what makes typing "egov" work at any point in any
-conversation. It is the single most useful escape hatch in the product, and it is
-one line. `chat-service` converts greeting words into that event before sending.
-
-Below the config, three statements do the assembly. `mergeStates` grafts the
-generated onboarding and chassis states onto the root; `Object.assign` adds the legacy
-organisation states; `assertTargets` validates the finished tree. Only then is
-`Machine(...)` called. The order matters — the check needs the complete tree — and
-Part 23 explains what it would otherwise miss.
-
-```js
-// src/machine/seva.js - the whole assembly, verbatim
-const flow = join(                         // states + graph -> the steps generate() takes
-  buildStates({ messages, userProfileService, offeredLocales }),
-  transitions,
-  layout.seva
-);
-mergeStates(                               // graft the generated states onto the root
-  sevaConfig.states,
-  generate(flow.steps, flow.layout)
-);
-Object.assign(                             // add the unreachable legacy flow
-  sevaConfig.states.onboarding.states,
-  legacyOrganizationStates({ emailTenantService })
-);
-
-assertTargets(sevaConfig);                 // fail at require time, not mid-conversation
-
-const sevaMachine = Machine(sevaConfig);   // only now is the machine built
-```
-
-The states themselves come from `flow/seva-states.js`. `start` waits for the first
-message and forks: a citizen who already has a locale goes to `#welcome`, everyone
-else to `#onboarding`. It sends nothing at all, which is unusual enough to need its
-own kind. `endstate` marks a finished conversation and loops straight back to
-`start`.
-
-`onboarding` establishes identity: language, then name, with confirmation. It ends by
-calling the user service to save the profile, then hands control to `#pgr`. A
-returning citizen skips it entirely. `welcome` greets the citizen and routes into
-`#pgr`, but only after re-checking that a locale exists — otherwise it diverts to
-onboarding.
-
-`system_error` is the failure backstop. Every `invoke` that can fail targets it, it
-apologises to the citizen in their language, reports the error to the session layer,
-and returns to `#welcome`. Without it a backend outage would leave the conversation
-silently frozen, which from the citizen's side is indistinguishable from the bot
-being switched off.
-
----
-
-## Part 7 — The filing journey
-
-`pgr` is the product: the grievance menu, filing, and complaint tracking. It lives in
-`src/machine/pgr.js`, which like `seva.js` is now mostly assembly plus message
-bundles. Its root has an `onEntry` that clears the answer bag, so starting a new
-complaint never inherits a previous one's data — a small guarantee that removes a
-whole class of confusing bug reports.
-
-`menu` offers two options: file a complaint, or track existing ones. Choosing to
-file enters `fileComplaint`, a compound state with three groups plus the closing
-steps. Read them in the order the citizen meets them rather than the order they
-appear in the source — the source order is historical and the retained dead code
-sits in the middle of it.
-
-```js
-// pgr-transitions.js - the filing journey IS this table, verbatim and complete.
-// Read the keys top to bottom and you have read the conversation.
-exits: {
-  menu:               { fileComplaint: 'fileComplaint', trackComplaint: 'trackComplaint' },
-  complaintType2Step: { onLeaf: 'other' },       // the MDMS category walk
-  institution:        'description',
-  description:        'imageUpload',
-  imageUpload:        'location',
-  boundary:           { onLeaf: 'consent', onEmpty: 'consent' },   // the boundary walk
-  consent:            { Yes: 'confidentiality', No: 'consentDeclined' },
-  consentDeclined:    'endstate',
-  confidentiality:    { Yes: 'persistComplaint', No: 'persistComplaint' },
-  persistComplaint:   { filed: 'endstate' },
-  trackComplaint:     { hasRecords: 'endstate', noRecords: 'endstate' }
-}
-```
-
-First `type`, containing `complaintType2Step`: a walk down the complaint category
-tree from MDMS. It may be two levels deep or five; the code does not know and does
-not care, because the depth is a property of the deployment's data rather than of
-the dialogue. It ends at a level marked as a leaf, storing the chosen code.
-
-Then `other`, containing three plain questions: which institution the grievance
-concerns, a free-text description with a configured minimum length, and an optional
-attachment. The attachment step accepts images and documents, or the literal "1" to
-skip — a deliberately blunt convention that needs no translation. These are the
-simplest states in the machine and the best place to start reading.
-
-Then `location`, containing `boundary`: the same kind of walk, this time down the
-administrative boundary tree from the boundary service. It ends by recording the
-city and the locality, which together tell the backend where the problem is. This
-group also holds the retained dead GPS flow as unreachable siblings.
-
-Then the closing sequence. `consent` presents two statements and requires
-acceptance — declining sends a notice and ends the session without filing anything.
-`confidentiality` asks whether to flag the complaint as confidential. Finally
-`persistComplaint` calls the backend and sends a receipt carrying a category, a
-reference number and a date. That receipt is the citizen's proof.
-
-`trackComplaint` is the other branch from the menu and is much simpler: one backend
-call, then either a formatted list of the citizen's complaints or a "nothing found"
-message. Either way it ends the session. It is a good second file to read because it
-shows a `call` step with two outcome branches and nothing else.
-
----
-
-## Part 8 — The triplet: the core idiom
-
-Most questions in this bot are three states, and once you see the pattern the
-machine becomes easy to read. The three are `question`, `process`, and `error`, and
-they are children of a compound state named after the question itself — you will see
-`institution`, `consent`, `boundary` in state paths, each with those three inside.
-
-```js
-// generate.js - node() is what makes a question compound. Every `ask` and
-// `choose` step goes through it, which is why they all have the same shape.
-function node(step, states) {
-  return { id: step.id || step.key, initial: 'question', states };
-}
-
-// ...and the ask emitter fills in the three children:
-ask: (step) => node(step, {
-  question: questionState(step),                                  // Part 8, para 2
-  process:  { onEntry: readInput(step), always: [...] },           // Part 8, para 3
-  error:    errorState(step, (c) => c.message && c.message.retry)  // Part 8, para 4
-})
-```
-
-`question` renders the prompt on entry and then waits: `on: { USER_MESSAGE: 'process' }`.
-It is the only one of the three that blocks. Anything the citizen needs to see is
-sent here, which is why re-entering `question` re-asks the question — a property the
-retry path uses deliberately rather than by accident.
-
-```js
-// generate.js - `question` is the only one of the three with an `on` handler
-function questionState(step, prepare) {
-  return {
-    onEntry: assign((context, event) => {
-      if (prepare) prepare(context);      // used only by a runtime option list
-      sendPrompts(step, context, event);  // renders the bundle and sends it
-    }),
-    on: { USER_MESSAGE: 'process' }       // <- the only place the machine waits
-  };
-}
-```
-
-`process` interprets the reply on entry, writes what it concluded into context, and
-then decides with a guarded `always` array where to go. It never sends anything and
-never waits for input. Understanding this machine is mostly a matter of reading
-`process` blocks and their guard arrays in order, because that is where every
-branching decision actually lives.
-
-```js
-// generate.js - readInput is `process`'s entry action for an `ask` step.
-// It writes context.message, which the guard array below it then reads.
-function readInput(step) {
-  const media = Array.isArray(step.accept);
-  return assign((context, event) => {
-    if (!dialog.validateInputType(event, step.accept)) {          // invariant: type first
-      context.message = { isValid: !!(step.optional && String(event.message?.input ?? '') === '1') };
-      return;
-    }
-    const input = media ? event.message.input : String(event.message.input).trim();
-    const verdict = step.validate ? step.validate(input) : true;
-    context.message = { isValid: verdict === true,
-                        retry: verdict === true ? undefined : verdict || undefined };
-    if (context.message.isValid) {
-      if (step.slot) context.slots.pgr[step.slot] = input;        // the answer is stored here
-      if (step.set) step.set(context, input);
-    }
-  });
-}
-```
-
-`error` sends a retry message and immediately returns to `question` via `always`.
-Because it uses the non-flushing form of `sendMessage`, the retry and the re-asked
-question arrive together as one delivery rather than two. Every rejected input in the
-product ends up here, whatever the reason it was rejected, so there is exactly one
-retry behaviour to reason about.
-
-```js
-// generate.js - note `false`: queue the retry, do not flush. The re-entered
-// `question` then flushes both as a single WhatsApp delivery.
-function errorState(step, pick) {
-  return {
-    onEntry: assign((context) => {
-      const bundle = pick(context)                    // a validate() verdict bundle...
-        || step.retry                                 // ...or this step's own retry...
-        || dialog.global_messages.error.retry;        // ...or the generic one
-      emit(context, render(bundle, step.fill, context), false);
-    }),
-    always: 'question'
-  };
-}
-```
-
-The critical detail is the last entry of `process`'s guard array. If every entry has
-a `cond` and none matches, the machine stays in `process` — which has no `on`
-handler — and no future message can move it. The citizen is stuck permanently. Two
-onboarding states once had exactly that shape, both reachable in normal use. The
-generator now always emits an unconditional final `{ target: 'error' }`.
-
-```js
-// what the generator emits for every `ask` step - the triplet
+// src/machine/flow/flow-state-ask.js - the shape every waiting state emits
 {
-  id: 'institution',
+  id: this.key,
   initial: 'question',
   states: {
-    question: { onEntry: <send the prompt>, on: { USER_MESSAGE: 'process' } },
-    process:  { onEntry: <read the reply>,
-                always: [ { target: '#description', cond: isValid },
-                          { target: 'error' } ] },     // <- unconditional: cannot wedge
-    error:    { onEntry: <send the retry>, always: 'question' }
+    question: { entry: ..., on: { USER_MESSAGE: 'process' } },
+    process:  { entry: ..., always: [{ target: 'retry', cond: invalid }, ...branches] },
+    retry:    { entry: ..., always: 'question' }
   }
 }
 ```
 
----
-
-## Part 9 — The seven kinds
-
-A step is a plain object with a `key` (which becomes its state name and its id), a
-`kind`, and whatever that kind needs. Seven kinds cover every state in the live
-conversation. Learn these and you can read or write any part of the dialogue,
-because the exceptions are few and all of them are commented where they live.
-
-**`say`** sends a message and moves on. One state, no waiting, no `on` handler. Use
-it for anything the citizen reads but does not answer: the welcome, the thank-you,
-the consent-declined notice. If you find yourself wanting to send a message from a
-transition action, you almost certainly want a `say` step instead.
-
-```js
-// pgr-states.js - the notice sent when a citizen declines consent
-{
-  key: 'consentDeclined',         // one state, no waiting, no `on` handler
-  kind: 'say',
-  prompt: messages.fileComplaint.consent.declined
-}
-// pgr-transitions.js
-consentDeclined: 'endstate'
-```
-
-**`ask`** captures free text or media. It declares what it will `accept`, an optional
-`validate` predicate, and where to store the answer. Its retry message can be
-specific — "that name is too long" — falling back to the generic one. The
-institution, description, attachment and name questions are all `ask`.
-
-```js
-// pgr-states.js - validate returns true, false, or a bundle to reject WITH
-{
-  key: 'institution',
-  kind: 'ask',
-  accept: 'text',
-  prompt: messages.fileComplaint.institution.question,
-  fill: { maxLength: config.instituteNameMaxLength },   // fills {{maxLength}} in prompt AND retry
-  slot: 'instituteName',
-  validate: (name) =>
-    name.length === 0
-      ? false                                          // generic retry
-      : name.length > config.instituteNameMaxLength
-        ? messages.fileComplaint.institution.tooLong    // this specific retry
-        : true
-}
-```
-
-**`choose`** presents a set of options and branches on which was picked. It declares
-`options` and a `next` telling each option where to go. The grammar that recognises
-replies is derived from the options, so the numbering and the recognition can never
-drift apart. Menus and yes/no confirmations are `choose`.
-
-```js
-// pgr-states.js - `value` transforms the picked option before it is stored
-{
-  key: 'confidentiality',
-  kind: 'choose',
-  options: ['Yes', 'No'],                              // the grammar is derived from this
-  prompt: messages.fileComplaint.confidentiality.question,
-  fill: { label: ..., hint: ... },
-  slot: 'isConfidential',
-  value: (intention) => intention === 'Yes'            // store a boolean, not "Yes"
-}
-// pgr-transitions.js - one entry per option, checked against `options` at boot
-confidentiality: { Yes: 'persistComplaint', No: 'persistComplaint' }
-```
-
-**`walk`** handles a tree of unknown depth fetched from a backend. It declares how to
-fetch a level, which slot holds the path so far, and where to go on reaching a leaf.
-It is the most complex kind and the only one whose meaning is not obvious from its
-name — read Part 15 before changing one.
-
-```js
-// pgr-states.js - the administrative boundary descent
-{
-  key: 'boundary',
-  kind: 'walk',
-  pathSlot: 'boundaryPath',        // the codes chosen so far, as an array
-  stepSlot: 'boundaryStep',        // the level most recently fetched
-  invokeId: 'fetchBoundaryStep',
-  fetch: (context, boundaryPath) =>
-    pgrService.fetchBoundaryStep(context.extraInfo.tenantId, boundaryPath),
-  preamble: messages.fileComplaint.boundary.question.preamble,
-  onLeaf:  { slot: 'locality', set: recordCity },     // the slot write stays with the state
-  onEmpty: { slot: 'locality', set: recordCity }
-}
-// pgr-transitions.js - only the destination moves out
-boundary: { onLeaf: 'consent', onEmpty: 'consent' }
-```
-
-**`call`** performs a backend operation and branches on the result. It declares the
-promise to run and a list of outcome branches, each optionally with a condition, a
-message and a data write. Filing the complaint, listing complaints and saving the
-user profile are all `call`. Each gets a failure destination automatically.
-
-```js
-// pgr-states.js - outcomes are NAMED, so the graph can pair with them by name
-{
-  key: 'trackComplaint',
-  kind: 'call',
-  invokeId: 'fetchOpenComplaints',
-  src: (context) => pgrService.fetchOpenComplaints(context.user, context.extraInfo),
-  onDone: {
-    hasRecords: { when: (c, e) => Array.isArray(e.data) && e.data.length > 0,
-                  message: complaintList },            // a function: builds the list
-    noRecords:  { message: messages.trackComplaint.noRecords }   // must be last, unguarded
-  }
-}
-// pgr-transitions.js - onError defaults to '#system_error'; name it only to override
-trackComplaint: { hasRecords: 'endstate', noRecords: 'endstate' }
-```
-
-**`gate`** waits for a message, sends nothing, and branches on guards. It is the only
-kind that blocks without asking anything, and the machine's entry state `start` is
-its only user. It stays deliberately atomic: `reminders-service` compares
-`state.value` to the bare string `'start'`, so making it compound would silently
-break the reminder skip.
-
-```js
-// seva-states.js - the machine's entry state; emits an atomic node, on purpose
-{ key: 'start', kind: 'gate' }       // it asks nothing, so it declares nothing
-
-// seva-transitions.js - the fork is entirely graph, so it lives entirely here
-start: [
-  ['welcome', isOnboarded],
-  ['onboarding']                     // unconditional last entry
-]
-```
-
-**`goto`** branches immediately with no message at all. `endstate` and the locale
-check at the front of `welcome` use it. A `say` with an empty prompt would behave the
-same, but `{ kind: 'goto' }` states the intent and avoids emitting a pointless entry
-action, which matters when the whole point is readability.
-
-```js
-// seva-states.js - no prompt, no entry action at all
-{ key: 'endstate', kind: 'goto' }
-// seva-transitions.js
-endstate: 'start'
-```
-
-Anywhere a destination appears it may be a bare step key, a `[target, guard]` pair, or
-an object with `to` plus extras: `when` for a condition, `set` for a write. One
-grammar, reused in unconditional exits, ordered arrays, option maps, call outcomes and
-`onUnknown`, rather than five separate mechanisms to learn.
-
-Three names deserve early mention because they exist for specific, documented
-reasons. `effect` runs a side effect on *entry* rather than on the transition, the
-only way to see the triggering event's payload. `onUnknown` replaces the retry path
-when a step should silently default instead of re-asking. `onAny` sends every
-recognised option to one place, which is the only form available when the option list
-is built at runtime.
-
-```js
-// effect: runs on ENTRY, so it can see the error.platform payload
-{ key: 'system_error', kind: 'say',
-  prompt: dialog.global_messages.system_error,
-  effect: (context, event) => context.chatInterface.system_error(event.data) }
-// seva-transitions.js
-system_error: 'welcome'
-
-// onUnknown: replaces the retry loop; this step silently defaults instead of re-asking
-{ key: 'onboardingLocale', kind: 'choose',
-  options: () => offeredLocales(),                       // built at ENTRY, not at generate time
-  recognize: (o) => [o.label.toLowerCase(), stripDiacritics(o.label)],
-  // the fallback branch gets NO step-level write, so it must record the locale itself
-  onUnknown: { set: (c) => { c.user.locale = 'en_IN'; c.onboarding.locale = 'en_IN'; } } }
-
-// seva-transitions.js - runtime options have no names to key on, hence onAny
-onboardingLocale: { onAny: 'onboardingWelcome', onUnknown: 'onboardingWelcome' }
-```
-
-The language menu is the only user of the last two, and for the same reason both
-times: its options come from the deployment's data rather than from the source, so
-there is no `Yes` or `No` to write a branch for. Every other step has a fixed option
-list and routes by name, which is why `onAny` reads as a documented exception rather
-than as the normal case.
-
-Placeholders in prompts are filled from a `fill` map whose values may be literals,
-bundles, or functions of `(context, event)`. A function is how a step computes
-something: the consent statements joined into a bullet list, the complaint reference
-from the backend response, today's date. Anything longer than a lookup belongs in a
-named helper beside the table.
-
----
-
-## Part 10 — Targets, keys and layout
-
-Every step's `key` becomes its emitted `id`, so `next: 'description'` is resolved by
-the generator into the `#description` that XState needs. Keys and targets are one
-vocabulary rather than two, and a step author never types a `#`. The one exception
-is `menu`, whose emitted id is `pgrMenu` because the id genuinely differs from the
-state name.
-
-Resolution happens through a table built once per `generate` call from three
-sources: every step's key, every group name in the layout, and an `external` list of
-names declared outside the generator. Anything not in that table throws at require
-time with the offending step and the bad name, phrased in the author's vocabulary
-rather than as an XState error.
-
-`layout.js` has four parts per journey, and none is a transition. `root` names the
-journey's own node, so the graph can say where it starts. `wrappers` describes the
-group nodes and the `id` others target them by. `place` maps a step key to the group
-it sits in; a step with no entry sits at the top level. `external` lists names the
-generator does not own.
-
-```js
-// src/machine/flow/layout.js - the only file that knows the machine's shape
-pgr: {
-  root: 'pgr',                                   // so the graph can name the journey's own start
-  wrappers: {                                    // the group nodes, and the id others target
-    'fileComplaint.type':     { id: 'pgrType' },
-    'fileComplaint.location': { id: 'location' },
-    'fileComplaint.other':    { id: 'other' }
-  },
-  place: {                                       // step key -> the group it sits in
-    complaintType2Step: ['fileComplaint', 'type'],
-    institution:        ['fileComplaint', 'other'],
-    consent:            ['fileComplaint']
-    // ... a step with no entry here sits at the top level
-  },
-  external: ['fileComplaint', 'endstate', 'system_error']   // declared outside the generator
-}
-```
-
-Where each group *starts* is deliberately not here, because entering a group is a
-transition like any other. It lives in the graph file's `entry` map, so every "what
-runs next" fact is in one place. Four authored targets land on a group rather than a
-step, so their real destination is decided by `entry` — `imageUpload` goes to
-`location`, and `location` starts at `boundary`.
-
-```js
-// pgr-transitions.js - the other half of the graph
-entry: {
-  pgr:                      'menu',              // layout.root names this key
-  fileComplaint:            'type',              // a group may start at a nested group
-  'fileComplaint.type':     'complaintType2Step',
-  'fileComplaint.location': 'boundary',          // where imageUpload -> 'location' lands
-  'fileComplaint.other':    'institution'
-}
-```
-
-That `external` list is short and shrinking. For the onboarding journey it is now just
-`pgr`, the subtree spliced in from the other file. Everything else — `start`,
-`welcome`, `endstate`, `system_error`, `onboarding` — resolves from the step list or
-the wrappers table, because those states are now steps or groups rather than
-hand-written nodes.
-
-The point of the separation is that editing the flow cannot move a state. Emitted
-paths feed two things that outlive a deploy: the `state.value` persisted per citizen,
-and the `source`/`destination` strings telemetry derives from `state.toStrings()`.
-Because layout is declared once and preserved, reordering or renaming steps in the
-flow leaves both untouched.
-
-It also gives a clean exit. If the persisted paths and telemetry dimensions ever stop
-mattering, deleting `layout.js` flattens the whole machine in one change and the step
-tables do not change at all. The indirection is therefore reversible, which is a
-better property for an abstraction to have than merely being small or clever.
-
----
-
-## Part 11 — The generator
-
-`src/machine/flow/generate.js` is about 500 lines and exports three functions.
-`generate(steps, layout)` turns a step table into a states object.
-`mergeStates(target, source)` grafts that into an existing tree.
-`assertTargets(config)` checks the assembled result. Everything else in the file is
-private to it, which is why the surface is small enough to hold in your head.
-
-Internally it is one emitter per kind over a set of shared helpers, and no function
-is long. `questionState`, `errorState`, `readInput` and `readChoice` are shared by
-`ask` and `choose`; `render` and `emit` handle text; `transitions` and `fallbackOf`
-build guard arrays. To learn what a step becomes, find its emitter and read downward
-from there.
-
-```js
-// generate.js - the `ask` emitter in full. Note the two invariants it bakes in:
-// every declared branch is gated on validity, and the array always ends unconditionally.
-ask: (step) => node(step, {
-  question: questionState(step),
-  process: {
-    onEntry: readInput(step),
-    always: transitions(step.next, null, step.key)
-      .map((transition) => ({
-        ...transition,
-        cond: transition.cond
-          ? (c, e) => c.message.isValid && transition.cond(c, e)
-          : (c) => c.message.isValid
-      }))
-      .concat([{ target: 'error' }])            // <- the wedge-proof fallback
-  },
-  error: errorState(step, (c) => c.message && c.message.retry)
-})
-```
-
-`generate` walks the table and places each step where the layout says, creating group
-nodes as needed, taking their `id` from `wrappers` and their `initial` from the `entry`
-map that `join` folded in. Side effects
-stay inside `assign`, matching the idiom in `dialog.js`, and every `assign` body is
-block-bodied — an accidental object return would silently replace the whole context.
-
-`mergeStates` is what makes incremental change safe. When a generated node and an
-existing hand-written node occupy the same key and both are compound, it recurses
-into their children rather than overwriting. A plain assignment would have replaced
-an entire subtree, which during the conversion would have silently deleted dozens of
-states.
-
-`join` is the piece that keeps the emitters ignorant of the split. It folds each
-state's exits back into the fields they already read — `next`, `onLeaf.to`, `onDone[]`
-— and enforces four rules at require time: every exit names a real state, every state
-needing an exit has one, every entry names a real group, and a call's last outcome is
-unguarded. Those checks are the design, not polish.
-
-Four invariants are emitted unconditionally, and each closes a defect that existed
-when states were written by hand. Input type is validated before the reply is
-interpreted. Every guard array ends unconditionally. Walk guard order is fixed by the
-emitter rather than by the author. And there is exactly one retry implementation
-instead of seven near-identical copies.
-
-The first invariant deserves explanation. `dialog.get_input` throws a `TypeError`
-when the message payload is not a string, which happens for a shared location pin.
-Six hand-written states called the interpreter without checking first, so a location
-pin at the consent prompt threw out of `service.send`. The check is now not something
-a step can forget.
-
-The generator also refuses malformed tables at load time rather than producing a
-broken machine. A `choose` that offers an option with no destination throws
-immediately, naming the step and the option — because the alternative is a citizen
-who picks a listed option and is told forever that it is invalid.
-
-Two step fields exist purely to express things the plain kinds could not. `options`
-may be a *function*, in which case the option list and its grammar are built on entry
-and stored in context; this is mandatory for the language menu, because the
-localisation service populates its locale list asynchronously and the list is empty
-when `generate` runs. `recognize` supplies extra accepted spellings per option.
-
----
-
-## Part 12 — Slots: the answer bag
-
-Answers accumulate in `context.slots.pgr`, a flat object: `complaint`,
-`instituteName`, `description`, `image`, `city`, `locality`, `isConfidential`, plus
-`hierarchyPath` and `boundaryPath`, which are the walks' working state rather than
-answers as such. This bag is what becomes a complaint at the end, and it is cleared
-whenever the citizen re-enters the grievance menu, so a new complaint never inherits
-an old one.
-
-A step writes to it by naming a `slot`. The generator does the assignment, so step
-data never touches `context` directly for the common case. A `choose` step can also
-transform the value on the way in: the confidentiality question stores a real boolean
-rather than the string "Yes", which is what the backend expects and what the receipt
-logic reads.
-
-```js
-// as written in pgr-states.js / seva-states.js
-slot: 'instituteName'                            // -> context.slots.pgr.instituteName
-
-slot: 'isConfidential',                          // with a transform on the way in
-value: (intention) => intention === 'Yes'
-
-set: (context, locale) => {                      // anywhere OUTSIDE the pgr bag
-  context.user.locale = locale;
-  context.onboarding.locale = locale;
-}
-```
-
-For anything outside that bag — the citizen's locale, the onboarding name — a step
-supplies a `set` function instead, receiving the context and the captured value. Two
-mechanisms rather than one, but both are trivial and neither needs a path resolver.
-Prefer `slot` whenever it fits, and reach for `set` only when the destination really
-lives elsewhere.
-
-The consumer is `persistComplaint` in `src/machine/service/egov-pgr.js`. It reads the
-bag and builds the PGR request body, including an `extendedAttributes` object
-carrying the institution name, the confidentiality flag and a deployment-level case
-category. If you add a slot, that function is where it must be read — writing a slot
-nobody reads is the easiest silent mistake here.
-
-```js
-// generate.js - where a `choose` step's answer is written
-function choiceWrite(step) {
-  if (!step.slot && !step.set) return null;
-  return (context) => {
-    const value = step.value ? step.value(context.intention) : context.intention;
-    if (step.slot) context.slots.pgr[step.slot] = value;   // -> the answer bag
-    if (step.set) step.set(context, value);                // -> anywhere else
-  };
-}
-
-// egov-pgr.js persistComplaint - the other end of the contract
-requestBody.service.description = slots.description ?? '';
-requestBody.service.extendedAttributes = {
-  caseRelatedTo:  config.caseRelatedTo,
-  instituteName:  slots.instituteName,
-  isConfidential: slots.isConfidential === true
-};
-```
-
-There is no schema. Nothing stops a typo in a slot name from producing a complaint
-with a missing field. The mitigation is a test asserting the exact set of slot keys
-after a happy path, so a rename fails on the same commit that introduces it. Treat
-that test as the contract, because it is the only one there is.
-
----
-
-## Part 13 — Text and translation
-
-All outbound text lives in message bundles: objects keyed by locale — `en_IN`,
-`pt_PT` — with an optional `code`. Onboarding and chassis copy sits in
-`flow/messages-seva.js`; filing copy sits near the bottom of `pgr.js`. They are
-ordinary data and safe to edit, kept next to the flow they serve rather than in a
-separate translation tree.
-
-`dialog.get_message(bundle, locale)` resolves one. If the bundle has a `code` it
-first asks the localisation service for a live translation of that code; if that
-yields nothing usable it falls back to the bundle's own text for the locale, and
-failing that to `en_IN`. So translations can change in DIGIT without a deploy, while
-the code still runs standalone.
-
-```js
-// pgr.js (filing) and flow/messages-seva.js (onboarding) hold these.
-// A bundle: a localisation code plus per-locale fallback literals.
-institution: {
-  question: {
-    code: 'chatbot.pgr.institution.question',    // asked of the platform FIRST
-    en_IN: 'Which institution is your grievance about?',
-    pt_PT: 'A que instituicao se refere a sua reclamacao?'
-  }
-}
-
-// resolution order, from dialog.get_message:
-//   1. live translation for `code` in the citizen's locale
-//   2. this bundle's entry for that locale
-//   3. this bundle's en_IN
-```
-
-`src/machine/util/localisation-service.js` fetches those translations once at module
-load and caches them. It queries two tenants — the state root and the deployment
-tenant — because the localisation search API returns rows from the first tenant in
-the chain that matches and then stops rather than merging. That detail has cost real
-debugging time.
-
-Which languages the menu offers is decided in `flow/offered-locales.js`. A locale is
-offered only if the platform declares it *and* every bundle in the journey has a
-fallback literal for it. The platform side is weaker than it looks: the service's
-coverage check proves only that a locale has some row at that tenant, not that the
-chatbot has translations.
-
-Placeholders use double braces: `{{maxLength}}`, `{{statements}}`, `{{name}}`,
-`{{options}}`, and positional `{{1}}` `{{2}}` `{{3}}` in the filing receipt. The
-generator substitutes them from the step's `fill` map, and a `choose` step gets
-`{{options}}` for free. A placeholder with no matching entry is left in the text —
-visible, which is the point.
-
-```js
-// generate.js - substitution. Two behaviours worth noting, both deliberate.
-function render(bundle, fill, context, event) {
-  let text = dialog.get_message(bundle, context.user.locale);
-  for (const token of Object.keys(fill || {})) {
-    const marker = `{{${token}}}`;
-    if (!text.includes(marker)) continue;                        // absent -> never evaluated
-    text = text.split(marker).join(String(resolve(fill[token], context, event) ?? ''));
-  }                                                              // nullish -> empty string
-  return text;
-}
-
-// and a `choose` step gets {{options}} for free:
-const fill = step.options ? { options: () => renderOptions(optionsOf(step)), ...step.fill } : step.fill;
-```
-
-Two rules about substitution, both learned the hard way. A `fill` value resolving to
-nothing renders as an empty string, not the word "undefined" and not a stray comma.
-And a `fill` entry whose placeholder does not appear in the text is never evaluated,
-so a function that would throw on missing data does not get the chance.
-
-Reused platform keys are worth knowing. The consent statements and the
-confidentiality label point at the same localisation codes the web portal uses, so
-the bot and the portal cannot drift apart in wording. When you add citizen-facing
-text, check whether the portal already has a key for it before inventing one.
-
----
-
-## Part 14 — Understanding what the citizen typed
-
-The bot recognises replies by *grammar*: a list of `{ intention, recognize }` pairs,
-where `recognize` is an array of accepted strings and `intention` is the symbol the
-machine reasons about. `dialog.get_intention(grammar, event, true)` returns the
-matching intention or a sentinel meaning "not understood". The third argument selects
-exact matching, and every live call uses it.
-
-```js
-// what choiceGrammer builds from options: ['Yes', 'No']
-[
-  { intention: 'Yes', recognize: ['1', 'yes'] },
-  { intention: 'No',  recognize: ['2', 'no'] }
-]
-
-// get_intention lowercases and trims the input, then matches exactly (strict = true)
-context.intention = dialog.get_intention(grammer, event, true);   // or INTENTION_UNKOWN
-```
-
-The product is deliberately numbers-first. A menu of three options accepts "1", "2",
-"3". This is not laziness: it works on every handset, needs no translation, and
-avoids the ambiguity of free text in a language the bot may not have been tested in.
-Confirmations additionally accept the word forms, so "yes" works as well as "1".
-
-For a `choose` step the grammar is derived from the step's `options`, so the prompt's
-numbering and the recognition come from the same list and cannot disagree. This
-matters more than it sounds: two hand-written confirmation grammars had once drifted,
-so "yes" was accepted at the name confirmation and rejected at the consent question
-for no reason anybody intended.
-
-A step may extend the accepted spellings with `recognize`. The language menu uses it
-to accept the option's label as well as its number, including a diacritic-stripped
-form — so a citizen typing `portugues` selects `PORTUGUÊS`. Without that, generating
-that step from its options alone would have accepted only the number and the locale
-code.
-
-There is an important asymmetry in where grammars live. A static option set is a
-compile-time constant held in the emitter's closure. A runtime list — the language
-menu, or a fetched tree level — must survive to the next HTTP request, so it is
-stored in `context.grammer`. Storing a constant there would add a way to fail for no
-benefit.
-
-```js
-// generate.js - one reader, two sources of grammar
-process: { onEntry: readChoice(step, dynamic
-            ? (context) => context.grammer   // runtime list: must survive to next request
-            : () => fixed) }                 // static list: closed over, never persisted
-
-function readChoice(step, grammerOf) {
-  return assign((context, event) => {
-    const grammer = grammerOf(context);
-    if (!grammer || !dialog.validateInputType(event, step.accept || REPLY_TYPES)) {
-      context.intention = dialog.INTENTION_UNKOWN;   // no throw, just "not understood"
-      return;
-    }
-    context.intention = dialog.get_intention(grammer, event, true);
-  });
-}
-```
-
-`validateInputType(event, accepted)` is the separate question of *kind*: was this
-text, an image, a document, a location, or a button reply? Text questions accept text
-and interactive button replies. The attachment question accepts images and documents.
-This check always runs before interpretation, which is one of the generator's four
-invariants and closes a crash described in Part 11.
-
----
-
-## Part 15 — The tree walks
-
-Two questions in the product are not really questions but descents through a tree of
-unknown shape: the complaint category and the administrative area. Both are driven
-entirely by backend data. Neither the depth nor the labels appear in the code, which
-is why a deployment can restructure its categories without anyone touching this
-module.
-
-A walk is five states. `fetch` invokes the backend for the current level. `evaluate`
-looks at what came back and decides whether there is anything to ask. `question`
-renders the numbered list and waits. `process` interprets the choice. `error`
-retries. The cycle repeats one level per pass until a level announces itself as the
-last.
-
-The path so far lives in a slot — `hierarchyPath` or `boundaryPath` — as an array of
-codes. Descending pushes the chosen code; going back pops it. The fetch function
-receives that array and returns the level below it, along with the labels to display
-and a flag saying whether this level is a leaf.
-
-`process`'s guard order is the subtlety, and the generator fixes it for good reason.
-Go-back is tested first, because "Go Back" is a real grammar entry and would
-otherwise satisfy the later guards — choosing it at a leaf level would have filed a
-complaint whose category was literally "goback". Leaf is tested before descend, or
-the leaf's own code gets pushed and the next fetch runs against nothing.
-
-```js
-// generate.js walkTransitions - the order is fixed by the emitter, not the author
-[
-  { target: 'fetch',            cond: (c) => !c[step.stepSlot] },              // 0: resumed with no level -> refetch
-  { target: 'fetch',            cond: (c) => c.intention === INTENTION_GOBACK, // 1: pop the path
-                                actions: <pop> },
-  { target: step.onLeaf.to,     cond: (c) => recognised(c) && c[step.stepSlot].isLeafLevel,
-                                actions: <push, write the slot> },             // 2: leaf BEFORE descend
-  { target: 'fetch',            cond: (c) => recognised(c), actions: <push> }, // 3: descend
-  { target: 'error' }                                                          // 4: retry
-]
-```
-
-Ahead of all of those sits a guard for missing fetched data. A conversation resumed
-mid-walk has the path but not the fetched level, because entry actions do not re-run
-on resume. Without the guard, reading the leaf flag off `undefined` throws. With it,
-the walk simply fetches again and re-asks, costing the citizen one prompt.
-
-`evaluate` exists for the case of a level with no options. For the boundary walk that
-means the citizen has descended as far as the data goes, so it records what it has
-and moves on. The category walk has no such escape, deliberately: there is no sound
-complaint to file without a category.
-
-The backend side lives in `src/machine/service/egov-pgr.js`.
-`fetchComplaintHierarchyStep` reads the MDMS category definition and rows, orders any
-"Other" option last, and returns exactly one level. `fetchBoundaryStep` does the
-equivalent against the boundary hierarchy. Both return the same shape — options,
-labels, a level name and a leaf flag — which is precisely why one emitter can serve
-both walks.
-
----
+`process` does the work and never waits. Its entry action interprets the reply —
+`QuestionState` matches it against the options and records an intention,
+`AskState` checks the input type, runs `validate`, and writes the answer into
+context when it passes. Then an `always` array decides where to go. The first
+entry sends an invalid or unrecognised reply to `retry`; the rest are the
+branches you declared with `setNext` and `setConditionalNext`, in the order you
+declared them.
+
+`retry` sends a message and goes straight back to `question`. Which message
+depends on what failed: a validator may return specific text, such as telling the
+citizen a name is too long, and the class falls back to the step's own retry
+prompt, then to a generic one. Because `retry` loops to `question` rather than
+advancing, a citizen who answers badly is asked the same thing again rather than
+carried forward with a missing answer.
+
+This three-state shape is why state paths are longer than you might expect and
+why they are useful. `pgr.fileComplaint.other.description.question` tells you the
+citizen is being asked for a description; the same path ending in `.retry` tells
+you they just answered it wrongly.
 
 ## Part 16 — The session layer
+
+
 
 `src/session/` turns HTTP into conversation. It is deliberately several small files
 rather than one: `session-manager.js` orchestrates, two login flows resolve identity,
@@ -1301,6 +1045,8 @@ whether that has been fixed before trusting it.
 
 ## Part 17 — Saving and resuming a conversation
 
+
+
 After every transition the persistence listener serialises the state, strips the user
 object down to locale, userId and mobile number, and writes it to the
 `eg_chat_state_v2` table against the citizen's id, along with telemetry describing
@@ -1360,7 +1106,7 @@ carries on.
 // src/session/chat-service.js
 resolvePersistedState(chatState, context) {
   try {
-    return sevaStateMachine.withContext(context).resolveState(State.create(chatState.raw));
+    return stateMachine.withContext(context).resolveState(State.create(chatState.raw));
   } catch (error) {
     console.error(`Discarding unresolvable chat state for user ${context.user.userId}: ${error.message}`);
     return null;                     // caller starts fresh, carrying only user + tenant
@@ -1376,6 +1122,8 @@ makes that arrangement safe rather than fragile, which is why it is not optional
 ---
 
 ## Part 18 — Channels
+
+
 
 `src/channel/index.js` picks one adapter at startup from `WHATSAPP_PROVIDER`:
 `Twilio`, `ValueFirst`, `Kaleyra`, or the console fallback. Every adapter implements
@@ -1417,6 +1165,8 @@ templates are switched on. No outbound template currently uses buttons.
 
 ## Part 19 — The backend services
 
+
+
 `src/machine/service/service-loader.js` is a thin indirection exporting the service
 objects. It exists so tests can replace them wholesale. Anything that talks to the
 network should be reachable through it, and code that captures a service at module
@@ -1432,8 +1182,8 @@ if (config.kafka.kafkaConsumerEnabled) {
   module.exports.pgrStatusUpdateEvents = require('./pgr-status-update-events');
 }
 
-// pgr-states.js receives it as an argument rather than importing it, so a test
-// can replace it: buildStates({ messages, pgrService, localisationService, config })
+// pgr-machine.js pulls the services it needs from the loader, so a test can
+// stub the loader and exercise the flow without touching the network
 ```
 
 `egov-pgr.js` is the large one. Besides the two walk functions it holds
@@ -1450,7 +1200,7 @@ the tracker is keyed by the normalised form.
 
 Requests to DIGIT need an authenticated envelope, and MDMS in particular is sensitive
 to the tenant in the query. When a lookup returns nothing, suspect the tenant before
-suspecting the data — Part 21 explains why that is the usual cause. An empty options
+suspecting the data — Part 20 explains why that is the usual cause. An empty options
 list is the symptom, and because that is not an error it surfaces as an odd-looking
 prompt.
 
@@ -1462,43 +1212,9 @@ than reaching that state.
 
 ---
 
-## Part 20 — Retained dead code
+## Part 20 — Tenants
 
-Two subtrees are unreachable but present. The location flow that asked for a GPS pin
-and did fuzzy matching on city and locality names was replaced by the boundary walk.
-Onboarding by organisation code, for deployments where a citizen belongs to one of
-several organisations, was replaced by a simpler single-tenant flow.
 
-They were kept rather than deleted because the behaviour may be wanted again and
-reconstructing it from a commit history is harder than reading it in place. They live
-in `flow/legacy-location.js` and `flow/legacy-organization.js`, moved with only their
-indentation changed, and are merged into the machine so their internal `#id`
-references still resolve at boot.
-
-```js
-// src/machine/pgr.js - the dead geo flow is merged in as siblings of the live walk
-mergeStates(
-  pgr.states.fileComplaint.states.location.states,
-  legacyLocationStates({ messages, grammer, pgrService, config })
-);
-
-// nothing targets them, which you can confirm with:
-//   grep -rn "#geoLocation\|#nlpCitySearch\|#confirmLocation" src/
-```
-
-Each also owns the message copy only it reads, so the dead flow is self-contained and
-deleting it later is a single-file change. That copy is the giveaway when you are
-reading: it carries `hi_IN` and `pa_IN` locales and no `code`, unlike the live
-bundles, which carry `en_IN`, `pt_PT` and a localisation code.
-
-Reviving either means restoring an entry point — a transition that targets its first
-state — and then testing it. Nothing currently routes in, which you can verify by
-searching for `#` references to their state ids. That search is also the quickest way
-to confirm whether a state you are reading is live at all.
-
----
-
-## Part 21 — Tenants
 
 DIGIT tenancy is hierarchical: a state root such as `mz` with cities beneath it such
 as `mz.ige`. The distinction is not cosmetic, and getting it wrong produces empty
@@ -1514,7 +1230,7 @@ One variable, four consequences, which is why changing it is never a small chang
 ```text
 // the same variable, reached from four different places
 standard-login-flow.js:14  userService.getUserForMobileNumber(mobile, config.rootTenantId)
-pgr-states.js              pgrService.fetchBoundaryStep(context.extraInfo.tenantId, path)
+pgr-machine.js:119         pgrService.fetchBoundaryStep(context.extraInfo.tenantId, path)
 egov-pgr.js:943            tenantId = ... : config.rootTenantId          // where a complaint is filed
 localisation-service.js:18 const stateTenantId = String(config.rootTenantId).split('.')[0];
 ```
@@ -1531,7 +1247,9 @@ the wrong tenant and they load without error and simply never appear in a messag
 
 ---
 
-## Part 22 — Configuration
+## Part 21 — Configuration
+
+
 
 `src/env-variables.js` is the single place environment variables are read, and every
 one has a default. There is no `.env` loading — the process expects real environment
@@ -1571,80 +1289,39 @@ place guarantees they will eventually disagree, which is an unpleasant bug to re
 
 ---
 
-## Part 23 — What fails at boot, and why that is good
+## Part 22 — What fails at boot, and why that is good
 
-`assertTargets` runs in `seva.js` after everything is merged and before `Machine(...)`
-is called. It walks the assembled config and raises on three things: a target that
-resolves to no state, a duplicate state id, and a compound state with no `initial`
-child. All three would otherwise be silent in different ways.
 
-```js
-// generate.js - three checks, all of them cheap, all of them fatal
-function assertTargets(config, allowed = []) {
-  const out = scan(config, { ids: [], targets: [], headless: [] });   // whole config, not just states
+Wiring is by object reference, so most mistakes are impossible to express. A step
+points at another step by naming the variable holding it; a typo is an undefined
+variable, and the file throws while it is being loaded. That happens as the service
+starts, before it accepts a single message, which is the cheapest moment to find out.
+There is no separate target table to keep in step with the states.
 
-  const duplicate = out.ids.find((id, i) => out.ids.indexOf(id) !== i);
-  if (duplicate) throw new Error(`flow: duplicate state id '#${duplicate}'`);
+A group compiles its `setStart` key into the node's `initial`. A group built without
+one produces a compound node with no initial child, and XState throws when `Machine()`
+is called — again at startup. Every group in the code sets it today, so this is a
+guard against a future edit rather than a live concern.
 
-  const known = new Set(out.ids.concat(allowed));
-  const missing = out.targets.find((t) => !known.has(t.slice(1)));
-  if (missing) throw new Error(`flow: unknown transition target '${missing}'`);
+One thing is not checked: duplicate keys. XState v4 does not detect two states sharing
+an `id`, and nothing in the flow classes does either. Two states constructed with the
+same key in different journeys compile into different subtrees, and an absolute target
+like `#endstate` resolves to whichever one the interpreter finds first. The filing
+journey relies on exactly this, declaring placeholder `endstate` and `system_error`
+states and leaving them out of its compile list so the shell's real ones win. That
+makes key choice something to think about: reuse a key by accident and a transition
+lands somewhere plausible but wrong, with no error anywhere.
 
-  if (out.headless.length)
-    throw new Error(`flow: compound state '${out.headless[0]}' has no initial state`);
-  return config;
-}
-```
-
-Each is silent for its own reason. XState v4 does not detect duplicate ids at all. An
-unknown target throws only when the machine is first interpreted — inside a swallowed
-catch — so it surfaces as one wedged citizen at a time. And a compound state with no
-`initial` merely logs a warning nobody reads.
-
-`join` adds four more, checked before the generator runs at all. They exist because
-splitting the graph into its own file doubles the number of places a step's name
-appears, so renaming it in one file and forgetting the other is now the likeliest
-mistake anyone will make. Each message names the offender, in the author's vocabulary
-rather than XState's, so the fix is usually obvious from the line alone.
-
-```text
-flow: transitions declare an exit for 'instituion', which is not a state
-flow: state 'severity' (choose) has no exit in transitions
-flow: entry declares a start for 'fileComplaint.typo', which is not a group in the layout
-flow: 'fileComplaint' starts at 'instituion', which is not a state or a group
-flow: state 'trackComplaint' declares outcome 'hasRecords' last, but it carries a
-      guard - the final outcome must be unconditional
-```
-
-The last one replaces a guarantee the syntax used to give for free. When `onDone` was
-an ordered array, "the fallback is last" was visible on the page. Named outcomes rely
-on object key order instead, which is a language detail rather than an author's
-intent, so the rule is now enforced rather than trusted.
-
-```text
-flow: step 'description' points at 'imageUploadd', which is not a step, a group
-      or a declared external state
-flow: duplicate state id '#institution'
-flow: unknown transition target '#welcomee'
-flow: compound state 'outer' has no initial state
-flow: step 'menu' offers option(s) somethingElse with no next target
-```
-
-Note it validates the whole *config*, not just the states map. That matters because
-the root's own `on` handlers are transitions too, and `USER_RESET → #welcome` is the
-product's universal escape hatch. Scanning only the states left that single
-transition unchecked, so breaking the one thing every citizen relies on used to be
-completely silent.
-
-Turning these into a startup failure is the point. A deployment that will not boot is
-obvious, fixed in minutes, and affects nobody mid-conversation. The same defect
-discovered as "some citizens stop getting replies" is a support ticket, a log hunt,
-and — because the state is persisted — citizens who stay broken until someone
-intervenes.
+The principle behind all of this is worth stating plainly. A flow error that surfaces
+at startup costs a failed deploy. The same error surfacing when a citizen reaches that
+step costs one wedged conversation at a time, discovered days later from a support
+report. Prefer the loud early failure every time.
 
 ---
 
-## Part 24 — Tests
+## Part 23 — Tests
+
+
 
 Five files, each testing something different. `test/flow-generate.test.js` is the
 largest and verifies the generator itself against synthetic steps with fixture text.
@@ -1716,39 +1393,81 @@ gated on that diff being byte-identical across 1,359 lines.
 
 ---
 
+## Part 24 — Retained dead code
+
+
+
+Two subtrees are unreachable but present. The location flow that asked for a GPS pin
+and did fuzzy matching on city and locality names was replaced by the boundary walk.
+Onboarding by organisation code, for deployments where a citizen belongs to one of
+several organisations, was replaced by a simpler single-tenant flow.
+
+They were kept rather than deleted because the behaviour may be wanted again and
+reconstructing it from a commit history is harder than reading it in place. They live
+in `flow/legacy-location.js` and `flow/legacy-organization.js`, moved with only their
+indentation changed. Neither is wired into the machine the service runs: nothing in
+the live path requires them, so they cost nothing at runtime and cannot be reached by
+a citizen.
+
+```text
+// nothing targets them, which you can confirm with:
+//   grep -rn "#geoLocation\|#nlpCitySearch\|#confirmLocation" src/
+```
+
+If you are reading them as a reference for rebuilding the behaviour, treat them as a
+description of the old flow rather than as code to re-enable. They were written for
+the step-table authoring model, so restoring either one means expressing it with the
+state classes.
+
+Each also owns the message copy only it reads, so the dead flow is self-contained and
+deleting it later is a single-file change. That copy is the giveaway when you are
+reading: it carries `hi_IN` and `pa_IN` locales and no `code`, unlike the live
+bundles, which carry `en_IN`, `pt_PT` and a localisation code.
+
+Reviving either means restoring an entry point — a transition that targets its first
+state — and then testing it. Nothing currently routes in, which you can verify by
+searching for `#` references to their state ids. That search is also the quickest way
+to confirm whether a state you are reading is live at all.
+
+---
+
 ## Part 25 — Recipes
 
-**To add a question**, append a state to `pgr-states.js` or `seva-states.js`, wire it
-into the matching `-transitions.js`, and add its copy to the bundle file. Pick the kind
-by what the citizen does: reads (`say`), types (`ask`), picks from a list (`choose`),
-descends a tree (`walk`), waits on a backend (`call`). If it belongs inside a group,
-`layout.place` needs a line too.
+
+
+**To add a question**, construct a state in `pgr-machine.js` or `shell-machine.js`,
+wire it with `setNext`, add it to the list its group holds, and add its copy to the
+matching messages file. Pick the class by what the citizen does: reads (`State`),
+types (`AskState`), picks from a list (`QuestionState`), descends a tree
+(`WalkState`), waits on a backend (`ProcessingState`).
 
 ```js
-// 1. pgr-states.js - the new state says nothing about where it goes
-{ key: 'severity', kind: 'choose',
-  options: ['Low', 'High'],
-  prompt: messages.fileComplaint.severity.question,
-  slot: 'severity' },
+// 1. pgr-machine.js - declare it alongside the other states
+const askSeverity = new QuestionState('severity');
 
-// 2. pgr-transitions.js - splice it into the chain
-description: 'severity',                        // was 'imageUpload'
-severity:    { Low: 'imageUpload', High: 'imageUpload' },
+// 2. wire it: the step before now points here, and this one points onward
+askDescription.setNext(askSeverity);
+askSeverity
+  .setPrompt(messages.fileComplaint.severity.question)
+  .setOptions(['Low', 'High'])
+  .setNext(askForAttachments);
 
-// 3. layout.js place - or it sits at the top level instead of inside fileComplaint.other
-severity: ['fileComplaint', 'other'],
+// 3. add it to the group that should hold it
+const otherGroup = new Group('other')
+  .setStates([askIntitution, askDescription, askSeverity, askForAttachments])
+  .setStart('institution');
 
-// 4. pgr.js messages - the copy
+// 4. flow/pgr-messages.js - the copy
 severity: { question: { code: 'chatbot.pgr.severity.question',
                         en_IN: '...', pt_PT: '...' } }
 
-// 5. egov-pgr.js persistComplaint - read the new slot, or it goes nowhere
+// 5. egov-pgr.js persistComplaint - read the new answer, or it goes nowhere
 ```
 
-You do not need to touch `layout.js` unless the step belongs in a *new* group. A step
-with no `place` entry sits at the top level of its journey, which is correct for most
-additions. If you do name a group that the layout does not define, the generator
-throws at require time rather than quietly misplacing the state.
+A state left out of every group's `setStates` is simply never compiled, so it will
+not appear in the machine at all. Wiring is by object reference, so a misspelled
+state name is an undefined variable that throws when the file loads — there is no
+way to point a step at a destination that does not exist.
 
 **To change wording**, edit the bundle. If it has a `code` and the deployment has a
 translation for that code, the live translation wins — so check there too, or your
@@ -1790,6 +1509,8 @@ the way a citizen would. Neither substitutes for the other.
 ---
 
 ## Part 26 — Gotchas worth knowing in advance
+
+
 
 Guard order is behaviour. In a walk it decides whether "Go Back" is treated as a
 category. In a triplet it decides whether an unrecognised reply retries or wedges.
@@ -1855,14 +1576,14 @@ state machine.
 | `src/session/upload-tenant.js` | Which tenant an attachment belongs to |
 | `src/session/repo/` | In-memory and Postgres state storage |
 | `src/session/user-service.js` | Mobile number to DIGIT user |
-| `src/machine/seva.js` | Assembles the one machine — read this first |
-| `src/machine/pgr.js` | Filing shell, filing copy, merges |
-| `src/machine/flow/{pgr,seva}-states.js` | What each step asks, as data |
-| `src/machine/flow/{pgr,seva}-transitions.js` | The graph: every exit, every group start |
-| `src/machine/flow/join.js` | Folds the two tables into one step list |
-| `src/machine/flow/layout.js` | Where each step sits in the tree |
-| `src/machine/flow/messages-seva.js` | Onboarding and chassis copy |
-| `src/machine/flow/generate.js` | Steps to XState nodes; the boot check |
+| `src/machine/state-machine.js` | Creates the machine — read this first |
+| `src/machine/citizen-service-machine.js` | Joins the shell and filing journeys |
+| `src/machine/shell-machine.js` | Onboarding and the chassis |
+| `src/machine/pgr-machine.js` | The complaint-filing journey |
+| `src/machine/flow/flow-state.js` | Base state class: prompts and branches |
+| `src/machine/flow/flow-state-*.js` | One class per kind of step |
+| `src/machine/flow/flow-state-compiler.js` | States to XState config |
+| `src/machine/flow/{shell,pgr}-messages.js` | Onboarding and filing copy |
 | `src/machine/flow/offered-locales.js` | Which languages the menu offers |
 | `src/machine/flow/legacy-*.js` | Unreachable, retained deliberately |
 | `src/machine/util/dialog.js` | Prompt, grammar and send primitives |
@@ -1875,8 +1596,8 @@ state machine.
 | `test/session-resume.test.js` | Save and resume, including the brick case |
 | `test/offered-locales.test.js` | Which languages are offered |
 
-**Read in this order on your first day:** `seva.js` for the assembly, then
-`seva-transitions.js` for the shape of a conversation in one screen, then
-`seva-states.js` for what each step asks, then `generate.js` to see what a step
-actually becomes, and `dialog.js` for the primitives underneath all of it. That is
-roughly an hour of reading and it covers the entire live flow.
+**Read in this order on your first day:** `state-machine.js` and
+`citizen-service-machine.js` for the assembly, then `pgr-machine.js` for the shape
+of a conversation in one screen, then `flow-state.js` and one subclass to see what
+a step actually becomes, and `dialog.js` for the primitives underneath all of it.
+That is roughly an hour of reading and it covers the entire live flow.
