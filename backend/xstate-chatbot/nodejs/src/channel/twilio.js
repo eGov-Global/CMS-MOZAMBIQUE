@@ -4,8 +4,10 @@ const axios = require('axios');
 var FormData = require("form-data");
 const mediaTypes = require('../media-types');
 
-// The only host inbound media is fetched from. See twilioMediaUrl below.
+// The only host inbound media is fetched from, and the only path shape accepted
+// on it. See twilioMediaUrl below.
 const TWILIO_MEDIA_HOST = 'api.twilio.com';
+const TWILIO_MEDIA_PATH = /^\/2010-04-01\/Accounts\/AC[0-9a-f]{32}\/Messages\/MM[0-9a-f]{32}\/Media\/ME[0-9a-f]{32}$/i;
 const INPUT_TYPES = {
     LOCATION: 'location',
     BUTTON: 'button',
@@ -276,7 +278,10 @@ class TwilioWhatsAppProvider {
         if (parsed.protocol !== 'https:' || parsed.hostname !== TWILIO_MEDIA_HOST) {
             throw new Error('refusing to download media from a non-Twilio host');
         }
-        return new URL(parsed.pathname + parsed.search, `https://${TWILIO_MEDIA_HOST}`).toString();
+        if (!TWILIO_MEDIA_PATH.test(parsed.pathname)) {
+            throw new Error('refusing to download media from an unexpected twilio path');
+        }
+        return new URL(parsed.pathname, `https://${TWILIO_MEDIA_HOST}`).toString();
     }
 
     async downloadMediaFromUrl(mediaUrl) {
