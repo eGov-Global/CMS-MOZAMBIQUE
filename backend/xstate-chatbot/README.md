@@ -44,6 +44,56 @@ The remaining variables point at the backend services the flow reads from — MD
 npm test
 ```
 
+### Wiring it into a local DIGIT stack
+
+The chatbot is not yet part of the compose stack, Kong's route table or the k8s manifests, so a deployment does not start it and nothing routes to it. Until that lands, connect it by hand in two steps.
+
+**1. Run the container on the stack's network.** Build the image from `nodejs/Dockerfile`, then attach it to the network compose created — named `<project>_egov-network`, so `digit_egov-network` for a stack brought up from `~/digit`:
+
+```
+docker build -t xstate-chatbot:local .
+docker run -d --name xstate-chatbot \
+  --network digit_egov-network \
+  --env-file .env \
+  xstate-chatbot:local
+```
+
+The container needs no published port: Kong reaches it over the network by container name. Publish `8082` only if you want to call it directly from the host. Check it joined:
+
+```
+docker network inspect digit_egov-network --format '{{range .Containers}}{{.Name}} {{end}}'
+```
+
+**2. Add a Kong service and route.** Kong runs DB-less (`KONG_DATABASE: "off"`), reading `local-setup/kong/kong.yml` as a read-only mount, so a route is a file edit plus a restart — not an Admin API call. Add alongside the other services in that file:
+
+```yaml
+- name: xstate-chatbot-service
+  url: http://xstate-chatbot:8082
+  tags:
+  - chatbot
+  routes:
+  - name: xstate-chatbot-route
+    paths:
+    - /xstate-chatbot
+    strip_path: false
+```
+
+`strip_path: false` matters: the service mounts its routes under `CONTEXT_PATH` (`/xstate-chatbot`), so stripping the prefix would 404 every request. Then restart Kong to reload the declarative config:
+
+```
+docker restart kong-gateway
+```
+
+**3. Verify.** Kong's proxy is published on host port 18000, so the inbound webhook is reachable at `http://localhost:18000/xstate-chatbot/message`. A POST with an empty body should reach the service and be answered rather than 404:
+
+```
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:18000/xstate-chatbot/message
+```
+
+A `404` means Kong did not match the route; check the path and that the restart picked up your edit. A `000` means Kong cannot reach the container — usually the wrong network name.
+
+For a provider to deliver messages, its webhook must point at a publicly reachable URL for that path, which on a local machine means a tunnel.
+
 ### Developing a dialogue
 
 `react-app/` renders the conversation in a browser so you can click through a flow without WhatsApp. Run `npm install` in both `nodejs/` and `react-app/`, then `npm start` in `react-app/` and open `http://localhost:3000`. A few environment variables must be disabled first — see [LOCALSETUP.md](./LOCALSETUP.md).
