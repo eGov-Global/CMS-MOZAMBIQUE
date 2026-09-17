@@ -6,11 +6,21 @@ const express = require("express"),
   remindersService = require("../../machine/service/reminders-service"),
   InboundRequestParser = require("../../session/inbound-message-parser"),
   { resolveUploadTenantId } = require("../../session/upload-tenant"),
-  { handleError } = require("../../session/error-handler");
+   { handleError } = require("../../session/error-handler"),
+  rateLimit = require("express-rate-limit");
 
+  // Inbound webhooks are unauthenticated and exposed directly — the service is not
+// behind Kong, which rate-limits only its own routes. 300/min is well above real
+// traffic, so it blunts a flood without dropping a provider's delivery retries.
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 500,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+});
 
 // Entry point for inbound messages from the channel provider
-router.post("/message", async (req, res) => {
+router.post("/message", webhookLimiter, async (req, res) => {
   console.log("Request URL: " + req.originalUrl);
   console.log('Request Body Object: ' + JSON.stringify(req.body));
   
@@ -41,7 +51,7 @@ router.post("/message", async (req, res) => {
 });
 
 // Handle WhatsApp delivery status webhooks (both GET and POST)
-router.all("/status", async (req, res) => {
+router.all("/status", webhookLimiter, async (req, res) => {
   try {
     const isDeliveryStatusWebhook = req.method === 'GET' || 
       req.query.MESSAGE_STATUS || 
@@ -84,7 +94,7 @@ router.all("/status", async (req, res) => {
   }
 });
 
-router.post("/reminder", async (req, res) => {
+router.post("/reminder", webhookLimiter, async (req, res) => {
   await remindersService.triggerReminders();
   res.end();
 });

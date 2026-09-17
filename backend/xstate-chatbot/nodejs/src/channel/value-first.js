@@ -42,7 +42,7 @@ class ValueFirstWhatsAppProvider {
     };
 
     reformattedMessage.user = {
-      mobileNumber: requestBody.mobile_number.slice(2),
+      mobileNumber: String(requestBody.mobile_number ?? '').slice(2),
     };
     reformattedMessage.extraInfo = {
       whatsAppBusinessNumber: config.whatsAppBusinessNumber.slice(2),
@@ -178,11 +178,11 @@ class ValueFirstWhatsAppProvider {
       // metadata: metadata
     };
     reformattedMessage.user = {
-      mobileNumber: requestBody.from.slice(2),
+      mobileNumber: String(requestBody.from ?? '').slice(2),
       //mobileNumber: requestBody.user.mobileNumber.slice(2)
     };
     reformattedMessage.extraInfo = {
-      whatsAppBusinessNumber: requestBody.to.slice(2),
+      whatsAppBusinessNumber: String(requestBody.to ?? '').slice(2),
       //whatsAppBusinessNumber: requestBody.extraInfo.whatsAppBusinessNumber.slice(2),
       tenantId: config.rootTenantId,
     };

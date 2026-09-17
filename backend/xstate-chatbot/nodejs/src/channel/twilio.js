@@ -258,9 +258,25 @@ class TwilioWhatsAppProvider {
         return 'unknown';
     }
 
+    // MediaUrl0 arrives in the webhook body and the download below attaches the
+    // account credentials as basic auth, so an attacker-controlled host would
+    // receive them. Only Twilio's own media API is fetched; anything else is
+    // refused before the request is made.
+    isTwilioMediaUrl(rawUrl) {
+        try {
+            const url = new URL(String(rawUrl ?? ''));
+            return url.protocol === 'https:' && url.hostname === 'api.twilio.com';
+        } catch {
+            return false;
+        }
+    }
+
     async downloadMediaFromUrl(mediaUrl) {
+        if (!this.isTwilioMediaUrl(mediaUrl)) {
+            throw new Error('refusing to download media from a non-Twilio host');
+        }
         return await axios.get(
-            mediaUrl, 
+            mediaUrl,
             {
                 responseType: 'arraybuffer',
                 auth: {

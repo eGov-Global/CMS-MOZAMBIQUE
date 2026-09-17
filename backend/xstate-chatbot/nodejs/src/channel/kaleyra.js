@@ -29,7 +29,7 @@ class KaleyraWhatsAppProvider {
     try {
       let reformattedMessage = {};
       reformattedMessage.user = {
-        mobileNumber: rawMessage.from.slice(2),
+        mobileNumber: String(rawMessage.from ?? '').slice(2),
       };
       reformattedMessage.extraInfo = {
         whatsAppBusinessNumber: rawMessage.wanumber,
