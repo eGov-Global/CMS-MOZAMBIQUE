@@ -3,6 +3,9 @@ const fetch = require("node-fetch");
 const axios = require('axios');
 var FormData = require("form-data");
 const mediaTypes = require('../media-types');
+
+// The only host inbound media is fetched from. See twilioMediaUrl below.
+const TWILIO_MEDIA_HOST = 'api.twilio.com';
 const INPUT_TYPES = {
     LOCATION: 'location',
     BUTTON: 'button',
@@ -260,23 +263,25 @@ class TwilioWhatsAppProvider {
 
     // MediaUrl0 arrives in the webhook body and the download below attaches the
     // account credentials as basic auth, so an attacker-controlled host would
-    // receive them. Only Twilio's own media API is fetched; anything else is
-    // refused before the request is made.
-    isTwilioMediaUrl(rawUrl) {
+    // receive them. Only the path is taken from the webhook: the request URL is
+    // rebuilt against a constant base, which drops any host, port, scheme or
+    // userinfo the caller tried to smuggle in.
+    twilioMediaUrl(rawUrl) {
+        let parsed;
         try {
-            const url = new URL(String(rawUrl ?? ''));
-            return url.protocol === 'https:' && url.hostname === 'api.twilio.com';
+            parsed = new URL(String(rawUrl ?? ''));
         } catch {
-            return false;
+            throw new Error('refusing to download media from a malformed url');
         }
+        if (parsed.protocol !== 'https:' || parsed.hostname !== TWILIO_MEDIA_HOST) {
+            throw new Error('refusing to download media from a non-Twilio host');
+        }
+        return new URL(parsed.pathname + parsed.search, `https://${TWILIO_MEDIA_HOST}`).toString();
     }
 
     async downloadMediaFromUrl(mediaUrl) {
-        if (!this.isTwilioMediaUrl(mediaUrl)) {
-            throw new Error('refusing to download media from a non-Twilio host');
-        }
         return await axios.get(
-            mediaUrl,
+            this.twilioMediaUrl(mediaUrl),
             {
                 responseType: 'arraybuffer',
                 auth: {
