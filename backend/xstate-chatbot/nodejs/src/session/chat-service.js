@@ -8,6 +8,7 @@ const config = require("../env-variables");
 const dialog = require("../machine/util/dialog");
 const messages = require("../machine/flow/shell-messages");
 const { hasActiveInvoke, waitUntilSettled } = require("./invoke-state");
+const { enqueuePersist, pendingPersist } = require("./persist-queue");
 
 
 class ChatService {
@@ -38,8 +39,10 @@ class ChatService {
 
     stateMachineService.send(event, inboundRequestModel);
 
-    // Wait until the state machine has no active invocations before returning.
-    return waitUntilSettled(stateMachineService);
+    // Wait until the machine has no active invocation AND its transition writes
+    // have landed, so the next queued message cannot read a half-written state.
+    await waitUntilSettled(stateMachineService);
+    return pendingPersist(sessionUserId);
   }
 
   /**
@@ -191,7 +194,7 @@ class ChatService {
       const persistableState = ChatState.create(state).toPersistableState();
       const timeStamp = new Date().getTime();
 
-      (async () => {
+      enqueuePersist(userId, async () => {
         await chatStateRepository.updateState(
           userId,
           active,
@@ -209,7 +212,7 @@ class ChatService {
           timestamp: timeStamp,
           extraInfo: reformattedMessage.extraInfo,
         });
-      })();
+      });
     });
   }
 
