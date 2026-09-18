@@ -213,32 +213,21 @@ export function statusValueToCssColor(statusClass) {
   }
 }
 
-// The analytics grain carries assignee UUIDs, not names (and many don't resolve to a
-// live user record). For a human-readable dashboard we derive a STABLE display name
-// from the UUID: a deterministic hash picks a first + last name, so the same officer
-// always shows the same name across every widget. ~400 combinations keeps collisions rare.
-const OFFICER_FIRST_NAMES = [
-  "Aisha", "John", "Grace", "David", "Mary", "Samuel", "Faith", "Peter", "Esther",
-  "Brian", "Joyce", "Kevin", "Lucy", "Daniel", "Naomi", "Eric", "Sarah", "James",
-  "Caroline", "Dennis",
-];
-const OFFICER_LAST_NAMES = [
-  "Mwangi", "Kamau", "Otieno", "Kiprono", "Wanjiru", "Chebet", "Njoroge", "Korir",
-  "Achieng", "Mutua", "Kibet", "Wafula", "Cheruiyot", "Onyango", "Maina", "Rotich",
-  "Wekesa", "Langat", "Mwende", "Barasa",
-];
 
-export function formatOfficerLabel(uuid) {
+/**
+ * Label an officer UUID. `names` is the resolved uuid -> employee name map
+ * from useEmployeeNames; a uuid HRMS could not resolve gets a short opaque id
+ * (never a fabricated name — a plausible-looking wrong name is worse than no
+ * name on a per-officer SLA chart).
+ */
+export function formatOfficerLabel(uuid, names) {
   const id = String(uuid ?? "");
   if (!id || id === "Unknown" || id === "null" || id === "undefined") {
     return t("DASHBOARD_COMMON_UNASSIGNED", "Unassigned");
   }
-  let h = 0;
-  for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  const first = OFFICER_FIRST_NAMES[h % OFFICER_FIRST_NAMES.length];
-  const last = OFFICER_LAST_NAMES[Math.floor(h / OFFICER_FIRST_NAMES.length) % OFFICER_LAST_NAMES.length];
-  return `${first} ${last}`;
+  return names?.[id] || `${t("DASHBOARD_COMMON_OFFICER", "Officer")} ${id.slice(-4)}`;
 }
+
 
 function formatListLabel(labelKey, raw) {
   if (labelKey === "service_code") return dimensionLabel(raw, "complaintType");

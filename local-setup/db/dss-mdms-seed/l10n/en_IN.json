@@ -239,6 +239,11 @@
     "message": "Unassigned",
     "module": "rainmaker-dashboard"
   },
+    {
+    "code": "DASHBOARD_COMMON_OFFICER",
+    "message": "Officer",
+    "module": "rainmaker-dashboard"
+  },
   {
     "code": "DASHBOARD_COMMON_UNKNOWN",
     "message": "Unknown",
