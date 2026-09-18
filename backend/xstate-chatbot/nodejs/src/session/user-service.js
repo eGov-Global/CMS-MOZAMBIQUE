@@ -2,6 +2,7 @@ const config = require('../env-variables');
 const fetch = require('node-fetch');
 require('url-search-params-polyfill');
 const { ValidationError, AuthenticationError, ExternalServiceError } = require('./errors');
+const { maskMobile } = require('../privacy');
 const { StatusCodes } = require('http-status-codes');
 
 
@@ -32,15 +33,14 @@ class UserService {
       try {
         user = await this.createUser(mobileNumber, tenantId);
       } catch (error) {
-        // A create that races another message for the same number comes back
-        // as a duplicate; a second lookup resolves it.
-        user = await this.findCitizen(mobileNumber, tenantId);
+        console.error(`Failed to create user for ${maskMobile(mobileNumber)}: ${error.message}`);
+        user = await this.findCitizen(mobileNumber, tenantId).catch(() => undefined);
         if (user) return user;
 
         // If the citizen is not found in the active users, check if they exist as an inactive user.
-        const inactive = await this.findInactiveCitizen(mobileNumber, tenantId);
+        const inactive = await this.findInactiveCitizen(mobileNumber, tenantId).catch(() => undefined);
         if (inactive)
-          throw new AuthenticationError(`Citizen ${mobileNumber} exists but is deactivated (uuid ${inactive.uuid}) - creation is blocked by the taken username`);
+          throw new AuthenticationError(`Citizen ${maskMobile(mobileNumber)} exists but is deactivated (uuid ${inactive.uuid}) - creation is blocked by the taken username`);
 
         throw error;
       }
@@ -48,7 +48,7 @@ class UserService {
     }
 
     if (!user || !user.userInfo)
-      throw new AuthenticationError(`Unable to resolve citizen ${mobileNumber} for tenant ${tenantId}`);
+      throw new AuthenticationError(`Unable to resolve citizen ${maskMobile(mobileNumber)} for tenant ${tenantId}`);
 
     return user;
   }
@@ -63,7 +63,7 @@ class UserService {
     try {
       const createResult = await this.createUser(mobileNumber, tenantId);
       if (!createResult) 
-        throw new ExternalServiceError(`Failed to create user for ${mobileNumber}`);
+        throw new ExternalServiceError(`Failed to create user for ${maskMobile(mobileNumber)}`);
       
       return createResult;
        
@@ -150,7 +150,9 @@ class UserService {
       })
     );
 
-    if (response.status !== StatusCodes.OK) return undefined;
+    if (response.status !== StatusCodes.OK) {
+      throw new ExternalServiceError(`user/_search failed with status ${response.status}`);
+    }
 
     const body = await response.json();
     const found = (body.user || []).find((candidate) => candidate.active !== false);
@@ -177,7 +179,9 @@ class UserService {
       })
     );
 
-    if (response.status !== StatusCodes.OK) return undefined;
+    if (response.status !== StatusCodes.OK) 
+      throw new ExternalServiceError(`user/_search failed with status ${response.status}`);
+    
     const body = await response.json();
     return (body.user || [])[0];
   }
@@ -308,7 +312,7 @@ class UserService {
 
     const cleanMobileNumber = this.sanitizeMobileNumber(mobileNumber);
     if (!cleanMobileNumber)
-        throw new ValidationError(`Invalid mobile number format: ${mobileNumber}. Expected ${config.mobileNumberLength} digits, optionally prefixed with ${config.countryCode}.`);
+        throw new ValidationError(`Invalid mobile number format: ${maskMobile(mobileNumber)}. Expected ${config.mobileNumberLength} digits, optionally prefixed with ${config.countryCode}.`);
 
     const url = config.egovServices.userServiceHost + config.egovServices.userServiceCreateNoValidatePath;
 
