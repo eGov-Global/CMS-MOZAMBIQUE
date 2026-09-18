@@ -38,7 +38,7 @@ class TwilioWhatsAppProvider {
         return mediaTypes.extensionForMimeType(contentType);
     }
 
-    async fileStoreAPICall(fileName, fileData, contentType = null, tenantId = null) {
+    async fileStoreAPICall(fileName, fileData, contentType = null, tenantId = null, cancelToken) {
         var url = config.egovServices.egovServicesHost + config.egovServices.egovFilestoreServiceUploadEndpoint;
         url = url + '&tenantId=' + (tenantId || config.rootTenantId);
         var form = new FormData();
@@ -46,7 +46,9 @@ class TwilioWhatsAppProvider {
             filename: fileName,
             contentType: mediaTypes.filestoreContentType(fileName) || contentType || 'application/octet-stream'
         });
-        let response = await axios.post(url, form, {
+        
+        const response = await axios.post(url, form, {
+            cancelToken,
             headers: {
                 ...form.getHeaders()
             }
@@ -304,11 +306,12 @@ class TwilioWhatsAppProvider {
         return `https://${TWILIO_MEDIA_HOST}/2010-04-01/Accounts/${accountSid}/Messages/${messageSid}/Media/${mediaSid}`;
     }
 
-    async downloadMediaFromUrl(mediaUrl) {
+    async downloadMediaFromUrl(mediaUrl, cancelToken) {
         return await axios.get(
             this.twilioMediaUrl(mediaUrl),
             {
                 responseType: 'arraybuffer',
+                cancelToken,
                 auth: {
                     username: this.accountSid,
                     password: this.authToken
@@ -317,53 +320,63 @@ class TwilioWhatsAppProvider {
         );
     }
 
-    async uploadMediaToFileStore(fileName, fileBuffer, contentType, tenantId = null) {
+
+    async uploadMediaToFileStore(fileName, fileBuffer, contentType, tenantId = null, cancelToken) {
         return await this.fileStoreAPICall(
             fileName,
             fileBuffer,
             contentType,
-            tenantId
+            tenantId,
+            cancelToken
         );
     }
+
 
     getMediaContentType(requestBody) {
         return requestBody.MediaContentType0 || '';
     }
 
-    async processMediaInput(requestBody, tenantId = null) {
+        async processMediaInput(requestBody, tenantId = null) {
         const mediaUrl = requestBody.MediaUrl0;
         if (!mediaUrl)
             return ' ';
 
+        // Set up a cancellation mechanism for the media download to enforce the timeout.
+        const cancellation = axios.CancelToken.source();
+        const timer = setTimeout(
+            () => cancellation.cancel(`media processing timed out after ${config.mediaProcessingTimeoutMs}ms`),
+            config.mediaProcessingTimeoutMs
+        );
+
         try {
-            const download = async () => {
-                const response = await this.downloadMediaFromUrl(mediaUrl);
-                const contentType = this.getMediaContentType(requestBody) || response.headers['content-type'] || '';
-                const fileExtension = this.getExtensionForMimeType(contentType);
-                const fileBuffer = Buffer.from(response.data);
+            const response = await this.downloadMediaFromUrl(mediaUrl, cancellation.token);
+            const contentType = this.getMediaContentType(requestBody) || response.headers['content-type'] || '';
+            const fileExtension = this.getExtensionForMimeType(contentType);
+            const fileBuffer = Buffer.from(response.data);
 
-                if (fileBuffer.length > config.maxMediaSizeBytes) {
-                    return 'FILE_TOO_LARGE';
-                }
+            if (fileBuffer.length > config.maxMediaSizeBytes) {
+                return 'FILE_TOO_LARGE';
+            }
 
-                return await this.uploadMediaToFileStore(
-                    `pgr-whatsapp-${Date.now()}${fileExtension}`,
-                    fileBuffer,
-                    contentType,
-                    tenantId
-                );
-            };
-            const timeout = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('media processing timed out')), config.mediaProcessingTimeoutMs)
+            return await this.uploadMediaToFileStore(
+                `pgr-whatsapp-${Date.now()}${fileExtension}`,
+                fileBuffer,
+                contentType,
+                tenantId,
+                cancellation.token
             );
-
-            return await Promise.race([download(), timeout]);
-
         } catch (error) {
-            console.error('Error processing media input:', error);
+            if (axios.isCancel(error)) {
+                console.error(`Twilio - ${error.message}`);
+            } else {
+                console.error('Error processing media input:', error.message);
+            }
             return ' ';
+        } finally {
+            clearTimeout(timer);
         }
     }
+
 
 
     async getUserMessage(requestBody, tenantId = null) {
