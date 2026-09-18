@@ -99,20 +99,6 @@ function constructListPromptAndGrammer(keys, message_bundle, locale, more = fals
 }
 
 
-function constructLiteralGrammer(keys, message_bundle, locale) {
-  var grammer = [];
-  keys.forEach((element) => {
-    let value = undefined;
-    if (message_bundle[element] !== undefined) {
-      value = get_message(message_bundle[element], locale);
-    } 
-    if(value === undefined) {
-      value = element;
-    }
-    grammer.push({intention: element, recognize: [value.toLowerCase()]});
-  });
-  return grammer;
-}
 
 function validateInputType(event, type) {
   let inputType = event.message.type;
@@ -155,4 +141,4 @@ let global_messages = {
   },
 }
 
-module.exports = { get_input, get_message, get_intention, INTENTION_UNKOWN, INTENTION_MORE, INTENTION_GOBACK, global_messages, constructListPromptAndGrammer, constructLiteralGrammer, validateInputType, sendMessage };
+module.exports = { get_input, get_message, get_intention, INTENTION_UNKOWN, INTENTION_MORE, INTENTION_GOBACK, global_messages, constructListPromptAndGrammer, validateInputType, sendMessage };

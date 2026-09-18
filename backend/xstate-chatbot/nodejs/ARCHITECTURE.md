@@ -1018,7 +1018,7 @@ async dispatch(session, inboundRequestModel) {
 ```
 
 `chat-state.js` is a small value wrapper around the serialised blob. It names the
-parts the rest of the layer needs — `context`, `value`, `isDone()` — and offers
+parts the rest of the layer needs — `context`, `value` — and offers
 `toPersistableState()`, which deep-clones and then strips the user object down to
 locale, userId and mobile number. Callers that need the un-stripped state must clone
 first, which the method name says.
@@ -1187,10 +1187,9 @@ if (config.kafka.kafkaConsumerEnabled) {
 ```
 
 `egov-pgr.js` is the large one. Besides the two walk functions it holds
-`persistComplaint`, which assembles and posts the complaint; `fetchOpenComplaints`,
-which lists the citizen's existing ones; `fetchMdmsData`, the generic MDMS query
-everything else is built on; and the filestore upload and download helpers used by
-the attachment step. Most backend contact is here.
+`persistComplaint`, which assembles and posts the complaint; `fetchMdmsData`, the
+generic MDMS query everything else is built on; and the filestore upload and
+download helpers used by the attachment step. Most backend contact is here.
 
 `egov-user-profile.js` saves the citizen's name and language during onboarding.
 `user-service.js` in the session layer resolves a mobile number to a DIGIT user,

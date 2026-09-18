@@ -76,22 +76,7 @@ class LocalisationService {
         }));
     }
 
-    async fetchMessagesForCodes(codes, tenantId) {
-        const bundles = {};
-        for (const code of codes) {
-            bundles[code] = {};
-        }
-        for (const locale of this.supportedLocales || ['en_IN']) {
-            const messages = await this.fetchMessagesForLocale(locale, tenantId, codes).catch(() => []);
-            (messages || []).forEach((record) => {
-                if (bundles[record.code]) {
-                    bundles[record.code][locale] = record.message;
-                }
-            });
-        }
-        return bundles;
-    }
-
+    
     getMessageForCode(code, locale) {
         return this.messages[locale][code];
     }

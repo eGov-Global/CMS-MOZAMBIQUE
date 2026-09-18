@@ -59,34 +59,6 @@ class UserService {
       throw new ValidationError('Mobile number and tenant ID are required');
   }
 
-  async createNewUser(mobileNumber, tenantId) {
-    try {
-      const createResult = await this.createUser(mobileNumber, tenantId);
-      if (!createResult) 
-        throw new ExternalServiceError(`Failed to create user for ${maskMobile(mobileNumber)}`);
-      
-      return createResult;
-       
-    } catch (createError) {
-      return this.handleCreationError(createError, mobileNumber, tenantId);
-    }
-  }
-
-  async authenticateCreatedUser(createResult, mobileNumber, tenantId) {
-    if (createResult.authToken) {
-      return createResult;
-    }
-
-    if (createResult.access_token && createResult.UserRequest) {
-      return {
-        authToken: createResult.access_token,
-        refreshToken: createResult.refresh_token,
-        userInfo: createResult.UserRequest
-      };
-    }
-
-    return await this.loginAfterCreation(mobileNumber, tenantId);
-  }
   
   // One service-account token serves every citizen. Cached until shortly
   async getServiceAccount() {
@@ -222,20 +194,7 @@ class UserService {
   }
 
 
-  async loginAfterCreation(mobileNumber, tenantId) {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    return await this.loginUser(mobileNumber, tenantId);
-  }
-
-  async handleCreationError(createError, mobileNumber, tenantId) {
-    if (createError.message && createError.message.includes('Duplicate')) {
-      console.log('User already exists, attempting login again...');
-      return await this.loginUser(mobileNumber, tenantId);
-    } else {
-      throw createError;
-    }
-  }
-
+  
   async enrichuserDetails(user) {
     // Skip enrichment if no auth token
     if (!user || !user.authToken) {
