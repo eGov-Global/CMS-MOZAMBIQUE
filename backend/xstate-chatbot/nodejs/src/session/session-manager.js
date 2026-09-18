@@ -104,11 +104,8 @@ class SessionManager {
       : new StandardLoginFlow(inboundRequestModel);
 
     const session = await loginFlow.resolveSession();
-    // TODO: SandboxLoginFlow.resolveSession() legitimately returns null after
-    // already notifying the citizen (asking for email/org selection, invalid
-    // selection, etc). dispatch() then throws on session.userId, and the
-    // generic error handler sends a second, confusing message. Restore an
-    // `if (!session) return;` guard here before relying on sandbox mode.
+    if (!session || !session.userId) return;
+
     await this.chatService.dispatch(session, inboundRequestModel);
     return session.userId;
   }
