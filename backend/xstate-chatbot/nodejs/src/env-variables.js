@@ -72,7 +72,8 @@ const envVariables = {
     // Time to wait for all dispatches to settle before considering the operation complete.
     dispatchSettleTimeoutMs: parseInt(process.env.DISPATCH_SETTLE_TIMEOUT_MS || '30000', 10),
     maxMediaSizeBytes: parseInt(process.env.MAX_MEDIA_SIZE_MB || '5', 10) * 1024 * 1024,
-
+    // Maximum number of messages that can be queued per user before older messages are dropped.
+    maxQueuedMessagesPerUser: parseInt(process.env.MAX_QUEUED_MESSAGES_PER_USER || '3', 10),
     paytmWnSLink: process.env.PAYTM_WNS_LINK || 'https://stvending.punjab.gov.in/wsbills/',
 
     postgresConfig: {

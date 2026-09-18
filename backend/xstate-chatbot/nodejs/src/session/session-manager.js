@@ -18,6 +18,7 @@ const sandboxOrgTracker = new SandboxOrgTracker(sandboxOrgCodeTracker);
 const sendQueues = new Map();
 // Per-user chain of pending inbound dispatches - see authenticateAndDispatch() below.
 const dispatchQueues = new Map();
+const dispatchDepth = new Map();   // mobileNumber -> messages queued or in flight
 
 
 
@@ -79,23 +80,42 @@ class SessionManager {
     });
   }
 
-  // Prevent concurrent requests for the same user from racing against
-  // persisted state by processing only the first message in a burst.
+  // Serialize a citizen's messages instead of dropping them: a second message
+  // sent while the first is still processing is answered after that turn settles,
+  // not discarded. Ordering is preserved, and different citizens stay concurrent.
+  //
+  // The queue is capped: beyond maxQueuedMessagesPerUser we go back to discarding,
+  // so a citizen tapping repeatedly cannot build a backlog that replies for the
+  // next minute. The webhook rate limiter is a per-instance ceiling, not per user.
   async authenticateAndDispatch(rawRequestModel) {
     const mobileNumber = rawRequestModel.user.mobileNumber;
-    if (dispatchQueues.has(mobileNumber)) {
-      console.log(`Discarding message from ${maskMobile(mobileNumber)}: previous message still processing`);
+    const waiting = dispatchDepth.get(mobileNumber) || 0;
+
+    if (waiting >= config.maxQueuedMessagesPerUser) {
+      console.log(`Discarding message from ${maskMobile(mobileNumber)}: ${waiting} already queued`);
       return;
     }
-    
-    const current = this._authenticateAndDispatch(rawRequestModel)
+
+    const previous = dispatchQueues.get(mobileNumber) || Promise.resolve();
+    dispatchDepth.set(mobileNumber, waiting + 1);
+
+    const current = previous
+      .catch(() => {}) // a failed turn must not skip the message behind it
+      .then(() => this._authenticateAndDispatch(rawRequestModel))
       .then((userId) => sendQueues.get(userId))
       .then(() => new Promise((resolve) => setTimeout(resolve, config.replyCooldownMs)))
-      .finally(() => dispatchQueues.delete(mobileNumber));
+      .finally(() => {
+        const remaining = (dispatchDepth.get(mobileNumber) || 1) - 1;
+        if (remaining > 0) dispatchDepth.set(mobileNumber, remaining);
+        else dispatchDepth.delete(mobileNumber);
+        // identity-guarded: a message queued meanwhile is the tail now and must stay
+        if (dispatchQueues.get(mobileNumber) === current) dispatchQueues.delete(mobileNumber);
+      });
 
     dispatchQueues.set(mobileNumber, current);
     return current;
   }
+
 
 
   async _authenticateAndDispatch(rawRequestModel) {
