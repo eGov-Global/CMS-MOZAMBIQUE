@@ -22,7 +22,8 @@ const CANCEL_GRAMMAR = [{
 
 class InboundMessage {
   constructor(message) {
-    this.input = message.input;
+    this.rawInput = message.input;
+    this.input = typeof message.input === 'string' ? message.input : '';
     this.type = message.type;
   }
 

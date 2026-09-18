@@ -42,3 +42,29 @@ test("cancel and reset words still work on a text message", () => {
   assert.equal(InboundMessage.create({ type: "text", input: "cancelar" }).isCancel(), true);
   assert.equal(InboundMessage.create({ type: "text", input: "reiniciar" }).isReset(), true);
 });
+
+test("a non-string media payload does not throw in the text helpers", () => {
+  // ConsoleProvider copies message.input through unchanged, so a media payload can
+  // be an object or array. dialog.get_input throws on a non-string, and getMessage()
+  // runs after the chat-state row is written — so a throw here lost the whole turn.
+  for (const input of [{ filestoreId: "abc" }, ["a", "b"], 42, null, undefined]) {
+    const message = InboundMessage.create({ type: "image", input });
+
+    assert.doesNotThrow(() => message.isUserMessage(), JSON.stringify(input));
+    assert.doesNotThrow(() => message.isGreeting(), JSON.stringify(input));
+    assert.doesNotThrow(() => message.isReset(), JSON.stringify(input));
+    assert.doesNotThrow(() => message.isCancel(), JSON.stringify(input));
+    assert.doesNotThrow(() => message.getInputMessage(), JSON.stringify(input));
+
+    assert.equal(message.isCancel(), false, "media is never a cancel word");
+    assert.equal(message.isReset(), false, "media is never a reset word");
+  }
+});
+
+test("the raw payload stays available for media handling", () => {
+  const payload = { filestoreId: "abc-123" };
+  const message = InboundMessage.create({ type: "image", input: payload });
+
+  assert.deepEqual(message.rawInput, payload, "the machine reads the raw value for media");
+  assert.equal(message.input, "", "the text helpers see an empty string instead");
+});
