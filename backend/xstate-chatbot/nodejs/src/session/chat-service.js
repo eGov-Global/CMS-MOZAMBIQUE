@@ -10,11 +10,6 @@ const messages = require("../machine/flow/shell-messages");
 const { hasActiveInvoke, waitUntilSettled } = require("./invoke-state");
 
 
-// Users awaiting a resume-or-restart choice after their session expired -
-// keyed by sessionUserId, holding the expired ChatState to restore if they
-// choose to resume.
-const resumeChoicePending = new Map();
-
 class ChatService {
   constructor(sessionManager) {
     this.sessionManager = sessionManager;
@@ -26,7 +21,7 @@ class ChatService {
   async dispatch(session, inboundRequestModel) {
     const sessionUserId = session.userId;
 
-    if (resumeChoicePending.has(sessionUserId)) {
+    if (await this.isResumeChoicePending(sessionUserId, inboundRequestModel)) {
       return this.resolveResumeChoice(session, inboundRequestModel);
     }
 
@@ -47,6 +42,35 @@ class ChatService {
     return waitUntilSettled(stateMachineService);
   }
 
+  /**
+   * True when the citizen still owes us a resume-or-restart answer.
+   *
+   * Read from the row, not a process-local Map: a restart between asking and
+   * answering used to lose the prompt, so the citizen's "1" was taken as a normal
+   * message and their expired session was discarded without them choosing.
+   *
+   * Cancel and reset words win over the prompt — someone typing "cancelar" is not
+   * answering the question, and the old gate swallowed those. A prompt older than
+   * avgSessionTime is treated as abandoned rather than intercepting forever.
+   */
+  async isResumeChoicePending(sessionUserId, inboundRequestModel) {
+    if (typeof chatStateRepository.getResumePendingAt !== "function") return false;
+
+    const pendingAt = await chatStateRepository.getResumePendingAt(sessionUserId);
+    if (!pendingAt) return false;
+
+    const message = inboundRequestModel.getMessage();
+    const abandoned = (Date.now() - pendingAt) / 1000 / 60 > config.avgSessionTime;
+
+    if (message.isCancel() || message.isReset() || abandoned) {
+      await chatStateRepository.clearResumePending(sessionUserId);
+      return false;
+    }
+
+    return true;
+  }
+
+
 
   /**
    * Retrieves the active chat state for the given user. If no active state exists,
@@ -61,10 +85,16 @@ class ChatService {
     }
 
     if (existingState && isExpiredSession) {
-      resumeChoicePending.set(sessionUserId, existingState);
+      // The expired blob stays in the row untouched; only the "awaiting an answer"
+      // marker is new, so a restart resumes the prompt rather than losing it.
+      if (typeof chatStateRepository.setResumePending === "function") {
+        await chatStateRepository.setResumePending(sessionUserId, Date.now());
+      }
+      
       this.sessionManager.toUser(user, [dialog.get_message(messages.sessionExpired.question, user.locale)], inboundRequestModel.extraInfo);
       return null;
     }
+
 
     // virgin dialog - no existing state at all
     const chatState = this.createChatStateFor(user);
@@ -82,27 +112,38 @@ class ChatService {
     const answer = inboundRequestModel.getMessage().getInputMessage();
 
     if (answer === '1') {
-      const existingState = resumeChoicePending.get(sessionUserId);
-      resumeChoicePending.delete(sessionUserId);
+      // The expired state was never removed from the row, so it is read back here
+      // rather than carried in memory between two webhook calls.
+      const existingState = await chatStateRepository.getActiveStateForUserId(sessionUserId);
+      await chatStateRepository.clearResumePending(sessionUserId);
+
+      // Nothing left to resume (row cleared meanwhile): start clean rather than
+      // throwing on a missing state.
+      if (!existingState) return this.restartSession(session, inboundRequestModel);
+
       await chatStateRepository.updateState(sessionUserId, true, existingState.toPersistableState().state, new Date().getTime());
       const lastPrompt = existingState.context.lastPrompt;
       this.sessionManager.toUser(session.user, [lastPrompt || dialog.get_message(messages.sessionExpired.resumed, session.user.locale)], inboundRequestModel.extraInfo);
       return;
     }
 
-
     if (answer === '2') {
-      resumeChoicePending.delete(sessionUserId);
-      const chatState = this.createChatStateFor(session.user);
-      await chatStateRepository.updateState(sessionUserId, true, chatState.toPersistableState().state, new Date().getTime());
-      await chatStateRepository.updateSessionId(sessionUserId, config.avgSessionTime);
-      const stateMachineService = this.getStateMachineServiceFor(chatState, inboundRequestModel);
-      stateMachineService.send("USER_RESET", inboundRequestModel);
-      return;
+      await chatStateRepository.clearResumePending(sessionUserId);
+      return this.restartSession(session, inboundRequestModel);
     }
 
     this.sessionManager.toUser(session.user, [dialog.get_message(messages.sessionExpired.invalid, session.user.locale)], inboundRequestModel.extraInfo);
   }
+
+  // Discards whatever was stored and starts the conversation from the menu.
+  async restartSession(session, inboundRequestModel) {
+    const chatState = this.createChatStateFor(session.user);
+    await chatStateRepository.updateState(session.userId, true, chatState.toPersistableState().state, new Date().getTime());
+    await chatStateRepository.updateSessionId(session.userId, config.avgSessionTime);
+    const stateMachineService = this.getStateMachineServiceFor(chatState, inboundRequestModel);
+    stateMachineService.send("USER_RESET", inboundRequestModel);
+  }
+
 
 
   // Postgres tracks last-activity time_stamp; InMemory doesn't need this

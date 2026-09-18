@@ -126,7 +126,11 @@ class SessionManager {
     const thisSend = previousSend
       .catch(() => {}) // a prior send's failure must not skip this one
       .then(() => channelProvider.sendMessageToUser(user, outputMessages, extraInfo))
-      .catch((error) => console.error(`Failed to send message to user ${userId}:`, error));
+      .catch((error) => console.error(`Failed to send message to user ${userId}:`, error))
+      .finally(() => {
+        if (sendQueues.get(userId) === thisSend) sendQueues.delete(userId);
+      });
+    
     sendQueues.set(userId, thisSend);
 
     for (let message of outputMessages) {
