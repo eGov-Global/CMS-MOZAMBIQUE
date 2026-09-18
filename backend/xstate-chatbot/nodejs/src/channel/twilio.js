@@ -64,24 +64,6 @@ class TwilioWhatsAppProvider {
         return fileInBase64String.replace(/^data:[^;]+;base64,/, '');
     }
 
-    async fileStoreAPICall(fileName, fileData, contentType = 'application/octet-stream', tenantId = null) {
-        var url = config.egovServices.egovServicesHost + config.egovServices.egovFilestoreServiceUploadEndpoint;
-        url = url + '&tenantId=' + (tenantId || config.rootTenantId);
-        var form = new FormData();
-        form.append("file", fileData, {
-            filename: fileName,
-            contentType: contentType
-        });
-        let response = await axios.post(url, form, {
-            headers: {
-                ...form.getHeaders()
-            }
-        });
-
-        var filestore = response.data;
-        return filestore['files'][0]['fileStoreId'];
-    }
-
     async convertFromBase64AndStore(fileInBase64String, tenantId = null) {
         if (!fileInBase64String || typeof fileInBase64String !== "string") {
             throw new Error("Invalid fileInBase64String: Value is missing or not a string");
