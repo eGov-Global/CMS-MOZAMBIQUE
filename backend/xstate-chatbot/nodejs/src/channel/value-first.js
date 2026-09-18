@@ -1,4 +1,5 @@
 const config = require("../env-variables");
+const { toNationalNumber, toInternationalNumber } = require("../phone-numbers");
 const { summarizeInbound } = require("../privacy");
 const fetch = require("node-fetch");
 const urlencode = require("urlencode");
@@ -43,10 +44,10 @@ class ValueFirstWhatsAppProvider {
     };
 
     reformattedMessage.user = {
-      mobileNumber: String(requestBody.mobile_number ?? '').slice(2),
+      mobileNumber: toNationalNumber(requestBody.mobile_number),
     };
     reformattedMessage.extraInfo = {
-      whatsAppBusinessNumber: config.whatsAppBusinessNumber.slice(2),
+      whatsAppBusinessNumber: toNationalNumber(config.whatsAppBusinessNumber),
       tenantId: config.rootTenantId,
       missedCall: true,
     };
@@ -179,11 +180,11 @@ class ValueFirstWhatsAppProvider {
       // metadata: metadata
     };
     reformattedMessage.user = {
-      mobileNumber: String(requestBody.from ?? '').slice(2),
+      mobileNumber: toNationalNumber(requestBody.from),
       //mobileNumber: requestBody.user.mobileNumber.slice(2)
     };
     reformattedMessage.extraInfo = {
-      whatsAppBusinessNumber: String(requestBody.to ?? '').slice(2),
+      whatsAppBusinessNumber: toNationalNumber(requestBody.to),
       //whatsAppBusinessNumber: requestBody.extraInfo.whatsAppBusinessNumber.slice(2),
       tenantId: config.rootTenantId,
     };
@@ -285,7 +286,7 @@ class ValueFirstWhatsAppProvider {
   async getTransformedResponse(user, messages, extraInfo) {
     let userMobile = user.mobileNumber;
 
-    let fromMobileNumber = "91" + extraInfo.whatsAppBusinessNumber;
+    let fromMobileNumber = toInternationalNumber(extraInfo.whatsAppBusinessNumber);
     if (!fromMobileNumber) console.error("Receipient number can not be empty");
 
     let requestBody = JSON.parse(valueFirstRequestBody);
@@ -365,7 +366,7 @@ class ValueFirstWhatsAppProvider {
         messageBody["@ID"] = uniqueImageMessageId;
       }
       messageBody["ADDRESS"][0]["@FROM"] = fromMobileNumber;
-      messageBody["ADDRESS"][0]["@TO"] = "91" + userMobile;
+      messageBody["ADDRESS"][0]["@TO"] = toInternationalNumber(userMobile);
 
       requestBody["SMS"].push(messageBody);
     }
@@ -484,7 +485,7 @@ class ValueFirstWhatsAppProvider {
         messageBody["@TEMPLATEINFO"] = combinedStringForTemplateInfo;
 
         messageBody["ADDRESS"][0]["@FROM"] = config.whatsAppBusinessNumber;
-        messageBody["ADDRESS"][0]["@TO"] = "91" + userMobile;
+        messageBody["ADDRESS"][0]["@TO"] = toInternationalNumber(userMobile);
 
         requestBody["SMS"].push(messageBody);
       }

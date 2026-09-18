@@ -3,6 +3,7 @@ const fetch = require("node-fetch");
 const axios = require('axios');
 var FormData = require("form-data");
 const mediaTypes = require('../media-types');
+const { toNationalNumber, toInternationalNumber } = require('../phone-numbers');
 const { maskMobile, summarizeInbound } = require('../privacy');
 const { isValidTwilioSignature } = require('./twilio-signature');
 
@@ -231,9 +232,7 @@ class TwilioWhatsAppProvider {
         // (this used to hardcode stripping '91' for India, which never matched
         // a +258 number, so context.user.mobileNumber kept its country code
         // and never matched entries in ALLOWED_MOBILE_NUMBERS).
-        const digits = String(twilioNumber).replace(/\D/g, '');
-        const countryCode = String(config.countryCode).replace(/\D/g, '');
-        return countryCode && digits.startsWith(countryCode) ? digits.slice(countryCode.length) : digits;
+        return toNationalNumber(twilioNumber);
     }
 
     getInputType(requestBody) {
@@ -408,12 +407,7 @@ class TwilioWhatsAppProvider {
     // Twilio wants E.164. `to` may arrive national (840000002) or already
     // prefixed (258840000002), so strip the country code before re-adding it.
     toWhatsAppNumber(to) {
-        const digits = String(to).replace(/\D/g, '');
-        const countryCode = String(config.countryCode).replace(/\D/g, '');
-        const national = countryCode && digits.startsWith(countryCode)
-            ? digits.slice(countryCode.length)
-            : digits;
-        return `whatsapp:+${countryCode}${national}`;
+        return `whatsapp:+${toInternationalNumber(to)}`;
     }
 
     async sendTextMessage(to, body) {
