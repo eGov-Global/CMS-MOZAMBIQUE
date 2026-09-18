@@ -6,12 +6,6 @@
         "locale": "en_IN"
     },
     {
-        "code": "chatbot.pgr.boundary.preamble",
-        "message": "Please type and send the number to select the {{level}} for your grievance 👇\n",
-        "module": "rainmaker-pgr",
-        "locale": "en_IN"
-    },
-    {
         "code": "chatbot.pgr.confidentiality.question",
         "message": "{{label}}\n\n{{hint}}\n\n👉 Type and send *1* to keep your details confidential.\n👉 Type and send *2* to continue without confidentiality.",
         "module": "rainmaker-pgr",
@@ -56,12 +50,6 @@
     {
         "code": "chatbot.pgr.error.system",
         "message": "I am sorry, our system has a problem and I cannot fulfill your request right now. Could you try again in a few minutes please?",
-        "module": "rainmaker-pgr",
-        "locale": "en_IN"
-    },
-    {
-        "code": "chatbot.pgr.hierarchy.preamble",
-        "message": "Please type and send the number to select a {{level}} from the list below 👇\n",
         "module": "rainmaker-pgr",
         "locale": "en_IN"
     },
