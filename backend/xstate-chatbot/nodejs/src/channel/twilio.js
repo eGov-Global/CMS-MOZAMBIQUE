@@ -3,6 +3,7 @@ const fetch = require("node-fetch");
 const axios = require('axios');
 var FormData = require("form-data");
 const mediaTypes = require('../media-types');
+const { isValidTwilioSignature } = require('./twilio-signature');
 
 // The only host inbound media is fetched from, and the only path shape accepted
 // on it. See twilioMediaUrl below.
@@ -178,6 +179,38 @@ class TwilioWhatsAppProvider {
         const countryCode = String(config.countryCode).replace(/\D/g, '');
         return !countryCode || digits.startsWith(countryCode);
     }
+
+    /**
+     * Request authenticity — the gate that makes `From` trustworthy. Without it
+     * anyone reaching the webhook can impersonate a whitelisted citizen, be logged
+     * in by the service account and file complaints under that citizen's uuid.
+     *
+     * Returns false (reject) when signing is misconfigured rather than failing
+     * open: a missing authToken/webhookBaseUrl in a deployment is exactly the
+     * state an attacker benefits from.
+     */
+    verifyRequest(req) {
+        if (!config.twilio.verifyWebhookSignature) {
+            console.warn('Twilio - webhook signature verification is DISABLED (TWILIO_VERIFY_WEBHOOK_SIGNATURE=false)');
+            return true;
+        }
+
+        const base = String(config.twilio.webhookBaseUrl || '').replace(/\/+$/, '');
+        if (!base || !this.authToken) {
+            console.error('Twilio - cannot verify webhook: TWILIO_WEBHOOK_BASE_URL or TWILIO_AUTH_TOKEN is unset');
+            return false;
+        }
+
+        return isValidTwilioSignature({
+            authToken: this.authToken,
+            url: base + req.originalUrl,
+            // Twilio signs the POST form fields; a GET status callback signs the
+            // query string, which is already part of originalUrl.
+            params: req.method === 'POST' ? req.body : {},
+            signature: req.get('X-Twilio-Signature'),
+        });
+    }
+
 
     // Validates if the incoming request is a valid Twilio message (text, media, or location)
     async isValid(requestBody) {

@@ -101,6 +101,11 @@ const envVariables = {
         authToken: process.env.TWILIO_AUTH_TOKEN || '',
         whatsappNumber: process.env.TWILIO_WHATSAPP_NUMBER || '+919880900990',
         baseUrl: process.env.TWILIO_BASE_URL || '',
+        // Public base URL for Twilio webhooks. This should match the URL configured in the Twilio console.
+        webhookBaseUrl: process.env.TWILIO_WEBHOOK_BASE_URL || process.env.EXTERNAL_HOST || '',
+        // Whether to verify the Twilio webhook signature. Set to false only for local testing.
+        verifyWebhookSignature: (process.env.TWILIO_VERIFY_WEBHOOK_SIGNATURE || 'true') !== 'false',
+
     },
 
     valueFirstWhatsAppProvider: {

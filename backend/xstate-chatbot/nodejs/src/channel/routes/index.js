@@ -23,7 +23,14 @@ const webhookLimiter = rateLimit({
 router.post("/message", webhookLimiter, async (req, res) => {
   console.log("Request URL: " + req.originalUrl);
   console.log('Request Body Object: ' + JSON.stringify(req.body));
-  
+
+  // Verify the authenticity of the inbound request using the channel provider's signature verification mechanism.
+  if (typeof channelProvider.verifyRequest === "function" && !channelProvider.verifyRequest(req)) {
+    console.warn("Rejected inbound webhook: signature verification failed");
+    return res.sendStatus(403);
+  }
+
+
   try {
     
     const inboundRequestParser = InboundRequestParser.create(req, channelProvider);
@@ -52,6 +59,12 @@ router.post("/message", webhookLimiter, async (req, res) => {
 
 // Handle WhatsApp delivery status webhooks (both GET and POST)
 router.all("/status", webhookLimiter, async (req, res) => {
+
+  if (typeof channelProvider.verifyRequest === "function" && !channelProvider.verifyRequest(req)) {
+    console.warn("Rejected status webhook: signature verification failed");
+    return res.sendStatus(403);
+  }
+
   try {
     const isDeliveryStatusWebhook = req.method === 'GET' || 
       req.query.MESSAGE_STATUS || 
@@ -77,7 +90,11 @@ router.all("/status", webhookLimiter, async (req, res) => {
       return;
     }
     
-    // Handle actual user status messages (if any)
+    // Verify the validity of the incoming request from the channel provider before processing it.
+    if (!(await channelProvider.isValid(req.body))) {
+      return res.status(200).send("OK");
+    }
+
     let reformattedMessage = await channelProvider.getFormattedMessageFromUser(req.body);
 
     if (reformattedMessage != null) {
@@ -85,6 +102,7 @@ router.all("/status", webhookLimiter, async (req, res) => {
         .authenticateAndDispatch(reformattedMessage)
         .catch((error) => handleError(error, reformattedMessage));
     }
+
     
     res.status(200).send("OK");
   } catch (e) {
