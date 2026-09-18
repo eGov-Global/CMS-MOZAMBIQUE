@@ -8,7 +8,7 @@ const express = require("express"),
   { resolveUploadTenantId } = require("../../session/upload-tenant"),
    { handleError } = require("../../session/error-handler"),
   rateLimit = require("express-rate-limit");
-const { summarizeInbound } = require("../../privacy");
+const { summarizeInbound, maskMobile } = require("../../privacy");
 
   // Inbound webhooks are unauthenticated and exposed directly — the service is not
 // behind Kong, which rate-limits only its own routes. 300/min is well above real
@@ -66,44 +66,34 @@ router.all("/status", webhookLimiter, async (req, res) => {
   }
 
   try {
-    const isDeliveryStatusWebhook = req.method === 'GET' || 
-      req.query.MESSAGE_STATUS || 
+    const isDeliveryStatusWebhook = req.method === 'GET' ||
+      req.query.MESSAGE_STATUS ||
       req.body.MESSAGE_STATUS ||
       req.query.TO ||
       req.body.TO;
-    
+
     if (isDeliveryStatusWebhook) {
-      // This is a delivery status webhook from WhatsApp provider
       const statusData = req.method === 'GET' ? req.query : req.body;
-      
-      console.log("WhatsApp Delivery Status Webhook:");
-      console.log("Method:", req.method);
-      console.log("Status Data:", JSON.stringify(statusData, null, 2));
-      
-      // Log specific delivery status fields
-      const { TO, MESSAGE_STATUS, REASON_CODE, MESSAGE_ID, STATUS_ERROR, TIME, DELIVERED_DATE } = statusData;
-      console.log(`Delivery Status - TO: ${TO}, Status: ${MESSAGE_STATUS}, MessageID: ${MESSAGE_ID}`);
-      
-      // Don't process delivery status as user message
-      // Just acknowledge receipt to prevent retries
+      const { TO, MESSAGE_STATUS, MESSAGE_ID } = statusData;
+      console.log(`Delivery status (${req.method}) for ${maskMobile(TO)}: ${MESSAGE_STATUS ?? 'unknown'} (${MESSAGE_ID ?? 'no id'})`);
+
       res.status(200).json({ status: "received", messageId: MESSAGE_ID });
       return;
     }
     
-    // Verify the validity of the incoming request from the channel provider before processing it.
-    if (!(await channelProvider.isValid(req.body))) {
-      return res.status(200).send("OK");
+    const inboundRequestParser = InboundRequestParser.create(req, channelProvider);
+
+    if (config.isSandboxMode) {
+      const tenantId = resolveUploadTenantId(req, config);
+      inboundRequestParser.setTenatId(tenantId);
     }
 
-    let reformattedMessage = await channelProvider.getFormattedMessageFromUser(req.body);
-
-    if (reformattedMessage != null) {
+    if (await inboundRequestParser.hasValidMessage()) {
+      const inboundRequestModel = await inboundRequestParser.getRequestModel();
       sessionManager
-        .authenticateAndDispatch(reformattedMessage)
-        .catch((error) => handleError(error, reformattedMessage));
+        .authenticateAndDispatch(inboundRequestModel)
+        .catch((error) => handleError(error, inboundRequestModel));
     }
-
-    
     res.status(200).send("OK");
   } catch (e) {
     console.error("Status endpoint error:", e);
