@@ -107,48 +107,75 @@ class UserService {
     throw lastError;
   }
 
+  /**
+   * Runs a privileged request with the service-account token, retrying ONCE with a
+   * freshly minted token if the first attempt comes back 401.
+   *
+   * The token is cached on expires_in alone, so an egov-user restart, a token-store
+   * flush or a password rotation invalidates it early. Without this retry the
+   * process never recovered: findCitizen read 401 as "citizen not found" — so every
+   * caller looked like a brand-new citizen — and createUser threw, until restart.
+   */
+  async withServiceAccount(perform) {
+    const account = await this.getServiceAccount();
+    const response = await perform(account);
+    if (response.status !== StatusCodes.UNAUTHORIZED) return { response, account };
+
+    console.warn('Service account token rejected (401); re-authenticating and retrying once');
+    this._serviceAccount = undefined;
+    this._serviceAccountExpiry = 0;
+
+    const freshAccount = await this.getServiceAccount();
+    return { response: await perform(freshAccount), account: freshAccount };
+  }
+
+
+
   // Finds a citizen by mobile number and tenant ID using the service account.
   // Returns the citizen's auth token and user info if found, otherwise undefined.
-  async findCitizen(mobileNumber, tenantId) {
-    const { authToken, userInfo } = await this.getServiceAccount();
+    async findCitizen(mobileNumber, tenantId) {
     const cleanMobileNumber = this.sanitizeMobileNumber(mobileNumber) || mobileNumber;
-
     const url = config.egovServices.userServiceHost + config.egovServices.userServiceSearchPath;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        RequestInfo: this.serviceRequestInfo(authToken, userInfo),
-        tenantId: tenantId,
-        mobileNumber: cleanMobileNumber,
-        userType: 'CITIZEN'
+
+    const { response, account } = await this.withServiceAccount(({ authToken, userInfo }) =>
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          RequestInfo: this.serviceRequestInfo(authToken, userInfo),
+          tenantId: tenantId,
+          mobileNumber: cleanMobileNumber,
+          userType: 'CITIZEN'
+        })
       })
-    });
+    );
 
     if (response.status !== StatusCodes.OK) return undefined;
 
     const body = await response.json();
     const found = (body.user || []).find((candidate) => candidate.active !== false);
-    return found ? { authToken, userInfo: found } : undefined;
+    return found ? { authToken: account.authToken, userInfo: found } : undefined;
   }
+
 
   
   async findInactiveCitizen(mobileNumber, tenantId) {
-    const { authToken, userInfo } = await this.getServiceAccount();
     const cleanMobileNumber = this.sanitizeMobileNumber(mobileNumber) || mobileNumber;
-
     const url = config.egovServices.userServiceHost + config.egovServices.userServiceSearchPath;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        RequestInfo: this.serviceRequestInfo(authToken, userInfo),
-        tenantId: tenantId,
-        mobileNumber: cleanMobileNumber,
-        userType: 'CITIZEN',
-        active: false
+
+    const { response } = await this.withServiceAccount(({ authToken, userInfo }) =>
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          RequestInfo: this.serviceRequestInfo(authToken, userInfo),
+          tenantId: tenantId,
+          mobileNumber: cleanMobileNumber,
+          userType: 'CITIZEN',
+          active: false
+        })
       })
-    });
+    );
 
     if (response.status !== StatusCodes.OK) return undefined;
     const body = await response.json();
@@ -283,35 +310,35 @@ class UserService {
     if (!cleanMobileNumber)
         throw new ValidationError(`Invalid mobile number format: ${mobileNumber}. Expected ${config.mobileNumberLength} digits, optionally prefixed with ${config.countryCode}.`);
 
-    const { authToken, userInfo } = await this.getServiceAccount();
-
-    const requestBody = {
-      requestInfo: this.serviceRequestInfo(authToken, userInfo),
-      user: {
-        userName: cleanMobileNumber,
-        mobileNumber: cleanMobileNumber,
-        name: config.citizenPlaceholderName,
-        type: "CITIZEN",
-        active: true,
-        password: config.citizenPlaceholderPassword,
-        permanentCity: tenantId,
-        tenantId: tenantId,
-        roles: [{ code: "CITIZEN", name: "Citizen", tenantId: tenantId }]
-      }
-    };
-
     const url = config.egovServices.userServiceHost + config.egovServices.userServiceCreateNoValidatePath;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
+    const { response, account } = await this.withServiceAccount(({ authToken, userInfo }) =>
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestInfo: this.serviceRequestInfo(authToken, userInfo),
+          user: {
+            userName: cleanMobileNumber,
+            mobileNumber: cleanMobileNumber,
+            name: config.citizenPlaceholderName,
+            type: "CITIZEN",
+            active: true,
+            password: config.citizenPlaceholderPassword,
+            permanentCity: tenantId,
+            tenantId: tenantId,
+            roles: [{ code: "CITIZEN", name: "Citizen", tenantId: tenantId }]
+          }
+        })
+      })
+    );
+
     const responseBody = await response.json();
 
     if (response.status === StatusCodes.OK) {
-      return { authToken, userInfo: (responseBody.user || [])[0] };
+      return { authToken: account.authToken, userInfo: (responseBody.user || [])[0] };
     }
+
 
     const errorCode = responseBody?.Errors?.[0]?.code
       || responseBody?.error?.fields?.[0]?.code
