@@ -324,7 +324,6 @@ class UserService {
             name: config.citizenPlaceholderName,
             type: "CITIZEN",
             active: true,
-            password: config.citizenPlaceholderPassword,
             permanentCity: tenantId,
             tenantId: tenantId,
             roles: [{ code: "CITIZEN", name: "Citizen", tenantId: tenantId }]

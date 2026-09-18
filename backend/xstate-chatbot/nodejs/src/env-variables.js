@@ -25,8 +25,6 @@ const envVariables = {
         tenantId: process.env.USER_SERVICE_ACCOUNT_TENANT ||  process.env.ROOT_TENANTID || 'mz',
     },
 
-    citizenPlaceholderPassword: process.env.CITIZEN_PLACEHOLDER_PASSWORD || 'Chatbot@2026',
-
     // Placeholder name for a citizen before they have provided a real name.
     citizenPlaceholderName: process.env.CITIZEN_PLACEHOLDER_NAME || 'Cidadão',
 
