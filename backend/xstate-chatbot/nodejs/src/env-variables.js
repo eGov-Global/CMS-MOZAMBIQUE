@@ -68,6 +68,8 @@ const envVariables = {
     avgSessionTime: process.env.AVG_SESSION_TIME || 10,
     replyCooldownMs: parseInt(process.env.REPLY_COOLDOWN_MS || '2000', 10),
     mediaProcessingTimeoutMs: parseInt(process.env.MEDIA_PROCESSING_TIMEOUT_MS || '13000', 10),
+    // Time to wait for all dispatches to settle before considering the operation complete.
+    dispatchSettleTimeoutMs: parseInt(process.env.DISPATCH_SETTLE_TIMEOUT_MS || '30000', 10),
     maxMediaSizeBytes: parseInt(process.env.MAX_MEDIA_SIZE_MB || '5', 10) * 1024 * 1024,
 
     paytmWnSLink: process.env.PAYTM_WNS_LINK || 'https://stvending.punjab.gov.in/wsbills/',

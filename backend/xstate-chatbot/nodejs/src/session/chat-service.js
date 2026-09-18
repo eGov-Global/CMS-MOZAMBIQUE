@@ -7,6 +7,8 @@ const uuid = require("uuid");
 const config = require("../env-variables");
 const dialog = require("../machine/util/dialog");
 const messages = require("../machine/flow/shell-messages");
+const { hasActiveInvoke, waitUntilSettled } = require("./invoke-state");
+
 
 // Users awaiting a resume-or-restart choice after their session expired -
 // keyed by sessionUserId, holding the expired ChatState to restore if they
@@ -40,6 +42,9 @@ class ChatService {
     const event = message.isCancel() ? "USER_CANCEL" : message.isReset() ? "USER_RESET" : "USER_MESSAGE";
 
     stateMachineService.send(event, inboundRequestModel);
+
+    // Wait until the state machine has no active invocations before returning.
+    return waitUntilSettled(stateMachineService);
   }
 
 
@@ -133,6 +138,10 @@ class ChatService {
   addTransitionPersistanceHandler(stateMachineService, reformattedMessage, locale) {
     stateMachineService.onTransition((state) => {
       if (!state.changed) return;
+
+      // Skip persisting the state if it has an active invocation.
+      if (hasActiveInvoke(state)) return;
+
 
       const userId = state.context.user.userId;
       const stateStrings = state.toStrings();
