@@ -137,8 +137,10 @@ env: |
         key: valuefirst-password
   - name: TRACER_OPENTRACING_ENABLED
     value: "true"
-  - name: FLOW_RESET_KEYWORDS
-    value: "Hi,Hey,Hello,mseva,Start,missedCall"
+  - name: RESET_WORDS
+    value: "reiniciar,reinicie,restart,reset,ola,oi,hello,hi"
+  - name: CANCEL_WORDS
+    value: "cancelar,cancele,cancel,parar,pare,stop"
   {{- if index .Values "contact-card-whatsapp-number" }}
   - name: CONTACT_CARD_WHATSAPP_NUMBER
     value: {{ index .Values "contact-card-whatsapp-number" | quote }}

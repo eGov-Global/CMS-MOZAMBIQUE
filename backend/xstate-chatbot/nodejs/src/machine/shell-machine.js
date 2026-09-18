@@ -93,6 +93,7 @@ askForName
     { bundle: messages.onboarding.nameInformation, delay: 2000 },
     { bundle: messages.onboarding.onboardingName.question, delay: 3000 }
   ])
+  .setValidate((name) => name.length > 0) 
   .setOnValid((context, name) => { context.onboarding.name = name; })
   .setConditionalNext(askToConfirmName, gaveName)
   .setNext(updateUserProfile);
@@ -109,8 +110,11 @@ askToConfirmProfile
 
 askToChangeName
   .setPrompt(messages.onboarding.changeName.question)
+  .setValidate((name) => name.length > 0)
   .setOnValid((context, name) => { context.onboarding.name = name; })
-  .setConditionalNext(askToConfirmName, gaveName);
+  .setConditionalNext(askToConfirmName, gaveName)
+  .setNext(askToChangeName);
+
 
 askToConfirmName
   .setPrompt([{ bundle: messages.onboarding.onboardingNameConfirmation, delay: 1000 }])

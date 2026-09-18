@@ -112,6 +112,7 @@ walkComplaintTypes
   .setTrail(true)
   .setFetch((context, path) => pgrService.fetchComplaintHierarchyStep(context.extraInfo.tenantId, path))
   .setOnError(system_error)
+  .setOnEmpty(system_error)
   .setOnLeaf(locationGroup, { slot: 'complaint' });
 
 walkBoundaries
