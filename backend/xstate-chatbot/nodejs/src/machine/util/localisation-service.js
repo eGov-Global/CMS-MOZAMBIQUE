@@ -78,7 +78,7 @@ class LocalisationService {
 
     
     getMessageForCode(code, locale) {
-        return this.messages[locale][code];
+        return (this.messages || {})[locale]?.[code];
     }
 
     getMessageBundleForCode(code) {
