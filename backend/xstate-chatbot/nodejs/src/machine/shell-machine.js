@@ -17,7 +17,7 @@ const { offeredLocales } = require('./flow/offered-locales');
 const userProfileService = require('./service/egov-user-profile');
 
 const isOnboarded = (context) => context.user.locale;
-const hasProfileName = (context) => context.user.name;
+const hasProfileName = (context) => context.user.name && context.user.name !== config.citizenPlaceholderName;
 const gaveName = (context) => context.onboarding.name;
 const commitName = (context) => { context.user.name = context.onboarding.name; };
 const isWhitelisted = (context) => {
@@ -163,6 +163,8 @@ const config_ = compile([startNode, onboardingGroup, welcomeGroup, endNode, syst
 module.exports = {
   config: config_,
   isWhitelisted,
+  isOnboarded,
+  hasProfileName,
   states: { start: startNode, onboardingGroup, welcomeGroup, endstate: endNode, system_error: systemErrorNode, pgr: pgrNode, notAuthorized,
     onboardingLocale: askLocale, onboardingWelcome: sayWelcome, checkProfile, onboardingName: askForName, onBoardingUserProfileConfirmation: askToConfirmProfile,
     changeName: askToChangeName, onboardingNameConfirmation: askToConfirmName, onboardingUpdateUserProfile: updateUserProfile, onboardingThankYou: sayThankYou,
