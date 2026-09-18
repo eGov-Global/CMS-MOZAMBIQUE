@@ -34,7 +34,15 @@ class LocalisationService {
             covered.push(value);
         }
 
-        this.supportedLocales = covered.length ? covered : ['en_IN'];
+        // Ensure that at least one locale has messages; otherwise, throw an error.
+        if (covered.length === 0) {
+            throw new Error(
+                `Localisation returned no messages for any configured locale [${candidates.map((c) => c.value).join(', ')}]`
+            );
+        }
+
+        this.supportedLocales = covered;
+
     }
 
     async fetchDeclaredLocales() {
@@ -187,6 +195,31 @@ class LocalisationService {
 }
 
 const localisationService = new LocalisationService();
-localisationService.init();
+
+/**
+ * Boot-time load with backoff, called once from app.js.
+ *
+ * Not done at require time any more: init() is async, so a failure there was
+ * unobservable and left the service running with empty message tables until
+ * someone restarted it by hand. Exiting on exhaustion restores the base's
+ * self-healing — the orchestrator restarts the container.
+ */
+async function loadLocalisationOrExit(maxAttempts = 5) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await localisationService.init();
+      console.log(`Localisation loaded for [${localisationService.supportedLocales.join(', ')}]`);
+      return;
+    } catch (error) {
+      console.error(`Localisation init attempt ${attempt}/${maxAttempts} failed: ${error.message}`);
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, Math.min(attempt * 2000, 10000)));
+      }
+    }
+  }
+  console.error('Localisation could not be loaded; exiting so the orchestrator restarts the service');
+  process.exit(1);
+}
 
 module.exports = localisationService;
+module.exports.loadLocalisationOrExit = loadLocalisationOrExit;
