@@ -83,6 +83,9 @@ pip-delete-this-directory.txt
 *.pem
 *.key
 *.p12
+# public CA certs (not secrets) needed to complete a server's incomplete TLS
+# chain - see backend/xstate-chatbot/nodejs/console-repl.js's NODE_EXTRA_CA_CERTS note
+!backend/xstate-chatbot/nodejs/certs/*.pem
 *.pfx
 secrets/
 credentials.json
