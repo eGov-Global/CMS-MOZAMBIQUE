@@ -74,10 +74,6 @@ startNode
 askLocale
   .setPrompt(messages.onboarding.localeMenu)
   .setOptions(() => offeredLocales())
-  .setOnUnknown(checkProfile, (context) => {
-    context.user.locale = config.defaultLocale;
-    context.onboarding.locale = config.defaultLocale;
-  })
   .setNext(checkProfile, (context) => {
     context.user.locale = context.intention;
     context.onboarding.locale = context.intention;
