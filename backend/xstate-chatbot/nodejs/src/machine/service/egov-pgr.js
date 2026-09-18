@@ -188,6 +188,11 @@ class PGRService {
         BoundaryTypeHierarchySearchCriteria: { tenantId },
       }),
     });
+
+    if (!response.ok) {
+      throw new Error(`Boundary hierarchy fetch failed with status ${response.status}`);
+    }
+
     const data = await response.json();
     // a tenant can have several unrelated hierarchy types registered (other
     // modules, QA fixtures) - pick the one PGR is configured to use, not just
@@ -237,6 +242,11 @@ class PGRService {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ RequestInfo: {} }),
     });
+
+    if (!response.ok) {
+      throw new Error(`Boundary relationships fetch failed with status ${response.status}`);
+    }
+
     const data = await response.json();
 
     let nodes = (data.TenantBoundary ?? []).flatMap((entry) => entry.boundary ?? []);
