@@ -8,6 +8,7 @@ const SandboxOrgTracker = require("./sandbox-org-tracker");
 const SandboxLoginFlow = require("./sandbox-login-flow");
 const StandardLoginFlow = require("./standard-login-flow");
 const ChatService = require("./chat-service");
+const { maskMobile } = require("../privacy");
 
 // Simple in-memory store for tracking email validation requests in sandbox mode
 // Format: { mobileNumber: { timestamp: Date, waitingForEmail: boolean } }
@@ -83,7 +84,7 @@ class SessionManager {
   async authenticateAndDispatch(rawRequestModel) {
     const mobileNumber = rawRequestModel.user.mobileNumber;
     if (dispatchQueues.has(mobileNumber)) {
-      console.log(`Discarding message from ${mobileNumber}: previous message still processing`);
+      console.log(`Discarding message from ${maskMobile(mobileNumber)}: previous message still processing`);
       return;
     }
     

@@ -4,6 +4,7 @@ const config = require("../env-variables");
 const Session = require("./session");
 const dialog = require("../machine/util/dialog");
 const messages = require("../machine/flow/shell-messages");
+const { maskMobile } = require("../privacy");
 
 class StandardLoginFlow {
   constructor(inboundRequestModel) {
@@ -18,7 +19,7 @@ class StandardLoginFlow {
 
   async resolveSession() {
     if (!this.isWhitelisted()) {
-      console.log(`Rejecting message from non-whitelisted number: ${this.mobileNumber}`);
+      console.log(`Rejecting message from non-whitelisted number: ${maskMobile(this.mobileNumber)}`);
       // Reply from the raw number, not a user record — nothing has been created.
       channelProvider.sendMessageToUser(
         { mobileNumber: this.mobileNumber, locale: config.defaultLocale },

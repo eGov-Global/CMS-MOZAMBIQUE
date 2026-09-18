@@ -1,4 +1,5 @@
 const config = require("../env-variables");
+const { summarizeInbound } = require("../privacy");
 const fetch = require("node-fetch");
 const urlencode = require("urlencode");
 const fs = require("fs");
@@ -134,7 +135,7 @@ class ValueFirstWhatsAppProvider {
   }
 
   async getUserMessage(requestBody, tenantId = null) {
-    console.log("Received requestBody:", JSON.stringify(requestBody, null, 2));
+    console.log("ValueFirst - inbound:", summarizeInbound(requestBody));
 
     let reformattedMessage = {};
     let type;
@@ -418,10 +419,10 @@ class ValueFirstWhatsAppProvider {
     let requestBody = req.query;
     if (Object.keys(requestBody).length === 0) {
       requestBody = req.body;
-      console.debug("Request body extracted from req.body:", requestBody);
+      console.debug("Request body extracted from req.body:", summarizeInbound(requestBody));
     }
 
-    console.debug("Request body extracted from req.query:", requestBody);
+    console.debug("Request body extracted from req.query:", summarizeInbound(requestBody));
     return requestBody;
   }
 

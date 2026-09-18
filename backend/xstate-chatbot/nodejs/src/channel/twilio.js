@@ -3,6 +3,7 @@ const fetch = require("node-fetch");
 const axios = require('axios');
 var FormData = require("form-data");
 const mediaTypes = require('../media-types');
+const { maskMobile, summarizeInbound } = require('../privacy');
 const { isValidTwilioSignature } = require('./twilio-signature');
 
 // The only host inbound media is fetched from, and the only path shape accepted
@@ -148,10 +149,10 @@ class TwilioWhatsAppProvider {
         let requestBody = req.body;
         if (Object.keys(requestBody).length === 0) {
             requestBody = req.query;
-            console.debug("Twilio - Extracted raw message from query:", JSON.stringify(requestBody, null, 2));
+            console.debug("Twilio - Extracted raw message from query:", summarizeInbound(requestBody));
         }
         
-        console.debug("Twilio - Extracted raw message:", JSON.stringify(requestBody, null, 2));
+        console.debug("Twilio - Extracted raw message:", summarizeInbound(requestBody));
         return requestBody;
     }
 
@@ -200,7 +201,7 @@ class TwilioWhatsAppProvider {
 
             // Discard messages from numbers that do not belong to the served country.
             if (!this.isServedCountry(requestBody.From)) {
-                console.log(`Twilio - Discarding message from out-of-country number: ${requestBody.From}`);
+                console.log(`Twilio - Discarding message from out-of-country number: ${maskMobile(requestBody.From)}`);
                 return false;
             }
 
@@ -366,7 +367,7 @@ class TwilioWhatsAppProvider {
 
 
     async getUserMessage(requestBody, tenantId = null) {
-        console.log("Twilio - Received requestBody:", JSON.stringify(requestBody, null, 2));
+        console.log("Twilio - inbound:", summarizeInbound(requestBody));
         const inputType = this.getInputType(requestBody);
         const inputFromType = await this.getInputFromType(requestBody, inputType, tenantId);
 

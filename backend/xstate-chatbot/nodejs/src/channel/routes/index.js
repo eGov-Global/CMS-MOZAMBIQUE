@@ -8,6 +8,7 @@ const express = require("express"),
   { resolveUploadTenantId } = require("../../session/upload-tenant"),
    { handleError } = require("../../session/error-handler"),
   rateLimit = require("express-rate-limit");
+const { summarizeInbound } = require("../../privacy");
 
   // Inbound webhooks are unauthenticated and exposed directly — the service is not
 // behind Kong, which rate-limits only its own routes. 300/min is well above real
@@ -21,8 +22,7 @@ const webhookLimiter = rateLimit({
 
 // Entry point for inbound messages from the channel provider
 router.post("/message", webhookLimiter, async (req, res) => {
-  console.log("Request URL: " + req.originalUrl);
-  console.log('Request Body Object: ' + JSON.stringify(req.body));
+  console.log(`Inbound ${req.originalUrl}: ${summarizeInbound(req.body)}`);
 
   // Verify the authenticity of the inbound request using the channel provider's signature verification mechanism.
   if (typeof channelProvider.verifyRequest === "function" && !channelProvider.verifyRequest(req)) {
