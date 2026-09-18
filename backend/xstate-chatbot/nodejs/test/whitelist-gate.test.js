@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
-process.env.ALLOWED_MOBILE_NUMBERS = "842164981,849904390";
+process.env.ALLOWED_MOBILE_NUMBERS = "840000000,840000002";
 
 const projectRoot = path.resolve(__dirname, "..");
 const p = (rel) => path.join(projectRoot, rel);
@@ -43,19 +43,19 @@ const modelFor = (mobileNumber) => ({ user: { mobileNumber }, extraInfo: {} });
 test("a non-whitelisted number creates nothing and is told so", async () => {
   sent.length = 0;
   getUserCalls = 0;
-  const session = await new StandardLoginFlow(modelFor("840000000")).resolveSession();
+  const session = await new StandardLoginFlow(modelFor("849999999")).resolveSession();
 
   assert.equal(session, null, "no session for a non-whitelisted number");
   assert.equal(getUserCalls, 0, "getUserForMobileNumber must not run — it creates a DIGIT citizen");
   assert.equal(sent.length, 1, "the citizen is still told why");
-  assert.equal(sent[0].user.mobileNumber, "840000000");
+  assert.equal(sent[0].user.mobileNumber, "849999999");
   assert.match(String(sent[0].messages[0]), /autorizado|authorized/i);
 });
 
 test("a whitelisted number resolves a session", async () => {
   sent.length = 0;
   getUserCalls = 0;
-  const session = await new StandardLoginFlow(modelFor("842164981")).resolveSession();
+  const session = await new StandardLoginFlow(modelFor("840000000")).resolveSession();
 
   assert.equal(getUserCalls, 1);
   assert.equal(session.userId, "u-1");

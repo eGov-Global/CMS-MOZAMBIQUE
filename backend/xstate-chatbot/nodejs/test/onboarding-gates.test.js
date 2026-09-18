@@ -42,7 +42,7 @@ test("createUser does not set a locale — locale presence is the onboarded mark
   userService._serviceAccountExpiry = Date.now() + 60_000;
 
 
-  await userService.createUser("842164981", "mz");
+  await userService.createUser("840000000", "mz");
 
   assert.ok(lastRequest, "a create request was made");
   assert.equal("locale" in lastRequest.body.user, false, "a created citizen must have no locale yet");

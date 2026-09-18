@@ -52,7 +52,7 @@ function harness({ service, localisation = { getMessageBundleForCode: () => unde
     initial: "pgr",
     context: {
       user: { locale: "pt_PT", userId: "u-1", name: "Feliciano" },
-      extraInfo: { tenantId: "mz", whatsAppBusinessNumber: "258841817027" },
+      extraInfo: { tenantId: "mz", whatsAppBusinessNumber: "258840000001" },
       slots: { pgr: {} },
       chatInterface: { toUser: (user, messages) => outputs.push(...messages) },
     },

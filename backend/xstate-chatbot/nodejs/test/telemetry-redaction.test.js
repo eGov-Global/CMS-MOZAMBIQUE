@@ -18,8 +18,8 @@ const redact = telemetry.redactSecrets;
 
 test("strips the service-account token from an inbound model", () => {
   const model = {
-    user: { userId: "u-1", locale: "pt_PT", mobileNumber: "258842164981", authToken: "live-token" },
-    extraInfo: { whatsAppBusinessNumber: "258841817027" },
+    user: { userId: "u-1", locale: "pt_PT", mobileNumber: "258840000000", authToken: "live-token" },
+    extraInfo: { whatsAppBusinessNumber: "258840000001" },
   };
   const out = redact(model);
   assert.equal(out.user.authToken, "[REDACTED]");

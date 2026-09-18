@@ -70,12 +70,12 @@ const sessionManager = require(path.join(sessionDir, "session-manager.js"));
 const ChatService = require(path.join(sessionDir, "chat-service.js"));
 const chatService = new ChatService(sessionManager);
 
-const user = { userId: "u1", mobileNumber: "258842164981", locale: "pt_PT" };
+const user = { userId: "u1", mobileNumber: "258840000000", locale: "pt_PT" };
 
 function model({ input = "1", cancel = false, reset = false } = {}) {
   return {
     user,
-    extraInfo: { tenantId: "mz", whatsAppBusinessNumber: "258841817027" },
+    extraInfo: { tenantId: "mz", whatsAppBusinessNumber: "258840000001" },
     getMessage: () => ({
       getInputMessage: () => input,
       isCancel: () => cancel,

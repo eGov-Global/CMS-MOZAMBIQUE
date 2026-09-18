@@ -53,7 +53,7 @@ test("a 401 re-authenticates and retries once, returning the fresh token", async
   userService._serviceAccount = { authToken: "stale-token", userInfo: { uuid: "svc" } };
   userService._serviceAccountExpiry = Date.now() + 60_000;
 
-  const found = await userService.findCitizen("842164981", "mz");
+  const found = await userService.findCitizen("840000000", "mz");
 
   assert.equal(calls.length, 2, "one refused attempt, then one retry");
   assert.equal(calls[0].token, "stale-token");
@@ -71,7 +71,7 @@ test("a healthy token makes exactly one call and no re-login", async () => {
   userService._serviceAccount = { authToken: "good-token", userInfo: { uuid: "svc" } };
   userService._serviceAccountExpiry = Date.now() + 60_000;
 
-  await userService.findCitizen("842164981", "mz");
+  await userService.findCitizen("840000000", "mz");
 
   assert.equal(calls.length, 1);
   assert.equal(loginCount, 0);

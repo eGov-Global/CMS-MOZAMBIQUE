@@ -9,7 +9,7 @@ const { isValidTwilioSignature, expectedSignature } = require(
 
 const TOKEN = "test_auth_token";
 const URL = "https://uat.falacidadao.gov.mz/xstate-chatbot/message";
-const BODY = { From: "whatsapp:+258842164981", To: "whatsapp:+258841817027", Body: "Ola" };
+const BODY = { From: "whatsapp:+258840000000", To: "whatsapp:+258840000001", Body: "Ola" };
 
 /** Independent implementation of Twilio's scheme, to pin the canonical string. */
 function sign(url, params) {
@@ -29,7 +29,7 @@ test("param order does not change the signature", () => {
 
 test("rejects a tampered From — the impersonation case", () => {
   const signature = sign(URL, BODY);
-  const tampered = { ...BODY, From: "whatsapp:+258849904390" };
+  const tampered = { ...BODY, From: "whatsapp:+258840000002" };
   assert.equal(isValidTwilioSignature({ authToken: TOKEN, url: URL, params: tampered, signature }), false);
 });
 
