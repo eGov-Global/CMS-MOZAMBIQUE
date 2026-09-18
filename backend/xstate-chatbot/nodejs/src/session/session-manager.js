@@ -121,7 +121,8 @@ class SessionManager {
   async _authenticateAndDispatch(rawRequestModel) {
     const inboundRequestModel = InboundRequestModel.create(rawRequestModel);
     const loginFlow = config.isSandboxMode
-      ? new SandboxLoginFlow(inboundRequestModel, sandboxOrgTracker, getAuthenticatedSandboxUser)
+      ? new SandboxLoginFlow(inboundRequestModel, sandboxOrgTracker, getAuthenticatedSandboxUser,
+          (user, messages, extraInfo) => this.toUser(user, messages, extraInfo))
       : new StandardLoginFlow(inboundRequestModel);
 
     const session = await loginFlow.resolveSession();
