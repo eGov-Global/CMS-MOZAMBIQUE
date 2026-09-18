@@ -8,7 +8,7 @@ const { isValidTwilioSignature } = require('./twilio-signature');
 // The only host inbound media is fetched from, and the only path shape accepted
 // on it. See twilioMediaUrl below.
 const TWILIO_MEDIA_HOST = 'api.twilio.com';
-const TWILIO_MEDIA_PATH = /^\/2010-04-01\/Accounts\/AC[0-9a-f]{32}\/Messages\/MM[0-9a-f]{32}\/Media\/ME[0-9a-f]{32}$/i;
+const TWILIO_MEDIA_PATH = /^\/2010-04-01\/Accounts\/(AC[0-9a-f]{32})\/Messages\/(MM[0-9a-f]{32})\/Media\/(ME[0-9a-f]{32})$/i;
 const INPUT_TYPES = {
     LOCATION: 'location',
     BUTTON: 'button',
@@ -293,10 +293,14 @@ class TwilioWhatsAppProvider {
         if (parsed.protocol !== 'https:' || parsed.hostname !== TWILIO_MEDIA_HOST) {
             throw new Error('refusing to download media from a non-Twilio host');
         }
-        if (!TWILIO_MEDIA_PATH.test(parsed.pathname)) {
+        const match = TWILIO_MEDIA_PATH.exec(parsed.pathname);
+        if (!match) {
             throw new Error('refusing to download media from an unexpected twilio path');
         }
-        return new URL(parsed.pathname, `https://${TWILIO_MEDIA_HOST}`).toString();
+        // Assembled from the three validated SIDs rather than from the inbound path,
+        // so nothing the webhook sent reaches the request url verbatim.
+        const [, accountSid, messageSid, mediaSid] = match;
+        return `https://${TWILIO_MEDIA_HOST}/2010-04-01/Accounts/${accountSid}/Messages/${messageSid}/Media/${mediaSid}`;
     }
 
     async downloadMediaFromUrl(mediaUrl) {
