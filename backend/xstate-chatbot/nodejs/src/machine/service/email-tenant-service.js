@@ -121,18 +121,6 @@ class EmailTenantService {
             };
         }
     }
-
-    /**
-     * Get registration URL for sandbox
-     * @param {string} tenantEmail - The email associated with tenant
-     * @returns {string} - Returns the registration URL
-     */
-    getSandboxRegistrationUrl(tenantEmail) {
-        // Use sandbox host from config
-        const sandboxHost = config.sandboxHost;
-        const timestamp = Date.now();
-        return `${sandboxHost}/sandbox-ui/user/sign-up?ts=${timestamp}`;
-    }
 }
 
 module.exports = new EmailTenantService();
