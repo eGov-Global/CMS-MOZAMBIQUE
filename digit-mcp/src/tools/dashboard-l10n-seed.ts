@@ -95,6 +95,16 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_CHANNEL",
+    "message": "Channel",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_CREATED",
+    "message": "Created",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_CSAT",
     "message": "CSAT",
     "module": "rainmaker-dashboard"
@@ -102,6 +112,11 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   {
     "code": "DASHBOARD_COL_DEPT",
     "message": "Dept",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_DISTRICT",
+    "message": "District",
     "module": "rainmaker-dashboard"
   },
   {
@@ -150,6 +165,11 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_RESOLUTION_RATE",
+    "message": "Resolution",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_RESOLVED",
     "message": "Resolved",
     "module": "rainmaker-dashboard"
@@ -162,6 +182,11 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   {
     "code": "DASHBOARD_COL_ROLE",
     "message": "Role",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_SHARE_PCT",
+    "message": "% of complaints",
     "module": "rainmaker-dashboard"
   },
   {
@@ -185,8 +210,23 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_TOTAL",
+    "message": "Total",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_TREND",
+    "message": "Trend",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_TYPE",
     "message": "Type",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_VOLUME",
+    "message": "Volume",
     "module": "rainmaker-dashboard"
   },
   {
@@ -227,6 +267,11 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   {
     "code": "DASHBOARD_COMMON_NO_TILES_FOR_ROLE",
     "message": "No tiles in the catalog pack for this role.",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_OFFICER",
+    "message": "Officer",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1714,6 +1759,16 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_CHANNEL",
+    "message": "Canal",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_CREATED",
+    "message": "Criadas",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_CSAT",
     "message": "CSAT",
     "module": "rainmaker-dashboard"
@@ -1721,6 +1776,11 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
   {
     "code": "DASHBOARD_COL_DEPT",
     "message": "Dep.",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_DISTRICT",
+    "message": "Distrito",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1769,6 +1829,11 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_RESOLUTION_RATE",
+    "message": "Taxa de resolução",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_RESOLVED",
     "message": "Resolvidas",
     "module": "rainmaker-dashboard"
@@ -1781,6 +1846,11 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
   {
     "code": "DASHBOARD_COL_ROLE",
     "message": "Função",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_SHARE_PCT",
+    "message": "% das manifestações",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1804,8 +1874,23 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_TOTAL",
+    "message": "Total",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_TREND",
+    "message": "Tendência",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_TYPE",
     "message": "Tipo",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_VOLUME",
+    "message": "Volume",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1846,6 +1931,11 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
   {
     "code": "DASHBOARD_COMMON_NO_TILES_FOR_ROLE",
     "message": "Não há mosaicos no pacote do catálogo para esta função.",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_OFFICER",
+    "message": "Funcionário",
     "module": "rainmaker-dashboard"
   },
   {

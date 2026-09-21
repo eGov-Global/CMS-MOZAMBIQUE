@@ -80,6 +80,16 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_CHANNEL",
+    "message": "Canal",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_CREATED",
+    "message": "Criadas",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_CSAT",
     "message": "CSAT",
     "module": "rainmaker-dashboard"
@@ -87,6 +97,11 @@
   {
     "code": "DASHBOARD_COL_DEPT",
     "message": "Dep.",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_DISTRICT",
+    "message": "Distrito",
     "module": "rainmaker-dashboard"
   },
   {
@@ -135,6 +150,11 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_RESOLUTION_RATE",
+    "message": "Taxa de resolução",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_RESOLVED",
     "message": "Resolvidas",
     "module": "rainmaker-dashboard"
@@ -147,6 +167,11 @@
   {
     "code": "DASHBOARD_COL_ROLE",
     "message": "Função",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_SHARE_PCT",
+    "message": "% das manifestações",
     "module": "rainmaker-dashboard"
   },
   {
@@ -170,8 +195,23 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_TOTAL",
+    "message": "Total",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_TREND",
+    "message": "Tendência",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_TYPE",
     "message": "Tipo",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_VOLUME",
+    "message": "Volume",
     "module": "rainmaker-dashboard"
   },
   {
@@ -215,6 +255,11 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COMMON_OFFICER",
+    "message": "Funcionário",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COMMON_REMOVE",
     "message": "Remover",
     "module": "rainmaker-dashboard"
@@ -237,11 +282,6 @@
   {
     "code": "DASHBOARD_COMMON_UNASSIGNED",
     "message": "Sem atribuição",
-    "module": "rainmaker-dashboard"
-  },
-  {
-    "code": "DASHBOARD_COMMON_OFFICER",
-    "message": "Funcionário",
     "module": "rainmaker-dashboard"
   },
   {
