@@ -27,6 +27,7 @@ public class AnalyticsCatalog {
         public final String table;
         public final Map<String,String> timeRoles;     // role -> column
         public final Set<String> epochMsColumns;        // columns stored as epoch-ms (vs sql date)
+        public final Set<String> dateColumns;           // columns stored as sql date (vs epoch-ms)
         public final Set<String> groupable;
         public final Set<String> filterable;
         public final Set<String> prefixFilterable;      // #1079: starts_with (path rollup/scope) allowlist — ONLY these
@@ -39,17 +40,21 @@ public class AnalyticsCatalog {
         public final String defaultTimeRole;
 
         Grain(String name, String table, Map<String,String> timeRoles, Set<String> epochMsColumns,
+              Set<String> dateColumns,
               Set<String> groupable, Set<String> filterable, Set<String> prefixFilterable,
               Set<String> measurable, Set<String> distinctable,
               String tenantColumn, String boundaryColumn, String citizenColumn, String departmentColumn,
               String defaultTimeRole) {
-            this.name = name; this.table = table; this.timeRoles = timeRoles; this.epochMsColumns = epochMsColumns;
+            this.name = name; this.table = table; this.timeRoles = timeRoles; this.epochMsColumns = epochMsColumns; this.dateColumns = dateColumns;
             this.groupable = groupable; this.filterable = filterable; this.prefixFilterable = prefixFilterable;
             this.measurable = measurable;
             this.distinctable = distinctable; this.tenantColumn = tenantColumn; this.boundaryColumn = boundaryColumn;
             this.citizenColumn = citizenColumn; this.departmentColumn = departmentColumn; this.defaultTimeRole = defaultTimeRole;
         }
         public boolean isEpochMs(String col){ return epochMsColumns.contains(col); }
+
+        public boolean isDate(String col){ return dateColumns.contains(col); }
+
     }
 
     private final Map<String,Grain> grains = new LinkedHashMap<>();
@@ -59,6 +64,7 @@ public class AnalyticsCatalog {
         grains.put("facts", new Grain("facts", "complaint_facts",
             mapOf("filed_at","created_at", "resolved_at","resolved_at"),
             setOf("created_at","resolved_at","last_transition_at","first_assigned_at","facts_built_at"),
+            setOf("created_date","created_week_start","resolved_date"),   // sql date cols
             // groupable
             setOf("service_code","application_status","source","ward_code","zone_code","boundary_path",
                   "boundary_leaf_code","boundary_leaf_type",   // #1079: depth-agnostic leaf node
@@ -100,6 +106,7 @@ public class AnalyticsCatalog {
         grains.put("events", new Grain("events", "complaint_events",
             mapOf("event_at","entered_at"),
             setOf("entered_at","exited_at","complaint_created_at"),
+            setOf("occurred_date","occurred_week_start"),   // sql date cols
             setOf("status","previous_status","action","escalation_source","ward_code","zone_code","service_code",
                   "department_code",   // S2: events now carries department_code (from MDMS ServiceDefs)
                   "boundary_leaf_code","boundary_leaf_type","complaint_depth",   // #1079
@@ -127,6 +134,7 @@ public class AnalyticsCatalog {
         grains.put("daily", new Grain("daily", "complaint_open_state_daily",
             mapOf("snapshot_date","snapshot_date"),
             setOf(),  // snapshot_date is a sql date, not epoch-ms
+            setOf("snapshot_date"),
             setOf("snapshot_date","ward_code","zone_code","service_code","sla_status_bucket","aging_bucket",
                   "department_code",   // S2: daily now carries department_code + account_id
                   "is_open","sla_breached","current_assignee_uuid","boundary_path","tenant_id"),

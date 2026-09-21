@@ -112,7 +112,7 @@ export function dimensionKindForName(name) {
   const n = String(name ?? "").toLowerCase();
   if (!n) return null;
   if (n.includes("service") || n.includes("subtype") || n.includes("complaint_type")) return "complaintType";
-  if (n.includes("ward") || n.includes("boundary") || n.includes("locality")) return "boundary";
+    if (n.includes("ward") || n.includes("zone") || n.includes("boundary") || n.includes("locality")) return "boundary";
   if (n.includes("department") || n === "dept") return "department";
   if (n.includes("sla")) return "slaState";
   if (n.includes("status") || n.includes("stage")) return "workflowStatus";

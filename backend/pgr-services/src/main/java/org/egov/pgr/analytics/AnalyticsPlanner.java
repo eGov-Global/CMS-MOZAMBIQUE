@@ -220,7 +220,7 @@ public class AnalyticsPlanner {
         if (!spec.isObject()) {
             if (!plainFilterable) throw new IllegalArgumentException(
                     "op_not_allowed: column '" + colKey + "' on " + g.name + " only supports the 'starts_with' filter op");
-            params.add(value(spec)); return colKey + " = ?";      // shorthand: eq
+        params.add(value(g, colKey, spec)); return colKey + " = ?";      // shorthand: eq
         }
         List<String> parts = new ArrayList<>();
         Iterator<Map.Entry<String,JsonNode>> it = spec.fields();
@@ -253,17 +253,17 @@ public class AnalyticsPlanner {
             if (!plainFilterable) throw new IllegalArgumentException(
                     "op_not_allowed: column '" + colKey + "' on " + g.name + " only supports the 'starts_with' filter op");
             switch (op) {
-                case "eq":  params.add(value(v)); parts.add(colKey + " = ?"); break;
-                case "ne":  params.add(value(v)); parts.add(colKey + " <> ?"); break;
-                case "gt":  params.add(value(v)); parts.add(colKey + " > ?"); break;
-                case "gte": params.add(value(v)); parts.add(colKey + " >= ?"); break;
-                case "lt":  params.add(value(v)); parts.add(colKey + " < ?"); break;
-                case "lte": params.add(value(v)); parts.add(colKey + " <= ?"); break;
+                case "eq":  params.add(value(g, colKey, v)); parts.add(colKey + " = ?"); break;
+                case "ne":  params.add(value(g, colKey, v)); parts.add(colKey + " <> ?"); break;
+                case "gt":  params.add(value(g, colKey, v)); parts.add(colKey + " > ?"); break;
+                case "gte": params.add(value(g, colKey, v)); parts.add(colKey + " >= ?"); break;
+                case "lt":  params.add(value(g, colKey, v)); parts.add(colKey + " < ?"); break;
+                case "lte": params.add(value(g, colKey, v)); parts.add(colKey + " <= ?"); break;
                 case "isnull": parts.add(colKey + (v.asBoolean() ? " IS NULL" : " IS NOT NULL")); break;
                 case "in": {
                     if (!v.isArray() || v.size()==0) throw new IllegalArgumentException("invalid_param: 'in' needs a non-empty array");
                     List<String> ph = new ArrayList<>();
-                    for (JsonNode item : v) { params.add(value(item)); ph.add("?"); }
+                    for (JsonNode item : v) { params.add(value(g, colKey, item)); ph.add("?"); }
                     parts.add(colKey + " IN (" + String.join(",", ph) + ")");
                     break;
                 }
@@ -276,6 +276,21 @@ public class AnalyticsPlanner {
     /** Escape LIKE metacharacters (backslash default escape) so a starts_with value is a literal prefix. */
     private String escapeLike(String s){
         return s.replace("\\","\\\\").replace("%","\\%").replace("_","\\_");
+    }
+
+    /**
+     * Column-aware bind: a sql date column (daily.snapshot_date) must bind a {@link java.sql.Date},
+     * not the ISO text — Postgres has no {@code date >= varchar} operator and rejects the statement
+     * as a grammar error. Malformed text now fails fast here instead of reaching the database.
+     */
+    private Object value(Grain g, String colKey, JsonNode v){
+        if (g.isDate(colKey) && v.isTextual()) {
+            try { return java.sql.Date.valueOf(v.asText()); }
+            catch (IllegalArgumentException ex) {
+                throw new IllegalArgumentException("invalid_param: '" + colKey + "' needs an ISO date (yyyy-MM-dd)");
+            }
+        }
+        return value(v);
     }
 
     private Object value(JsonNode v){
