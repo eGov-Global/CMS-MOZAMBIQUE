@@ -80,6 +80,16 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_CHANNEL",
+    "message": "Channel",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_CREATED",
+    "message": "Created",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_CSAT",
     "message": "CSAT",
     "module": "rainmaker-dashboard"
@@ -87,6 +97,11 @@
   {
     "code": "DASHBOARD_COL_DEPT",
     "message": "Dept",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_DISTRICT",
+    "message": "District",
     "module": "rainmaker-dashboard"
   },
   {
@@ -135,6 +150,11 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_RESOLUTION_RATE",
+    "message": "Resolution",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_RESOLVED",
     "message": "Resolved",
     "module": "rainmaker-dashboard"
@@ -147,6 +167,11 @@
   {
     "code": "DASHBOARD_COL_ROLE",
     "message": "Role",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_SHARE_PCT",
+    "message": "% of complaints",
     "module": "rainmaker-dashboard"
   },
   {
@@ -170,8 +195,23 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_TOTAL",
+    "message": "Total",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_TREND",
+    "message": "Trend",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_TYPE",
     "message": "Type",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_VOLUME",
+    "message": "Volume",
     "module": "rainmaker-dashboard"
   },
   {
@@ -215,6 +255,11 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COMMON_OFFICER",
+    "message": "Officer",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COMMON_REMOVE",
     "message": "Remove",
     "module": "rainmaker-dashboard"
@@ -237,11 +282,6 @@
   {
     "code": "DASHBOARD_COMMON_UNASSIGNED",
     "message": "Unassigned",
-    "module": "rainmaker-dashboard"
-  },
-    {
-    "code": "DASHBOARD_COMMON_OFFICER",
-    "message": "Officer",
     "module": "rainmaker-dashboard"
   },
   {

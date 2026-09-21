@@ -108,6 +108,46 @@ export function getKpiDisplayTitle(metric) {
  * return null and callers fall back to the legacy humanisers. Order matters:
  * sla_status_bucket must resolve to slaState before the "status" check.
  */
+/**
+ * Column id -> localisation code, for catalog columns that carry a literal
+ * `label` and no `labelKey`. Those headers rendered English on every locale:
+ * the catalog is data, so nobody could translate them without editing MDMS.
+ *
+ * Resolved only as a FALLBACK — an explicit labelKey on the column still wins,
+ * so a tenant can override any of these without touching code.
+ */
+export const COLUMN_LABEL_KEYS = {
+  zone_code: "DASHBOARD_COL_DISTRICT",
+  ward_code: "DASHBOARD_COL_LOCALITY",
+  service_code: "DASHBOARD_COL_SUBTYPE",
+  service_group: "DASHBOARD_COL_TYPE",
+  source: "DASHBOARD_COL_CHANNEL",
+  created: "DASHBOARD_COL_CREATED",
+  open: "DASHBOARD_COL_OPEN",
+  resolved: "DASHBOARD_COL_RESOLVED",
+  assigned: "DASHBOARD_COL_ASSIGNED",
+  total: "DASHBOARD_COL_TOTAL",
+  volume: "DASHBOARD_COL_VOLUME",
+  trendPct: "DASHBOARD_COL_TREND",
+  share_pct: "DASHBOARD_COL_SHARE_PCT",
+  reopen_rate: "DASHBOARD_COL_REOPEN_RATE",
+  ontime_rate: "DASHBOARD_COL_RESOLVED_ON_TIME_RATE",
+  resolutionRate: "DASHBOARD_COL_RESOLUTION_RATE",
+  avg_csat: "DASHBOARD_COL_CSAT",
+  avg_resolution_ms: "DASHBOARD_COL_AVG_RESOLUTION_TIME",
+  ideal_sla_ms: "DASHBOARD_COL_SLA",
+  department_code: "DASHBOARD_COL_DEPT",
+  current_assignee_uuid: "DASHBOARD_COL_OWNER",
+  officerName: "DASHBOARD_COMMON_OFFICER",
+  status: "DASHBOARD_COL_STATUS",
+  sla_status_bucket: "DASHBOARD_COL_SLA_STATUS",
+};
+
+/** The code a column header should try, explicit labelKey first. */
+export function columnLabelKey(column) {
+  return column?.labelKey || COLUMN_LABEL_KEYS[column?.id] || null;
+}
+
 export function dimensionKindForName(name) {
   const n = String(name ?? "").toLowerCase();
   if (!n) return null;
