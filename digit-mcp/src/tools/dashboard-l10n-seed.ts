@@ -240,6 +240,11 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COMMON_CITY",
+    "message": "City",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COMMON_COUNT",
     "message": "Count",
     "module": "rainmaker-dashboard"
@@ -367,6 +372,11 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   {
     "code": "DASHBOARD_FILTERS_ALL_WARDS",
     "message": "All wards",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_FILTERS_ALL_DISTRICTS",
+    "message": "All districts",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1904,6 +1914,11 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COMMON_CITY",
+    "message": "Cidade",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COMMON_COUNT",
     "message": "Contagem",
     "module": "rainmaker-dashboard"
@@ -2031,6 +2046,11 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
   {
     "code": "DASHBOARD_FILTERS_ALL_WARDS",
     "message": "Todos os bairros",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_FILTERS_ALL_DISTRICTS",
+    "message": "Todos os distritos",
     "module": "rainmaker-dashboard"
   },
   {

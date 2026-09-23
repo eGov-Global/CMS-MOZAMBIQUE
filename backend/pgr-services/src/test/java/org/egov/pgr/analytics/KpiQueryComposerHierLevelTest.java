@@ -55,7 +55,7 @@ public class KpiQueryComposerHierLevelTest {
         JsonNode base = json("{\"grain\":\"daily\",\"dimensions\":[\"service_code\"],"
                 + "\"measures\":[{\"name\":\"open\",\"agg\":\"count\"}]}");
         JsonNode merged = composer.mergeParams(base, json("{\"hierLevel\":\"2\"}"), calendar);
-        assertEquals(base, merged);   // param inapplicable on daily — graceful skip, like ward
+        assertEquals(base, merged);   // param inapplicable on daily — graceful skip, like zone
     }
 
     @Test
@@ -104,11 +104,11 @@ public class KpiQueryComposerHierLevelTest {
     }
 
     @Test
-    public void composesWithWindowWardAndServiceCodeParams() {
+    public void composesWithWindowZoneAndServiceCodeParams() {
         JsonNode merged = composer.mergeParams(byTypeBase(),
-                json("{\"hierLevel\":\"1\",\"window\":\"last_7d\",\"ward\":\"W1\",\"serviceCode\":\"StreetLightNotWorking\"}"), calendar);
+                json("{\"hierLevel\":\"1\",\"window\":\"last_7d\",\"zone\":\"Z1\",\"serviceCode\":\"StreetLightNotWorking\"}"), calendar);
         assertEquals("last_7d", merged.get("window").get("name").asText());
-        assertEquals("W1", merged.get("filters").get("ward_code").get("eq").asText());
+        assertEquals("Z1", merged.get("filters").get("zone_code").get("eq").asText());
         assertEquals("StreetLightNotWorking", merged.get("filters").get("service_code").get("eq").asText());
         assertTrue(merged.get("dimensions").get(0).isObject());
         // ...and the planner accepts the combination (WHERE on raw service_code column,

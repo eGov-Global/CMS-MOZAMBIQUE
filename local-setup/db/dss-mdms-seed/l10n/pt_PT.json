@@ -225,6 +225,11 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COMMON_CITY",
+    "message": "Cidade",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COMMON_COUNT",
     "message": "Contagem",
     "module": "rainmaker-dashboard"
@@ -352,6 +357,11 @@
   {
     "code": "DASHBOARD_FILTERS_ALL_WARDS",
     "message": "Todos os bairros",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_FILTERS_ALL_DISTRICTS",
+    "message": "Todos os distritos",
     "module": "rainmaker-dashboard"
   },
   {

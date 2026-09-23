@@ -211,8 +211,8 @@ public class KpiQueryComposerPinnedWindowTest {
 
     @Test
     public void narrowingParamsStillApplyToAPinnedQuery() {
-        JsonNode merged = merge(createdTodayBase(), "{\"ward\":\"WARD_1\",\"serviceCode\":\"Pothole\"}");
-        assertEquals("WARD_1", merged.path("filters").path("ward_code").path("eq").asText());
+        JsonNode merged = merge(createdTodayBase(), "{\"zone\":\"KaMavota\",\"serviceCode\":\"Pothole\"}");
+        assertEquals("KaMavota", merged.path("filters").path("zone_code").path("eq").asText());
         assertEquals("Pothole", merged.path("filters").path("service_code").path("eq").asText());
         assertEquals(today().atStartOfDay(EAT).toInstant().toEpochMilli(),
                 merged.path("filters").path("created_at").path("gte").asLong(),
