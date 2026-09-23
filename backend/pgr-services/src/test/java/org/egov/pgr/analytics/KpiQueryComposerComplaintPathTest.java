@@ -147,11 +147,11 @@ public class KpiQueryComposerComplaintPathTest {
 
     @Test
     public void wardStaysASilentNoOpAndSanitizerStillRunsOnDaily() {
-        // ward has no reporting (unchanged behaviour); only complaintPath lands in the collector.
+        // zone has no reporting (unchanged behaviour); only complaintPath lands in the collector.
         List<String> ignored = new ArrayList<>();
         JsonNode eventsBase = json("{\"grain\":\"daily\",\"dimensions\":[\"service_code\"],"
                 + "\"measures\":[{\"name\":\"open\",\"agg\":\"count\"}]}");
-        composer.mergeParams(eventsBase, json("{\"ward\":\"W1\",\"complaintPath\":\"SANITATION\"}"), ignored, calendar);
+        composer.mergeParams(eventsBase, json("{\"zone\":\"Z1\",\"complaintPath\":\"SANITATION\"}"), ignored, calendar);
         assertEquals(List.of("complaintPath"), ignored);
         // a malformed path is invalid_param even on the grain that would skip the filter —
         // garbage is rejected, never half-applied.

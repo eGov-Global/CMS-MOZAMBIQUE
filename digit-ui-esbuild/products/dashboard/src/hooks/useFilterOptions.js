@@ -16,7 +16,7 @@ import {
 } from "../config/globalFilterGroups";
 
 /**
- * Fetches the global filter dropdown options (wards + complaint types) as
+ * Fetches the global filter dropdown options (zones + complaint types) as
  * server-scoped distincts: one inline batch _query on the facts grain, so the
  * backend's ABAC (PrincipalScopeResolver department/ward scoping) applies —
  * a Water-dept supervisor only ever sees water complaint types.
@@ -45,10 +45,12 @@ const OPTION_QUERIES = {
     measures: [{ name: "n", agg: "count" }],
     limit: 300,
   },
-  wards: {
+  districts: {
     grain: "facts",
     window: { name: "all" },
-    dimensions: ["ward_code"],
+    // Districts, not wards: with no sub-municipal level every ward inherits its
+    // municipality's name, so a ward list shows the same label several times.
+    dimensions: ["zone_code"],
     measures: [{ name: "n", agg: "count" }],
     limit: 300,
   },
@@ -141,8 +143,8 @@ export function useFilterOptions({ enabled = true } = {}) {
       toComplaintTypeDecorator(hierarchyIndex?.size ? hierarchyIndex : null)
     );
     const geography = toOptionList(
-      raw.results.wards?.rows,
-      "ward_code",
+      raw.results.districts?.rows,
+      "zone_code",
       GEOGRAPHY_OPTIONS,
       "boundary"
     );

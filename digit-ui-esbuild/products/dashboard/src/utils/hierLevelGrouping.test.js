@@ -223,7 +223,7 @@ test("applyGroupByToColumns: leaf/no grouping leaves columns untouched", () => {
 /* Override merge into refs + refsKey refire (R7c)                     */
 /* ------------------------------------------------------------------ */
 
-const FILTERS = { geography: "WARD1", complaintType: "all", dateRangeActive: false };
+const FILTERS = { geography: "KaMavota", complaintType: "all", dateRangeActive: false };
 
 test("buildRefs: override merges into the tile's params BEFORE the companion spreads", () => {
   const kpis = {
@@ -235,11 +235,11 @@ test("buildRefs: override merges into the tile's params BEFORE the companion spr
   const overrides = { chart: "2", spark: "2", map: "2" };
   const refs = buildRefs(tiles, kpis, FILTERS, overrides);
 
-  assert.deepEqual(refs.chart.params, { ward: "WARD1", hierLevel: "2" });
+  assert.deepEqual(refs.chart.params, { zone: "KaMavota", hierLevel: "2" });
   // companions AUTO-INHERIT the override (spread comes after the merge)…
-  assert.deepEqual(refs.spark__prior.params, { ward: "WARD1", hierLevel: "2", compare: "prior" });
-  assert.deepEqual(refs.spark__series.params, { ward: "WARD1", hierLevel: "2", series: "daily" });
-  assert.deepEqual(refs.map__pins.params, { ward: "WARD1", hierLevel: "2" });
+  assert.deepEqual(refs.spark__prior.params, { zone: "KaMavota", hierLevel: "2", compare: "prior" });
+  assert.deepEqual(refs.spark__series.params, { zone: "KaMavota", hierLevel: "2", series: "daily" });
+  assert.deepEqual(refs.map__pins.params, { zone: "KaMavota", hierLevel: "2" });
   // …and the companion's own marker can never be clobbered by the merge
   assert.equal(refs.spark__prior.params.compare, "prior");
 });
@@ -249,8 +249,8 @@ test("buildRefs: tiles without the param (or without an override) send no hierLe
   const tiles = [{ kpiId: "chart" }, { kpiId: "card" }];
   // stale override for a def that does not declare the param
   const refs = buildRefs(tiles, kpis, FILTERS, { card: "2" });
-  assert.deepEqual(refs.chart.params, { ward: "WARD1" }); // default is server-side
-  assert.deepEqual(refs.card.params, { ward: "WARD1" });
+  assert.deepEqual(refs.chart.params, { zone: "KaMavota" }); // default is server-side
+  assert.deepEqual(refs.card.params, { zone: "KaMavota" });
   assert.equal("hierLevel" in refs.card__prior.params, false);
 });
 
@@ -278,7 +278,7 @@ test("globalParams: unchanged filter mapping (regression guard for the extractio
       dateFrom: "2026-07-01",
       dateTo: "2026-07-10",
     }),
-    { ward: "W2", serviceCode: "CT", dateFrom: "2026-07-01", dateTo: "2026-07-10" }
+    { zone: "W2", serviceCode: "CT", dateFrom: "2026-07-01", dateTo: "2026-07-10" }
   );
   assert.deepEqual(globalParams({ geography: "all", complaintType: "all" }), {});
 });
