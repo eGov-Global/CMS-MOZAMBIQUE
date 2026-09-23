@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
  * Param-merge for the kpiId-by-reference analytics path.
  *
  * <p>A KPI definition stores a fixed base query (grammar against a single grain). The dashboard,
- * however, has a row of <em>global</em> filters (date range / window, ward, service type) that the
+ * however, has a row of <em>global</em> filters (date range / window, zone, service type) that the
  * user sets once and that must apply to <em>every</em> tile. The inline-query FE used to bake these
  * into each query body before sending; this composer reproduces that exact transform server-side so
  * the FE can send {@code {kpiId, params}} and let the BE apply the globals.
@@ -43,9 +43,12 @@ import java.util.regex.Pattern;
  *       column the planner's window targets): epoch-ms bounds for facts/events, ISO-date bounds
  *       for the daily snapshot grain. The base {@code window} is removed so the range fully governs
  *       the time axis (exactly as the FE does).</li>
- *   <li>{@code ward} — a boundary/ward code; narrows to {@code ward_code = ?} <em>iff</em> the grain
- *       has a filterable {@code ward_code}. A client narrowing WITHIN the user's RBAC scope; it can
- *       never widen (row-scope is still injected on top by {@link AnalyticsPlanner#plan}).</li>
+ *   <li>{@code zone} — a district (zone) boundary code; narrows to {@code zone_code = ?} <em>iff</em>
+ *       the grain has a filterable {@code zone_code}. Replaced the former {@code ward} param: in a
+ *       hierarchy with no sub-municipal level every ward carries its municipality's own name, so a
+ *       ward filter offered several identical choices. A client narrowing WITHIN the user's RBAC
+ *       scope; it can never widen (row-scope is still injected on top by
+ *       {@link AnalyticsPlanner#plan}).</li>
  *   <li>{@code serviceCode} — a complaint type LEAF; narrows to {@code service_code = ?} iff
  *       filterable. This stays the param for leaf selections (exact match, works on every grain
  *       incl. daily); {@code complaintPath} below is for interior nodes only.</li>
@@ -54,7 +57,7 @@ import java.util.regex.Pattern;
  *       {@code complaint_node_path} subtree predicate ({@code = ? OR LIKE ?||'.%'}) iff the grain
  *       carries the path column (facts/events). Values are validated against the path alphabet
  *       ({@code [A-Za-z0-9._/-]}, length-capped) — anything else is {@code invalid_param}. On the
- *       daily grain (no path column) the param cannot apply; unlike {@code ward}'s silent skip,
+ *       daily grain (no path column) the param cannot apply; unlike {@code zone}'s silent skip,
  *       the skip is REPORTED to the caller via the {@code paramsIgnored} collector (surfaced as
  *       {@code paramsIgnored:["complaintPath"]} on the result envelope) so the FE can flag the
  *       widget as unfiltered. Rows with a NULL path (nodes whose own code contains '.', see the
@@ -70,7 +73,7 @@ import java.util.regex.Pattern;
  *       {@code complaint_node_path} (aliased {@code AS service_code}, so viz/sort/columns are
  *       unchanged) and drops any {@code service_group} dimension (at a rolled-up level it
  *       collapses into a duplicate of the level bucket). Grains without the path column (daily)
- *       no-op gracefully, like {@code ward}. Aggregates recompute over raw rows, so averages and
+ *       no-op gracefully, like {@code zone}. Aggregates recompute over raw rows, so averages and
  *       ratios are correctly weighted — never an average of leaf averages.</li>
  *   <li>{@code series: "daily"} — turn a scalar tile into a daily time series: add the grain's daily
  *       date dimension (+ ascending sort), apply the selected range, drop the base window, and cap
@@ -89,13 +92,13 @@ import java.util.regex.Pattern;
  * empty state instead of a number for a period the filter excludes; {@code compare:"prior"} then
  * means the preceding window of equal span (yesterday, for {@code dtd}), and {@code series:"daily"}
  * gets an axis wider than the pin (the range, else the {@code window} param, else a rolling default)
- * so the sparkline is a trend rather than a single point. Non-time params (ward / serviceCode /
+ * so the sparkline is a trend rather than a single point. Non-time params (zone / serviceCode /
  * complaintPath / hierLevel) still apply — pinning fixes time, not filters. Pinning a BOUNDLESS
  * window ({@code all} / {@code live}) is meaningless and ignored: there is no interval to cover and
  * no preceding period, so such a def takes the ordinary path.
  *
  * <p>{@code compare}/{@code series} compose with {@code window}/{@code dateFrom}/{@code dateTo}/
- * {@code ward}/{@code serviceCode}: the window/range params resolve the <em>current</em> range first,
+ * {@code zone}/{@code serviceCode}: the window/range params resolve the <em>current</em> range first,
  * then {@code compare:"prior"} shifts it back one equal period, and {@code series:"daily"} buckets it.
  *
  * <p>All injected predicates ride the planner's existing parameterized {@code filters} mechanism
@@ -154,7 +157,7 @@ public class KpiQueryComposer {
      * to this def's grain and whose skip the FE must be told about. Today only
      * {@code complaintPath} reports (the daily grain has no {@code complaint_node_path}, so a
      * subtree selection would otherwise leave those widgets silently unfiltered); the historical
-     * silent no-ops ({@code ward} on ward-less grains, {@code hierLevel} on daily) keep their
+     * silent no-ops ({@code zone} on zone-less grains, {@code hierLevel} on daily) keep their
      * behaviour unchanged.
      */
     public JsonNode mergeParams(JsonNode baseQuery, JsonNode params, List<String> paramsIgnoredOut,
@@ -162,7 +165,7 @@ public class KpiQueryComposer {
         if (baseQuery == null || !baseQuery.isObject()) return baseQuery;
         if (params == null || !params.isObject() || params.size() == 0) return baseQuery;
 
-        // Resolve the grain so we can (a) pick the time column and (b) gate ward/service narrowing.
+        // Resolve the grain so we can (a) pick the time column and (b) gate zone/service narrowing.
         String grainName = baseQuery.hasNonNull("grain") ? baseQuery.get("grain").asText() : inferGrain(baseQuery);
         Grain g = catalog.grain(grainName);
         if (g == null) return baseQuery;   // planner will reject; don't mask the error here.
@@ -257,15 +260,15 @@ public class KpiQueryComposer {
     }
 
     /**
-     * The non-time narrowing params — ward, service type, complaint subtree, hierarchy rollup.
+     * The non-time narrowing params — zone, service type, complaint subtree, hierarchy rollup.
      * Applied on every path, pinned windows included: pinning fixes a tile's <em>time</em> axis, it
-     * does not exempt it from the dashboard's ward / type filters.
+     * does not exempt it from the dashboard's zone / type filters.
      */
     private void applyNarrowingParams(ObjectNode next, Grain g, JsonNode params, List<String> paramsIgnoredOut) {
         // ---- narrowing dimension filters (only if the grain supports the column) ----
-        if (params.hasNonNull("ward")) {
-            String ward = params.get("ward").asText();
-            if (!ward.isEmpty() && !"all".equals(ward)) applyEqFilter(next, g, "ward_code", ward);
+        if (params.hasNonNull("zone")) {
+            String zone = params.get("zone").asText();
+            if (!zone.isEmpty() && !"all".equals(zone)) applyEqFilter(next, g, "zone_code", zone);
         }
         if (params.hasNonNull("serviceCode")) {
             String svc = params.get("serviceCode").asText();
@@ -673,8 +676,8 @@ public class KpiQueryComposer {
      * (flat/legacy tenants) fall back to their leaf {@code service_code} inside the SQL expr, and
      * the level clamps to each row's own depth — both live in {@link AnalyticsCatalog#hierLevelExpr}.
      *
-     * <p>Grains without the path column (daily) skip gracefully, exactly like {@code ward} on a
-     * ward-less grain: the param is inapplicable, not an error. A malformed level, however, IS an
+     * <p>Grains without the path column (daily) skip gracefully, exactly like {@code zone} on a
+     * zone-less grain: the param is inapplicable, not an error. A malformed level, however, IS an
      * error ({@code invalid_param}) — silently serving leaf granularity for a level the caller
      * asked for would be a wrong answer, the same reasoning as C2's unparseable-date hard failure.
      *
