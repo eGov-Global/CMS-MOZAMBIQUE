@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Weekly M&E figures for Fala Cidadao, laid out in the order of the tracking workbook.
+"""Weekly M&E figures for a CCRS/DIGIT deployment, in the order of the tracking workbook.
 
 Columns the platform cannot produce yet print as "-".
 
@@ -11,8 +11,10 @@ Config resolution order (env wins, then a `kpi.env` file beside this script):
     AUTH_TOKEN     PGR service authToken (may also be passed as arg 3)
     PGR_USERNAME   service account used to mint a token when AUTH_TOKEN is unset (cron)
     PGR_PASSWORD   its password (keep in kpi.env, chmod 600)
-    BASE_URL       PGR base URL           (default https://uat.falacidadao.gov.mz)
-    TENANT_ID      PGR tenant             (default mz)
+    BASE_URL       PGR base URL           (required)
+    TENANT_ID      PGR tenant             (required)
+    TZ_NAME        IANA zone for day boundaries (default UTC)
+    WEEK1_START    week 1 of the tracking sheet; unset -> ISO week numbers
     MATOMO_URL     Matomo …/index.php     (web-analytics columns; skipped if unset)
     MATOMO_TOKEN   Matomo auth token
     MATOMO_SITE_ID Matomo site id         (default 1)
@@ -23,8 +25,6 @@ Put the secrets in kpi.env (chmod 600, never committed) so a run is just:
 import base64, csv, datetime, glob, gzip, json, os, subprocess, sys, urllib.parse, urllib.request, zoneinfo
 
 NA = "-"
-W1_START = datetime.date(2026, 8, 31)      # W1 of the tracking sheet
-ZONE = zoneinfo.ZoneInfo("Africa/Maputo")
 
 
 def load_env_file():
@@ -32,7 +32,9 @@ def load_env_file():
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kpi.env")
     if not os.path.exists(path):
         return
-    for raw in open(path):
+    with open(path) as fh:
+        lines = fh.readlines()
+    for raw in lines:
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -41,6 +43,13 @@ def load_env_file():
 
 
 load_env_file()
+
+# Deployment-specific, so both come from config. TZ_NAME decides which local day a
+# timestamp falls in. WEEK1_START is only needed where weeks are numbered against a
+# programme sheet; unset, the ISO week number is used.
+ZONE = zoneinfo.ZoneInfo(os.environ.get("TZ_NAME", "UTC"))
+_week1 = os.environ.get("WEEK1_START")
+W1_START = datetime.date.fromisoformat(_week1) if _week1 else None
 
 def positional_args(argv):
     """positional args only: drop flags and the optional filename after --csv."""
@@ -57,12 +66,22 @@ def positional_args(argv):
 
 
 pos = positional_args(sys.argv[1:])
+if len(pos) < 2 or "--help" in sys.argv or "-h" in sys.argv:
+    sys.exit(__doc__.strip())
+
 start, end = pos[0], pos[1]
+for label, value in (("week-start", start), ("week-end", end)):
+    try:
+        datetime.date.fromisoformat(value)
+    except ValueError:
+        sys.exit(f"{label} must be YYYY-MM-DD, got {value!r}")
 token = pos[2] if len(pos) > 2 else os.environ.get("AUTH_TOKEN")
-base = pos[3] if len(pos) > 3 else os.environ.get("BASE_URL", "https://uat.falacidadao.gov.mz")
-tenant = pos[4] if len(pos) > 4 else os.environ.get("TENANT_ID", "mz")
+base = pos[3] if len(pos) > 3 else os.environ.get("BASE_URL")
+tenant = pos[4] if len(pos) > 4 else os.environ.get("TENANT_ID")
+if not base or not tenant:
+    sys.exit("set BASE_URL and TENANT_ID (in kpi.env or the environment), or pass them as args 4 and 5")
 # Air-gapped host: point BASE_URL/MATOMO_URL at kong or a container, and set
-# HTTP_HOST_HEADER so kong still matches the public route (e.g. falacidadao.gov.mz).
+# HTTP_HOST_HEADER so kong still matches the public route (the deployment's domain).
 HOST_HEADER = os.environ.get("HTTP_HOST_HEADER")
 
 # Unattended runs (cron): mint a token from service-account credentials instead of
@@ -94,13 +113,14 @@ if not token:
     try:
         token = mint_token()
     except Exception as exc:                            # never echo the password
-        sys.exit(f"could not mint authToken for {PGR_USERNAME}: {exc}")
+        sys.exit(f"could not mint an authToken from PGR_USERNAME/PGR_PASSWORD: {exc}")
 
 d_start = datetime.date.fromisoformat(start)
 d_end = datetime.date.fromisoformat(end)
 FROM = int(datetime.datetime.combine(d_start, datetime.time()).replace(tzinfo=ZONE).timestamp() * 1000)
 TO = int(datetime.datetime.combine(d_end + datetime.timedelta(days=1), datetime.time()).replace(tzinfo=ZONE).timestamp() * 1000)
-week_no = f"W{(d_start - W1_START).days // 7 + 1}"
+week_no = (f"W{(d_start - W1_START).days // 7 + 1}" if W1_START
+           else f"W{d_start.isocalendar()[1]}")
 
 filed = {"created_at": {"gte": FROM, "lt": TO}}
 resolved = {"resolved_at": {"gte": FROM, "lt": TO}, "is_resolved": True}
@@ -189,7 +209,10 @@ if "--matomo-pages" in sys.argv:
         print(f'{row.get("nb_visits"):>6}  {row.get("label")}')
     sys.exit(0)
 
-mins = lambda sec: round(sec / 60, 1) if sec else NA
+def mins(sec):
+    return round(sec / 60, 1) if sec else NA
+
+
 site, emp = matomo.get("all") or {}, matomo.get("employee") or {}
 cit = matomo.get("citizen") or {}
 
@@ -227,7 +250,10 @@ def val(key, col, default=None):
 
 
 by_source = {r.get("source"): r.get("n") for r in rows("filed_by_source")}
-hours = lambda ms: round(ms / 3600000, 1) if isinstance(ms, (int, float)) else NA
+def hours(ms):
+    return round(ms / 3600000, 1) if isinstance(ms, (int, float)) else NA
+
+
 csat = val("csat", "avg_rating")
 _acted = val("first_action", "n")
 first_action = (f'{hours(val("first_action", "ms"))}   ({_acted} assigned this week)'
@@ -243,13 +269,19 @@ PG_USER = os.environ.get("PG_USER", "postgres")
 PG_DB = os.environ.get("PG_DB", "postgres")
 
 
-def pg(sql):
-    """Single scalar from the platform DB via docker exec psql; NA if unreachable."""
+def pg(sql, **params):
+    """Single scalar from the platform DB via docker exec psql; NA if unreachable.
+
+    Values go in as psql variables and are referenced :'like_this', so the server
+    quotes them. Never interpolate a value into `sql` -- the dates come from argv.
+    """
     if not PG_CONTAINER:
         return NA
+    argv = ["docker", "exec", PG_CONTAINER, "psql", "-U", PG_USER, "-d", PG_DB]
+    for key, value in params.items():
+        argv += ["-v", f"{key}={value}"]
     try:
-        out = subprocess.run(["docker", "exec", PG_CONTAINER, "psql", "-U", PG_USER,
-                              "-d", PG_DB, "-tAc", sql],
+        out = subprocess.run(argv + ["-tAc", sql],
                              capture_output=True, text=True, timeout=60, check=True).stdout.strip()
         return int(out) if out else 0
     except Exception as exc:                                    # never let PG blank the rest
@@ -258,28 +290,34 @@ def pg(sql):
 
 
 def failed_logins(user_type):
-    return pg(f"SELECT count(*) FROM eg_user_login_failed_attempts f "
-              f"JOIN eg_user u ON u.uuid = f.user_uuid "
-              f"WHERE f.attempt_date >= {FROM} AND f.attempt_date < {TO} "
-              f"AND u.type = '{user_type}'")
+    return pg("SELECT count(*) FROM eg_user_login_failed_attempts f "
+              "JOIN eg_user u ON u.uuid = f.user_uuid "
+              "WHERE f.attempt_date >= :'t0' AND f.attempt_date < :'t1' "
+              "AND u.type = :'utype'",
+              t0=FROM, t1=TO, utype=user_type)
 
 
 failed_citizen = failed_logins("CITIZEN")
 failed_employee = failed_logins("EMPLOYEE")
 # every FE registration goes through OTP, so this gives a floor for the OTP volume
-registrations = pg(f"SELECT count(*) FROM eg_user WHERE type = 'CITIZEN' "
-                   f"AND createddate >= '{start}' "
-                   f"AND createddate < '{(d_end + datetime.timedelta(days=1)).isoformat()}'")
+registrations = pg("SELECT count(*) FROM eg_user WHERE type = 'CITIZEN' "
+                   "AND createddate >= :'from_date' AND createddate < :'to_date'",
+                   from_date=d_start.isoformat(),
+                   to_date=(d_end + datetime.timedelta(days=1)).isoformat())
 def nb_count(where):
-    """SENT dispatches in the week matching a channel/type predicate; NA if PG unreachable."""
-    return pg(f"SELECT count(*) FROM nb_dispatch_log WHERE status = 'SENT' "
-              f"AND created_time >= {FROM} AND created_time < {TO} AND {where}")
+    """SENT dispatches in the week matching a channel/type predicate; NA if PG unreachable.
+
+    `where` is a literal fragment written in this file, never user input.
+    """
+    return pg("SELECT count(*) FROM nb_dispatch_log WHERE status = 'SENT' "
+              "AND created_time >= :'t0' AND created_time < :'t1' AND " + where,
+              t0=FROM, t1=TO)
 
 
 _otp = "(lower(event_name) LIKE '%otp%' OR lower(coalesce(template_key, '')) LIKE '%otp%')"
 otp_sms_sent = nb_count(f"channel = 'SMS' AND {_otp}")
 # no OTP rows ever -> OTP isn't routed through novu-bridge here, so it's unmeasurable, not zero
-if pg(f"SELECT count(*) FROM nb_dispatch_log WHERE {_otp}") == 0:
+if pg("SELECT count(*) FROM nb_dispatch_log WHERE " + _otp) == 0:
     otp_sms_sent = NA
 other_sms = nb_count(f"channel = 'SMS' AND NOT {_otp}")
 whatsapp_notif = nb_count("channel = 'WHATSAPP'")
