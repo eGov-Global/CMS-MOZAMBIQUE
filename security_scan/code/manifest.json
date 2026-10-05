@@ -1,6 +1,32 @@
 {
  "runs": [
   {
+   "file": "data/shivam-eGov---5th-Oct-2026-09-37-UTC.json",
+   "label": "shivam-eGov - 5th Oct 2026, 09:37 UTC",
+   "repo": "eGov-Global/CMS-MOZAMBIQUE",
+   "runner": "shivam-eGov",
+   "branch": "master",
+   "ts": "2026-10-05T09:37:07.856212+00:00",
+   "date": "2026-10-05 09:37 UTC",
+   "shaShort": "0d5e7a4",
+   "pr": null,
+   "occurrences": 521,
+   "types": 480,
+   "occBySeverity": {
+    "CRITICAL": 42,
+    "HIGH": 207,
+    "MEDIUM": 184,
+    "LOW": 47
+   },
+   "typesBySeverity": {
+    "CRITICAL": 42,
+    "HIGH": 207,
+    "MEDIUM": 184,
+    "LOW": 47
+   },
+   "xlsxUrl": ""
+  },
+  {
    "file": "data/shivam-eGov---28th-Sep-2026-08-59-UTC.json",
    "label": "shivam-eGov - 28th Sep 2026, 08:59 UTC",
    "repo": "eGov-Global/CMS-MOZAMBIQUE",
