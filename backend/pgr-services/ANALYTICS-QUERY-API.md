@@ -153,7 +153,7 @@ For a pinned window:
 - `series: "daily"` gets an axis **wider** than the pin — the selected range, else the `window` param,
   else a rolling `last_30d` — so the sparkline is a trend rather than a single bucket, and it stays
   answerable even when the headline value is suppressed;
-- `ward` / `serviceCode` / `complaintPath` / `hierLevel` still apply: pinning fixes **time**, not filters;
+- `zone` / `ward` / `serviceCode` / `complaintPath` / `hierLevel` still apply: pinning fixes **time**, not filters;
 - pinning a boundless window (`all` / `live`) is meaningless — there is no interval to cover and no
   preceding period — and is ignored: such a def takes the ordinary path.
 
@@ -180,7 +180,8 @@ ignored) and every declared param with an `allowed` list is enforced server-side
 |---|---|
 | `window` | overrides `query.window.name`, preserving `timeRole`/`timeBucket` — **ignored on a pinned window** |
 | `dateFrom` + `dateTo` | inclusive ISO dates → half-open range on the grain's time column; removes the base window. **On a pinned window it does not rewrite the predicate** — it only decides whether the tile is answerable |
-| `ward` | narrows `ward_code = ?` iff filterable on the grain |
+| `zone` | narrows `zone_code = ?` iff filterable on the grain — the district/municipality level, and the dashboard's geography filter: in a hierarchy with no sub-municipal level every ward inherits its municipality's name, so a ward list offers several identically-labelled choices |
+| `ward` | narrows `ward_code = ?` iff filterable on the grain. Not sent by the dashboard; kept for screens that filter by ward |
 | `serviceCode` | narrows `service_code = ?` iff filterable — the param for complaint-type **leaf** selections (exact match; works on every grain incl. daily) |
 | `complaintPath` | narrows to a complaint-hierarchy **interior** node's whole subtree: a delimiter-guarded `subtree` predicate on `complaint_node_path` (`= ? OR LIKE ?\|\|'.%'`) iff the grain carries the path column (facts/events). Value = the node's dot-path (`SANITATION.SEWAGE`); validated against `[A-Za-z0-9._/-]` (max 256 chars) — anything else is `invalid_param`. On the daily grain (no path column) the filter cannot apply and the result envelope reports `paramsIgnored:["complaintPath"]` instead of silently serving unfiltered numbers. Leaf selections keep using `serviceCode`; NULL-path rows (node codes containing `.`, flat tenants) never match a subtree |
 | `compare: "prior"` | immediately-preceding equal-duration range — "vs prior period" deltas |

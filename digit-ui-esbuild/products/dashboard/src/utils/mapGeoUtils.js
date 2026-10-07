@@ -116,7 +116,9 @@ export function getMapCityLabel() {
     window?.globalConfigs?.getConfig("DASHBOARD_MAP_CITY_LABEL") ||
     window?.globalConfigs?.getConfig("DASHBOARD_STATE_LABEL") ||
     window?.globalConfigs?.getConfig("STATE_NAME") ||
-    "City"
+    // Deployment names above are data; this last one is a UI word, so it is
+    // translated rather than hardcoded English.
+    t("DASHBOARD_COMMON_CITY", "City")
   );
 }
 

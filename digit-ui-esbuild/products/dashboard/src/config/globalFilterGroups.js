@@ -19,7 +19,7 @@ export const GEOGRAPHY_OPTIONS = [
   {
     id: "all",
     get label() {
-      return translate("DASHBOARD_FILTERS_ALL_WARDS", "All wards");
+      return translate("DASHBOARD_FILTERS_ALL_DISTRICTS", "All districts");
     },
   },
 ];

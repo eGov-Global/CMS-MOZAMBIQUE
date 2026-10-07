@@ -225,6 +225,11 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COMMON_CITY",
+    "message": "City",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COMMON_COUNT",
     "message": "Count",
     "module": "rainmaker-dashboard"
@@ -352,6 +357,11 @@
   {
     "code": "DASHBOARD_FILTERS_ALL_WARDS",
     "message": "All wards",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_FILTERS_ALL_DISTRICTS",
+    "message": "All districts",
     "module": "rainmaker-dashboard"
   },
   {

@@ -272,7 +272,7 @@ public class AnalyticsControllerPublicTest {
 
         ResponseEntity<Map<String,Object>> withParams = controller.publicQuery(mapper.readTree(
                 "{\"tenantId\":\"ke\",\"queries\":{\"tile\":{" +
-                        "\"kpiId\":\"cl_public\",\"params\":{\"ward\":\"W1\"}}}}"), null);
+                        "\"kpiId\":\"cl_public\",\"params\":{\"zone\":\"Z1\"}}}}"), null);
         ResponseEntity<Map<String,Object>> outsidePack = controller.publicQuery(mapper.readTree(
                 "{\"tenantId\":\"ke\",\"queries\":{\"tile\":{" +
                         "\"kpiId\":\"cl_other\"}}}"), null);
