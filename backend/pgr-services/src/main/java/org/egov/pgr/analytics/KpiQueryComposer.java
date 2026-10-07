@@ -44,11 +44,13 @@ import java.util.regex.Pattern;
  *       for the daily snapshot grain. The base {@code window} is removed so the range fully governs
  *       the time axis (exactly as the FE does).</li>
  *   <li>{@code zone} — a district (zone) boundary code; narrows to {@code zone_code = ?} <em>iff</em>
- *       the grain has a filterable {@code zone_code}. Replaced the former {@code ward} param: in a
+ *       the grain has a filterable {@code zone_code}. The dashboard's geography filter: in a
  *       hierarchy with no sub-municipal level every ward carries its municipality's own name, so a
- *       ward filter offered several identical choices. A client narrowing WITHIN the user's RBAC
+ *       ward list offers several identical choices. A client narrowing WITHIN the user's RBAC
  *       scope; it can never widen (row-scope is still injected on top by
  *       {@link AnalyticsPlanner#plan}).</li>
+ *   <li>{@code ward} — a ward boundary code; narrows to {@code ward_code = ?} <em>iff</em> the grain
+ *       has a filterable {@code ward_code}. Same narrowing-only rule as {@code zone}.</li>
  *   <li>{@code serviceCode} — a complaint type LEAF; narrows to {@code service_code = ?} iff
  *       filterable. This stays the param for leaf selections (exact match, works on every grain
  *       incl. daily); {@code complaintPath} below is for interior nodes only.</li>
@@ -260,7 +262,7 @@ public class KpiQueryComposer {
     }
 
     /**
-     * The non-time narrowing params — zone, service type, complaint subtree, hierarchy rollup.
+     * The non-time narrowing params — zone, ward, service type, complaint subtree, hierarchy rollup.
      * Applied on every path, pinned windows included: pinning fixes a tile's <em>time</em> axis, it
      * does not exempt it from the dashboard's zone / type filters.
      */
@@ -269,6 +271,10 @@ public class KpiQueryComposer {
         if (params.hasNonNull("zone")) {
             String zone = params.get("zone").asText();
             if (!zone.isEmpty() && !"all".equals(zone)) applyEqFilter(next, g, "zone_code", zone);
+        }
+        if (params.hasNonNull("ward")) {
+            String ward = params.get("ward").asText();
+            if (!ward.isEmpty() && !"all".equals(ward)) applyEqFilter(next, g, "ward_code", ward);
         }
         if (params.hasNonNull("serviceCode")) {
             String svc = params.get("serviceCode").asText();
