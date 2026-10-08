@@ -27,11 +27,11 @@ class KaleyraWhatsAppProvider {
     );
   }
 
-  getFormattedMessageFromUser(rawMessage) {
+  async getFormattedMessageFromUser(rawMessage) {
     try {
       let reformattedMessage = {};
       reformattedMessage.user = {
-        mobileNumber: toNationalNumber(rawMessage.from),
+        mobileNumber: await toNationalNumber(rawMessage.from),
       };
       reformattedMessage.extraInfo = {
         whatsAppBusinessNumber: rawMessage.wanumber,
@@ -80,7 +80,7 @@ class KaleyraWhatsAppProvider {
 
       form.append("channel", config.kaleyra.channel);
       form.append("from", extraInfo.whatsAppBusinessNumber);
-      form.append("to", toInternationalNumber(phone));
+      form.append("to", await toInternationalNumber(phone));
 
       if (typeof message == "string") {
         form.append("type", "text");

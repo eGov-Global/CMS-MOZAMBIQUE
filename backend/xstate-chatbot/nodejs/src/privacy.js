@@ -15,6 +15,20 @@ function maskMobile(mobileNumber) {
 }
 
 /**
+ * A request url with every query VALUE replaced by `<redacted>`; keys are kept.
+ * Applied to all values, not a list of secret-looking names.
+ */
+function redactUrl(url) {
+  const raw = String(url ?? '');
+  const [path, query] = raw.split('?');
+  if (!query) return path;
+  const keys = new URLSearchParams(query);
+  const redacted = [...keys.keys()].map((key) => `${key}=<redacted>`).join('&');
+  return redacted ? `${path}?${redacted}` : path;
+}
+
+
+/**
  * What a webhook contained, without what it said: field NAMES only, plus the
  * counts and types needed to debug a malformed payload.
  */
@@ -33,4 +47,4 @@ function summarizeInbound(body) {
   });
 }
 
-module.exports = { maskMobile, summarizeInbound };
+module.exports = { maskMobile, summarizeInbound, redactUrl };

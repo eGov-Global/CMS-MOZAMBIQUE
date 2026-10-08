@@ -168,8 +168,10 @@ class ChatService {
     const chatState = this.createChatStateFor(session.user);
     await chatStateRepository.updateState(session.userId, true, chatState.toPersistableState().state, new Date().getTime());
     await chatStateRepository.updateSessionId(session.userId, config.avgSessionTime);
+    
     const stateMachineService = this.getStateMachineServiceFor(chatState, inboundRequestModel);
     stateMachineService.send(event, inboundRequestModel);
+    return pendingPersist(session.userId);
   }
 
 
@@ -226,17 +228,23 @@ class ChatService {
           persistableState.state,
           timeStamp
         );
-        const sessionId = await chatStateRepository.getSessionId(userId);
-        
-        telemetry.log(userId, "transition", {
-          input: reformattedMessage.message.input,
-          source: sourceStrings[sourceStrings.length - 1],
-          destination: stateStrings[stateStrings.length - 1],
-          locale: locale,
-          sessionId: sessionId,
-          timestamp: timeStamp,
-          extraInfo: reformattedMessage.extraInfo,
-        });
+
+        // Only the write above decides whether the turn succeeded: a failed write
+        // rejects dispatch, and telemetry must not turn a stored state into one.
+        try {
+          const sessionId = await chatStateRepository.getSessionId(userId);
+          telemetry.log(userId, "transition", {
+            input: reformattedMessage.message.input,
+            source: sourceStrings[sourceStrings.length - 1],
+            destination: stateStrings[stateStrings.length - 1],
+            locale: locale,
+            sessionId: sessionId,
+            timestamp: timeStamp,
+            extraInfo: reformattedMessage.extraInfo,
+          });
+        } catch (error) {
+          console.error(`Transition telemetry failed for ${userId}: ${error.message}`);
+        }
       });
     });
   }
@@ -248,6 +256,7 @@ class ChatService {
     
     const savedMobileNumber = context.user.mobileNumber;
     const savedLocale = context.user.locale;
+    const savedWhatsAppAddress = context.user.whatsAppAddress;
     
     context.chatInterface = this.sessionManager;
     context.user = reformattedMessage.user;
@@ -255,6 +264,8 @@ class ChatService {
 
     if (!context.user.mobileNumber && savedMobileNumber)
       context.user.mobileNumber = savedMobileNumber;
+    if (!context.user.whatsAppAddress && savedWhatsAppAddress)
+      context.user.whatsAppAddress = savedWhatsAppAddress;
     
     context.extraInfo = reformattedMessage.extraInfo;
 

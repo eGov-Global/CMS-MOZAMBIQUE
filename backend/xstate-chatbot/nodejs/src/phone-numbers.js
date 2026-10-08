@@ -1,33 +1,19 @@
 const config = require('./env-variables');
+const mobileValidation = require('./machine/service/mobile-validation-service');
 
-// One pair of conversions for every channel adapter.
-//
-// Both directions are idempotent: a number that already carries the prefix is not
-// double-prefixed, and one that does not is not truncated. That second guarantee
-// needs a length test, not just a prefix test — under COUNTRY_CODE=91 the
-// national number 9123456789 starts with its own country code, and stripping on
-// the prefix alone turned it into 23456789 and lost it from the whitelist. Same
-// rule as user-service.js sanitizeMobileNumber: strip only a number whose length
-// says the prefix is really there.
+// The tenant's MDMS MobileNumberValidation row is the single source of truth,
+// shared with Twilio and user-service. COUNTRY_CODE is no longer read here.
 
-/** Digits only, with the configured country code removed if present. */
-function toNationalNumber(value) {
-  const digits = String(value ?? '').replace(/\D/g, '');
-  const countryCode = String(config.countryCode ?? '').replace(/\D/g, '');
-  const carriesPrefix =
-    countryCode &&
-    digits.length === countryCode.length + config.mobileNumberLength &&
-    digits.startsWith(countryCode);
-  return carriesPrefix ? digits.slice(countryCode.length) : digits;
+/** National form under the tenant rule; plain digits when the rule cannot reconcile it. */
+async function toNationalNumber(value) {
+  const mobileConfig = await mobileValidation.getConfig(config.rootTenantId);
+  return mobileValidation.toNational(value, mobileConfig) || mobileValidation.digitsOnly(value);
 }
 
-
-/** Digits only, with exactly one country code on the front. No plus. */
-function toInternationalNumber(value) {
-  const national = toNationalNumber(value);
-  if (!national) return '';   // a bare country code is not a number worth dialling
-  const countryCode = String(config.countryCode ?? '').replace(/\D/g, '');
-  return `${countryCode}${national}`;
+/** Digits with exactly one country code on the front. No plus. */
+async function toInternationalNumber(value) {
+  const mobileConfig = await mobileValidation.getConfig(config.rootTenantId);
+  return mobileValidation.toAddressableDigits(value, mobileConfig) || '';
 }
 
 module.exports = { toNationalNumber, toInternationalNumber };

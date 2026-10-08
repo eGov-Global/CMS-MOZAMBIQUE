@@ -24,7 +24,7 @@ class LocalisationService {
         for (const { value, label } of candidates) {
             const codeToMessages = {};
             for (const tenantId of tenants) {
-                const messages = await this.fetchMessagesForLocale(value, tenantId).catch(() => []);
+                const messages = await this.fetchMessagesForLocale(value, tenantId);
                 (messages || []).forEach((record) => { codeToMessages[record.code] = record.message; });
             }
             if (Object.keys(codeToMessages).length === 0) continue;
@@ -58,13 +58,18 @@ class LocalisationService {
         try {
             const response = await fetch(url, {
                 method: 'POST',
+                timeout: config.timeouts.request,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
+            if (!response.ok) {
+                throw new Error(`StateInfo fetch failed with status ${response.status}`);
+            }
             const data = await response.json();
             const languages = data?.MdmsRes?.['common-masters']?.StateInfo?.[0]?.languages ?? [];
             return languages.filter((language) => language?.value);
         } catch (error) {
+            console.error(`Could not load the offered languages: ${error.message}`);
             return [];
         }
     }
@@ -130,7 +135,10 @@ class LocalisationService {
         }
         
         try {
-            const response = await fetch(url, options);
+            const response = await fetch(url, { ...options, timeout: config.timeouts.request });
+            if (!response.ok) {
+                throw new Error(`Localisation search failed with status ${response.status}`);
+            }
             const data = await response.json();
             return data['messages'];
         } catch (error) {
@@ -160,7 +168,10 @@ class LocalisationService {
         }
         
         try {
-            const response = await fetch(url, options);
+            const response = await fetch(url, { ...options, timeout: config.timeouts.request });
+            if (!response.ok) {
+                throw new Error(`Localisation search failed with status ${response.status}`);
+            }
             const data = await response.json();
             
             // Convert to a code->message map

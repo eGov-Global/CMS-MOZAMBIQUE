@@ -1,5 +1,6 @@
 const fetch = require("node-fetch");
 const config = require("../../env-variables");
+const mobileValidation = require("./mobile-validation-service");
 const getCityAndLocality = require("./util/google-maps-util");
 const localisationService = require("../util/localisation-service");
 const urlencode = require("urlencode");
@@ -9,14 +10,38 @@ const fs = require("fs");
 const axios = require("axios");
 var FormData = require("form-data");
 const mediaTypes = require("../../media-types");
+const TtlCache = require("../../ttl-cache");
 var geturl = require("url");
 var path = require("path");
 const userService = require('../../session/user-service');
 const { ExternalServiceError } = require("../../session/errors");
 require("url-search-params-polyfill");
 
+/** The pre-boundary-service locality form: ADMIN_ added once, never twice. */
+function withAdminPrefix(code) {
+  if (!code) return code;
+  return String(code).startsWith("ADMIN_") ? code : "ADMIN_" + code;
+}
+
+/**
+ * A readable locality label generated from its code ("ADMIN_SUN04" -> "Sun 04"), used when
+ * there is no localised or boundary name. The hierarchy prefix is dropped from the label
+ * only; the code itself keeps it.
+ */
+function labelFromCode(code) {
+  return String(code)
+    .replace(/^ADMIN_/, "")
+    .replace(/([A-Z]+)(\d+)/, "$1 $2") // space between letters and numbers
+    .replace(/_/g, " ")
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 let pgrCreateRequestBody =
   '{"RequestInfo":{"authToken":"","userInfo":{}},"service":{"tenantId":"","serviceCode":"","description":"","accountId":"","source":"whatsapp","address":{"landmark":"","city":"","geoLocation":{"latitude": null, "longitude": null},"locality":{"code":""}}},"workflow":{"action":"APPLY","verificationDocuments":[]}}';
+
+const referenceCache = new TtlCache(config.referenceCacheTtlMs);
 
 class PGRService {
   async fetchMdmsData(tenantId, moduleName, masterName, filterPath, user) {
@@ -50,7 +75,7 @@ class PGRService {
       },
     };
 
-    let response = await fetch(url, options);
+    let response = await fetch(url, { ...options, timeout: config.timeouts.request });
 
     if (!response.ok) {
       throw new Error(`MDMS fetch failed with status ${response.status}`);
@@ -100,7 +125,7 @@ class PGRService {
       }
     };
 
-    let response = await fetch(url, options);
+    let response = await fetch(url, { ...options, timeout: config.timeouts.request });
 
     if (!response.ok) {
       throw new Error(`MDMS v2 fetch failed with status ${response.status}`);
@@ -111,11 +136,13 @@ class PGRService {
   }
 
   async fetchComplaintHierarchyLevels(tenantId) {
-    const rows = await this.fetchMdmsData(
-      tenantId,
-      "RAINMAKER-PGR",
-      "ComplaintHierarchyDefinition",
-      "$.[?(@.active == true)]"
+    const rows = await referenceCache.get(`definition:${tenantId}`, () =>
+      this.fetchMdmsData(
+        tenantId,
+        "RAINMAKER-PGR",
+        "ComplaintHierarchyDefinition",
+        "$.[?(@.active == true)]"
+      )
     );
     const definition = rows?.[0] ?? {};
     const levels = definition.levels ?? [];
@@ -136,8 +163,11 @@ class PGRService {
   async fetchComplaintHierarchyStep(tenantId, hierarchyPath = []) {
     const [{ hierarchyType, levels }, hierarchyRows] = await Promise.all([
       this.fetchComplaintHierarchyLevels(tenantId),
-      this.fetchMdmsData(tenantId, "RAINMAKER-PGR", "ComplaintHierarchy", "$.[?(@.active == true)]")
+      referenceCache.get(`hierarchy:${tenantId}`, () =>
+        this.fetchMdmsData(tenantId, "RAINMAKER-PGR", "ComplaintHierarchy", "$.[?(@.active == true)]")
+      )
     ]);
+
 
     const parentCode = hierarchyPath[hierarchyPath.length - 1];
     const children = hierarchyRows
@@ -153,8 +183,15 @@ class PGRService {
     const level =
       levels.find((candidate) => candidate.levelCode === children[0]?.levelCode) ??
       levels[hierarchyPath.length];
+    
+    const hasChildren = (code) =>
+      hierarchyRows.some(
+        (row) => (!hierarchyType || row.hierarchyType === hierarchyType) && row.parentCode === code
+      );
+      
+    const isLeaf = (row) => !hasChildren(row.code);
     const isLeafLevel = level
-      ? level.isLeafServiceCode === true
+      ? level.isLeafServiceCode === true || (children.length > 0 && children.every(isLeaf))
       : children.every((row) => row.department !== undefined || row.slaHours !== undefined);
 
     const options = children.map((row) => row.code);
@@ -163,8 +200,24 @@ class PGRService {
       messageBundle: this.hierarchyMessageBundle(options),
       trailBundle: this.hierarchyMessageBundle(hierarchyPath),
       levelLabel: level?.label ?? "",
-      isLeafLevel
+      isLeafLevel,
+      leafByCode: this.leafExceptions(children.map((row) => [row.code, isLeaf(row)]), isLeafLevel)
     };
+  }
+
+  /** Codes whose leafness disagrees with isLeafLevel; empty on a uniform level.
+   *  Rides in context, which is serialised into eg_chat_state_v2 each transition. */
+  leafExceptions(pairs, isLeafLevel) {
+    const exceptions = {};
+    for (const [code, leaf] of pairs) {
+      if (leaf !== isLeafLevel) exceptions[code] = leaf;
+    }
+    return exceptions;
+  }
+
+  /** Drops the cached MDMS and boundary reads for every tenant. */
+  clearReferenceCache() {
+    referenceCache.clear();
   }
 
   hierarchyMessageBundle(codes) {
@@ -181,20 +234,25 @@ class PGRService {
     const url =
       config.egovServices.egovServicesHost +
       "boundary-service/boundary-hierarchy-definition/_search";
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        RequestInfo: {},
-        BoundaryTypeHierarchySearchCriteria: { tenantId },
-      }),
+     
+      const data = await referenceCache.get(`boundary-def:${tenantId}`, async () => {
+        const response = await fetch(url, {
+          method: "POST",
+          timeout: config.timeouts.request,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            RequestInfo: {},
+            BoundaryTypeHierarchySearchCriteria: { tenantId },
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Boundary hierarchy fetch failed with status ${response.status}`);
+        }
+
+        return response.json();
     });
 
-    if (!response.ok) {
-      throw new Error(`Boundary hierarchy fetch failed with status ${response.status}`);
-    }
-
-    const data = await response.json();
     // a tenant can have several unrelated hierarchy types registered (other
     // modules, QA fixtures) - pick the one PGR is configured to use, not just
     // whichever the search happens to return first.
@@ -241,17 +299,22 @@ class PGRService {
       "&hierarchyType=" +
       encodeURIComponent(hierarchyType) +
       "&includeChildren=true";
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ RequestInfo: {} }),
+    
+    const data = await referenceCache.get(`boundary-tree:${tenantId}:${hierarchyType}`, async () => {
+      const response = await fetch(url, {
+        method: "POST",
+        timeout: config.timeouts.request,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ RequestInfo: {} }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Boundary relationships fetch failed with status ${response.status}`);
+      }
+
+      return response.json();
     });
 
-    if (!response.ok) {
-      throw new Error(`Boundary relationships fetch failed with status ${response.status}`);
-    }
-
-    const data = await response.json();
 
     let nodes = (data.TenantBoundary ?? []).flatMap((entry) => entry.boundary ?? []);
     for (const code of boundaryPath) {
@@ -263,13 +326,18 @@ class PGRService {
       .map((node) => node.code)
       .sort((a, b) => String(a).localeCompare(String(b)));
 
+    const isLeaf = (node) => (node.children ?? []).length === 0;
+    const isLeafLevel = nodes.every(isLeaf);
+
     return {
       options,
       messageBundle: this.boundaryMessageBundle(options),
       levelLabel:
         nodes[0]?.boundaryType ?? levels[boundaryPath.length]?.boundaryType ?? "",
-      isLeafLevel: nodes.every((node) => (node.children ?? []).length === 0),
+      isLeafLevel,
+      leafByCode: this.leafExceptions(nodes.map((node) => [node.code, isLeaf(node)]), isLeafLevel),
     };
+
   }
 
   boundaryMessageBundle(codes) {
@@ -281,19 +349,68 @@ class PGRService {
   }
 
   
-  async fetchCities(tenantId) {
-    let cities = await this.fetchMdmsData(
-      tenantId,
-      "tenant",
-      "citymodule",
-      "$.[?(@.module=='PGR.WHATSAPP')].tenants.*.code"
-    );
+/**
+   * The city pick-list a citizen chooses from, and the tenant the complaint is filed against.
+   *
+   * Derived from `tenant.tenants`, NOT seeded statically. The previous implementation read
+   * only `tenant.citymodule` filtered on `module == 'PGR.WHATSAPP'`, which conflated two
+   * different questions: "which tenants have the WhatsApp module" and "which cities can a
+   * citizen file in". Seeding that row with the module's own tenant produced a one-entry
+   * pick-list containing the STATE tenant, with no localisation, so selecting it filed the
+   * complaint at state level while boundaries and employees live at the city tenant -- the
+   * complaint landed in nobody's inbox. An absent row was no better: an empty list is a dead
+   * end the citizen cannot get past.
+   *
+   * `tenant.tenants` is the master city onboarding actually populates, so the list stays
+   * correct without a seed step. `citymodule` is still honoured when present, as an operator
+   * override for restricting WhatsApp to a subset of cities.
+   */
+  async fetchCities(tenantId, user) {
+    let cities = await this.fetchWhatsAppCityOverride(tenantId, user);
+    if (!cities.length) cities = await this.fetchCityTenants(tenantId, user);
+
     let messageBundle = {};
     for (let city of cities) {
-      let message = localisationService.getMessageBundleForCode(city);
-      messageBundle[city] = message;
+      messageBundle[city] = localisationService.getMessageBundleForCode(city);
     }
     return { cities, messageBundle };
+  }
+
+  /** City tenants from `tenant.tenants` -- everything below the state root. */
+  async fetchCityTenants(tenantId, user) {
+    const stateRoot = String(tenantId || "").split(".")[0];
+    try {
+      const rows = await this.fetchMdmsData(tenantId, "tenant", "tenants", "$.*", user);
+      const codes = (rows || [])
+        .map((r) => (typeof r === "string" ? r : r && r.code))
+        .filter((c) => c && c !== stateRoot);
+      if (codes.length) return codes;
+      // Single-tenant deployment: the state root IS the only place to file.
+      return stateRoot ? [stateRoot] : [];
+    } catch (error) {
+      console.error(`Unable to derive city tenants for ${tenantId}: ${error.message}`);
+      return stateRoot ? [stateRoot] : [];
+    }
+  }
+
+  /** Optional `tenant.citymodule` PGR.WHATSAPP restriction. Empty when unset. */
+  async fetchWhatsAppCityOverride(tenantId, user) {
+    try {
+      const codes = await this.fetchMdmsData(
+        tenantId,
+        "tenant",
+        "citymodule",
+        "$.[?(@.module=='PGR.WHATSAPP')].tenants.*.code",
+        user
+      );
+      // A row listing only the state root is the mis-seeded shape described above; treat it
+      // as "no override" rather than filing every complaint at state level.
+      const stateRoot = String(tenantId || "").split(".")[0];
+      return (codes || []).filter((c) => c && c !== stateRoot);
+    } catch (error) {
+      console.warn(`WhatsApp city override lookup failed, using none: ${error.message}`);
+      return [];
+    }
   }
 
   async getCityExternalWebpageLink(tenantId, whatsAppBusinessNumber) {
@@ -301,12 +418,22 @@ class PGRService {
       config.egovServices.externalHost +
       config.egovServices.cityExternalWebpagePath +
       "?tenantId=" +
-      tenantId +
-      "&phone=+91" +
-      whatsAppBusinessNumber;
+      tenantId;
+    // The business number belongs to the TWILIO ACCOUNT, not to the citizen's tenant, so it
+    // is deliberately NOT normalised against the tenant's mobile rule: a Kenyan tenant on
+    // the Twilio US sandbox sender produced phone=%2B25414155238886, a dead wa.me target.
+    // It arrives in E.164 already, so its own digits are used as-is.
+    //
+    // Blank omits the parameter entirely, which is what host_vars promises. Previously
+    // toE164('') returned null and encodeURIComponent(null) rendered the literal
+    // "phone=null" into the URL.
+    const phoneDigits = mobileValidation.digitsOnly(whatsAppBusinessNumber);
+    if (phoneDigits) url += "&phone=" + encodeURIComponent("+" + phoneDigits);
     let shorturl = await this.getShortenedURL(url);
     return shorturl;
   }
+
+
 
   
   async getLocalityExternalWebpageLink(tenantId, whatsAppBusinessNumber) {
@@ -314,9 +441,17 @@ class PGRService {
       config.egovServices.externalHost +
       config.egovServices.localityExternalWebpagePath +
       "?tenantId=" +
-      tenantId +
-      "&phone=+91" +
-      whatsAppBusinessNumber;
+      tenantId;
+    // The business number belongs to the TWILIO ACCOUNT, not to the citizen's tenant, so it
+    // is deliberately NOT normalised against the tenant's mobile rule: a Kenyan tenant on
+    // the Twilio US sandbox sender produced phone=%2B25414155238886, a dead wa.me target.
+    // It arrives in E.164 already, so its own digits are used as-is.
+    //
+    // Blank omits the parameter entirely, which is what host_vars promises. Previously
+    // toE164('') returned null and encodeURIComponent(null) rendered the literal
+    // "phone=null" into the URL.
+    const phoneDigits = mobileValidation.digitsOnly(whatsAppBusinessNumber);
+    if (phoneDigits) url += "&phone=" + encodeURIComponent("+" + phoneDigits);
     let shorturl = await this.getShortenedURL(url);
     return shorturl;
   }
@@ -347,6 +482,7 @@ class PGRService {
           }
         }
       } catch (mdmsError) {
+        console.warn(`Hierarchy schema lookup failed, using the default boundary type: ${mdmsError.message}`);
       }
 
       // Step 1: Fetch boundary data from boundary service with specific boundary type
@@ -371,7 +507,7 @@ class PGRService {
         }
       };
 
-      const boundaryResponse = await fetch(boundaryUrl, boundaryOptions);
+      const boundaryResponse = await fetch(boundaryUrl, { ...boundaryOptions, timeout: config.timeouts.request });
 
       if (!boundaryResponse.ok) {
         throw new Error(`Boundary service returned status ${boundaryResponse.status}`);
@@ -424,7 +560,7 @@ class PGRService {
       let localizedMessages = {};
 
       try {
-        const localizationResponse = await fetch(localizationUrl, localizationOptions);
+        const localizationResponse = await fetch(localizationUrl, { ...localizationOptions, timeout: config.timeouts.request });
 
         if (localizationResponse.ok) {
           const localizationData = await localizationResponse.json();
@@ -447,7 +583,7 @@ class PGRService {
         } else {
         }
       } catch (localizationError) {
-        // Continue without localized messages
+        console.warn(`Locality names unavailable, showing codes: ${localizationError.message}`);
       }
 
       // Step 3: Build the result with proper display names
@@ -455,31 +591,18 @@ class PGRService {
       const messageBundle = {};
 
       for (const code of localityCodes) {
-        // Remove ADMIN_ prefix for PGR usage
-        const localityCodeForPGR = code.replace(/^ADMIN_/, '');
-        localities.push(localityCodeForPGR);
+        // The boundary code is exactly what PGR validates the locality against, so it is
+        // carried through untouched. Previously a leading ADMIN_ was stripped here and
+        // re-added in persistComplaint, which only round-tripped for ADMIN_-prefixed codes:
+        // W1_ADMIN_WARD went out as ADMIN_W1_ADMIN_WARD and PGR rejected the complaint.
+        localities.push(code);
 
-        // Use localized name if available, otherwise generate a readable name from the code
-        let displayName = localizedMessages[code];
+        // Localised name, else the boundary's own name, else one generated from the code.
+        const localityObj = localityMap.get(code);
+        const displayName =
+          localizedMessages[code] || (localityObj && localityObj.name) || labelFromCode(code);
 
-        if (!displayName) {
-          // Try to extract a readable name from the locality object if available
-          const localityObj = localityMap.get(code);
-          if (localityObj && localityObj.name) {
-            displayName = localityObj.name;
-          } else {
-            // Generate a readable name from the code (e.g., "ADMIN_SUN04" -> "Sun 04")
-            const cleanCode = localityCodeForPGR;
-            displayName = cleanCode
-              .replace(/([A-Z]+)(\d+)/, '$1 $2')  // Add space between letters and numbers
-              .replace(/_/g, ' ')  // Replace underscores with spaces
-              .split(' ')
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-              .join(' ');
-          }
-        }
-
-        messageBundle[localityCodeForPGR] = {
+        messageBundle[code] = {
           en_IN: displayName,
           hi_IN: displayName,  // Will use same unless we fetch hi_IN locale too
           pa_IN: displayName   // Will use same unless we fetch pa_IN locale too
@@ -507,34 +630,36 @@ class PGRService {
         );
 
         if (boundaryData && boundaryData.length > 0) {
-          let localities = [];
-          for (let i = 0; i < boundaryData.length; i++) {
-            localities.push(boundaryData[i].code);
-          }
-
-          let localitiesLocalisationCodes = [];
-          for (let locality of localities) {
-            let localisationCode =
-              tenantId.replace(".", "_").toUpperCase() + "_ADMIN_" + locality;
-            localitiesLocalisationCodes.push(localisationCode);
-          }
+          // This legacy master stores bare codes (SUN04), while PGR validates the ADMIN_
+          // form that persistComplaint used to add for every source. One pass builds the
+          // PGR code and the localisation key from the same bare code, so a code that
+          // already carries ADMIN_ is never prefixed twice in either.
+          const tenantKey = tenantId.replace(".", "_").toUpperCase();
+          const entries = boundaryData.map((boundary) => {
+            const bare = String(boundary.code).replace(/^ADMIN_/, "");
+            return { pgrCode: "ADMIN_" + bare, localisationCode: tenantKey + "_ADMIN_" + bare };
+          });
 
           let localisedMessages =
             await localisationService.getMessagesForCodesAndTenantId(
-              localitiesLocalisationCodes,
+              entries.map((e) => e.localisationCode),
               tenantId
             );
 
           let messageBundle = {};
-          for (let locality of localities) {
-            let localisationCode =
-              tenantId.replace(".", "_").toUpperCase() + "_ADMIN_" + locality;
-            messageBundle[locality] = localisedMessages[localisationCode];
+          for (const { pgrCode, localisationCode } of entries) {
+            const localised = localisedMessages && localisedMessages[localisationCode];
+            // A missing translation used to leave the entry undefined, and the pick-list
+            // threw a TypeError on it.
+            messageBundle[pgrCode] =
+              localised && localised.en_IN ? localised : { en_IN: labelFromCode(pgrCode) };
           }
+          const pgrLocalities = entries.map((e) => e.pgrCode);
 
-          return { localities, messageBundle };
+          return { localities: pgrLocalities, messageBundle };
         }
       } catch (mdmsError) {
+        console.warn(`Locality MDMS lookup failed, falling back to boundary service: ${mdmsError.message}`);
       }
 
       throw new Error(`Unable to fetch localities for tenant ${tenantId}`);
@@ -640,8 +765,8 @@ class PGRService {
     let authToken = serviceAccount.authToken;
     let userId = user.userId;
     let complaintType = slots.complaint;
-    let locality = slots.locality;
     let city = slots.city;
+    let locality = slots.locality;
     let userInfo = serviceAccount.userInfo;
 
     requestBody["RequestInfo"]["authToken"] = authToken;
@@ -670,6 +795,7 @@ class PGRService {
 
         const response = await fetch(localizationUrl, {
           method: "POST",
+          timeout: config.timeouts.request,
           body: JSON.stringify(localizationRequest),
           headers: { "Content-Type": "application/json" }
         });
@@ -677,15 +803,15 @@ class PGRService {
         if (response.ok) {
           const data = await response.json();
           if (data.messages) {
-            // Look for ADMIN_<locality> code
-            const localityCode = locality;
-            const message = data.messages.find(m => m.code === localityCode);
+            // digit-tenants keys locality names by the boundary code itself
+            const message = data.messages.find(m => m.code === locality);
             if (message) {
               requestBody["service"]["address"]["locality"]["name"] = message.message;
             }
           }
         }
       } catch (error) {
+        console.warn(`Could not resolve the locality name; filing with the code: ${error.message}`);
       }
     }
 
@@ -715,6 +841,7 @@ class PGRService {
         };
         requestBody["workflow"]["verificationDocuments"].push(content);
       } catch (error) {
+        console.error(`Attachment dropped from the complaint: ${error.message}`);
       }
     }
 
@@ -728,6 +855,7 @@ class PGRService {
         };
         requestBody["workflow"]["verificationDocuments"].push(content);
       } catch (error) {
+        console.error(`Attachment dropped from the complaint: ${error.message}`);
       }
     }
 
@@ -748,7 +876,7 @@ class PGRService {
       timeout: config.timeouts.request,
     };
 
-    let response = await fetch(url, options);
+    let response = await fetch(url, { ...options, timeout: config.timeouts.request });
 
     if (response.status === 200) {
       // the create endpoint wraps its result the same way search does:
@@ -776,7 +904,7 @@ class PGRService {
         "Content-Type": "application/json",
       },
     };
-    let response = await fetch(url, options);
+    let response = await fetch(url, { ...options, timeout: config.timeouts.request });
     if (!response.ok) {
       return finalPath;
     }
@@ -871,7 +999,7 @@ class PGRService {
       origin: "*",
     };
 
-    let response = await fetch(url, options);
+    let response = await fetch(url, { ...options, timeout: config.timeouts.request });
     response = await response.json();
 
     // Handle the correct response structure based on actual API response

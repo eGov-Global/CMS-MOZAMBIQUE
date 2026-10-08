@@ -1,14 +1,30 @@
 const pool = require('./postgres-config');
 const ChatState = require('../chat-state');
 
+// Postgres makes conversations survive a restart; it does NOT make more than one
+// replica safe. Writes are serialised per citizen only inside one process
+// (session/persist-queue.js), and updateState is an unconditional last-writer-wins
+// UPDATE, so two replicas can interleave and drop a transition. Run replicas: 1
+// until updateState has a version check or a row lock.
 class StateRepository {
 
+    // Upsert: user_id is unique, and a citizen whose session was closed
+    // (stalled, cancelled) comes back here with their row still present.
     async insertNewState(userId, active, state, session_id, time_stamp) {
-        const query = 'INSERT INTO eg_chat_state_v2 (user_id, active, state, session_id, time_stamp) VALUES ($1, $2, $3, $4, $5)';
+        const query = `INSERT INTO eg_chat_state_v2 (user_id, active, state, session_id, time_stamp)
+                       VALUES ($1, $2, $3, $4, $5)
+                       ON CONFLICT (user_id) DO UPDATE
+                         SET active = EXCLUDED.active,
+                             state = EXCLUDED.state,
+                             session_id = EXCLUDED.session_id,
+                             time_stamp = EXCLUDED.time_stamp`;
         let result = await pool.query(query, [userId, active, state, session_id, time_stamp]);
         return result;
     }
 
+    // FLAG: last writer wins. No version column, no row lock, and persist-queue
+    // serialises per citizen within ONE process — two replicas can interleave
+    // read-modify-write here and drop a transition. Safe at replicas: 1.
     async updateState(userId, active, state, time_stamp) {
         const query = 'UPDATE eg_chat_state_v2 SET active = $2, state = $3, time_stamp = $4 WHERE user_id = $1';
         let result = await pool.query(query, [userId, active, state, time_stamp]);

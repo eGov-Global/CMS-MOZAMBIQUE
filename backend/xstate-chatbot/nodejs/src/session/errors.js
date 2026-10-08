@@ -17,7 +17,15 @@ class ChatbotError extends Error {
 
 class ValidationError extends ChatbotError {
   constructor(message) {
-    super(message, messages.errors.validation);
+    super(message, messages.errors.generic);
+  }
+}
+
+// The one validation failure the citizen can fix themselves.
+class InvalidMobileNumberError extends ValidationError {
+  constructor(message) {
+    super(message);
+    this.bundle = messages.errors.validation;
   }
 }
 
@@ -33,5 +41,5 @@ class ExternalServiceError extends ChatbotError {
   }
 }
 
-module.exports = { ChatbotError, ValidationError, AuthenticationError, ExternalServiceError };
+module.exports = { ChatbotError, ValidationError, InvalidMobileNumberError, AuthenticationError, ExternalServiceError };
 

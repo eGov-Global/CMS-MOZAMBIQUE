@@ -8,7 +8,7 @@ const { isValidTwilioSignature, expectedSignature } = require(
 );
 
 const TOKEN = "test_auth_token";
-const URL = "https://uat.falacidadao.gov.mz/xstate-chatbot/message";
+const URL = "https://chatbot.example.gov/xstate-chatbot/message";
 const BODY = { From: "whatsapp:+258840000000", To: "whatsapp:+258840000001", Body: "Ola" };
 
 /** Independent implementation of Twilio's scheme, to pin the canonical string. */

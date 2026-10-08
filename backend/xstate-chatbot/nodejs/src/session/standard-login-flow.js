@@ -5,6 +5,7 @@ const Session = require("./session");
 const dialog = require("../machine/util/dialog");
 const messages = require("../machine/flow/shell-messages");
 const { maskMobile } = require("../privacy");
+const { isWhitelisted: isNumberAllowed } = require("../whitelist");
 
 class StandardLoginFlow {
   constructor(inboundRequestModel) {
@@ -13,8 +14,7 @@ class StandardLoginFlow {
   }
 
   isWhitelisted() {
-    const allowed = config.allowedMobileNumbers.split(",").map((n) => n.trim()).filter(Boolean);
-    return allowed.length === 0 || allowed.includes(this.mobileNumber);
+    return isNumberAllowed(this.mobileNumber);
   }
 
   async resolveSession() {
@@ -25,7 +25,7 @@ class StandardLoginFlow {
       // Awaited: unawaited, a ValueFirst transport error here is an unhandled
       // rejection, and the caller returns null before the reply is even sent.
       await channelProvider.sendMessageToUser(
-        { mobileNumber: this.mobileNumber, locale: config.defaultLocale },
+        { mobileNumber: this.mobileNumber, whatsAppAddress: this.inboundRequestModel.user.whatsAppAddress, locale: config.defaultLocale },
         [dialog.get_message(messages.notAuthorized, config.defaultLocale)],
         this.inboundRequestModel.extraInfo
       );
@@ -34,6 +34,8 @@ class StandardLoginFlow {
     }
 
     const user = await userService.getUserForMobileNumber(this.mobileNumber, config.rootTenantId);
+    // egov-user has no channel address; keep the one the citizen wrote from.
+    user.whatsAppAddress = this.inboundRequestModel.user.whatsAppAddress;
     this.inboundRequestModel.user = user;
     this.inboundRequestModel.extraInfo.tenantId = config.rootTenantId;
     return Session.create(user);

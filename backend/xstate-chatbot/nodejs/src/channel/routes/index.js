@@ -8,7 +8,9 @@ const express = require("express"),
   { resolveUploadTenantId } = require("../../session/upload-tenant"),
    { handleError } = require("../../session/error-handler"),
   rateLimit = require("express-rate-limit");
-const { summarizeInbound, maskMobile } = require("../../privacy");
+const { summarizeInbound, maskMobile, redactUrl} = require("../../privacy");
+const { safeEqual } = require("../shared-secret");
+const { warnings } = require("../../startup-checks");
 
  const webhookLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -16,15 +18,22 @@ const { summarizeInbound, maskMobile } = require("../../privacy");
   standardHeaders: "draft-7",
   legacyHeaders: false,
   // Use the sender or recipient as the key for rate limiting, falling back to the IP address if neither is available.
-  keyGenerator: (req) =>
-    req.body?.From ?? req.body?.To ?? req.query?.From ?? req.query?.To ?? "unattributed",
+  keyGenerator: (req) => {
+    const fields = ["From", "To", "from", "to", "mobile_number"];
+    for (const source of [req.body, req.query]) {
+      for (const field of fields) {
+        if (source?.[field]) return String(source[field]);
+      }
+    }
+    return "unattributed";
+  },
 });
 
 // Reject anything the channel provider cannot vouch for, before it reaches the
 // limiter, a parser, or a session.
 function verifySignature(req, res, next) {
   if (!channelProvider.verifyRequest(req)) {
-    console.warn(`Rejected inbound webhook: verification failed (${req.originalUrl})`);
+    console.warn(`Rejected inbound webhook: verification failed (${redactUrl(req.originalUrl)})`);
     return res.sendStatus(403);
   }
   next();
@@ -33,15 +42,15 @@ function verifySignature(req, res, next) {
 
 // Entry point for inbound messages from the channel provider
 router.post("/message", verifySignature, webhookLimiter, async (req, res) => {
-  console.log(`Inbound ${req.originalUrl}: ${summarizeInbound(req.body)}`);
+  console.log(`Inbound ${redactUrl(req.originalUrl)}: ${summarizeInbound(req.body)}`);
 
   try {
     
     const inboundRequestParser = InboundRequestParser.create(req, channelProvider);
     
     if (config.isSandboxMode) {
-      const tenantId = resolveUploadTenantId(req, config);
-      inboundRequestParser.setTenatId(tenantId);
+      const tenantId = await resolveUploadTenantId(req, config, channelProvider);
+      inboundRequestParser.setTenantId(tenantId);
     }
 
     // only valid messages go through
@@ -83,8 +92,8 @@ router.all("/status", verifySignature, webhookLimiter, async (req, res) => {
     const inboundRequestParser = InboundRequestParser.create(req, channelProvider);
 
     if (config.isSandboxMode) {
-      const tenantId = resolveUploadTenantId(req, config);
-      inboundRequestParser.setTenatId(tenantId);
+      const tenantId = await resolveUploadTenantId(req, config, channelProvider);
+      inboundRequestParser.setTenantId(tenantId);
     }
 
     if (await inboundRequestParser.hasValidMessage()) {
@@ -101,10 +110,21 @@ router.all("/status", verifySignature, webhookLimiter, async (req, res) => {
   }
 });
 
-// Operational trigger, not a citizen path: verified like the webhooks, and the
-// sweep is awaited inside a try/catch — an unhandled rejection here exits the
+// Operational trigger, not a citizen path, so it cannot carry a provider
+// signature. Gated on its own secret and disabled outright when that is unset —
+// it fans out to every active session, so an open route is an abuse amplifier.
+// The sweep is awaited inside a try/catch: an unhandled rejection here exits the
 // process on Node 23 and takes every in-memory session with it.
-router.post("/reminder", verifySignature, webhookLimiter, async (req, res) => {
+router.post("/reminder", webhookLimiter, async (req, res) => {
+  if (!config.reminderAuthToken) {
+    console.error("Rejected /reminder: REMINDER_AUTH_TOKEN is not set, route is disabled");
+    return res.status(404).json({ status: "not found" });
+  }
+  if (!safeEqual(req.get("X-Reminder-Token"), config.reminderAuthToken)) {
+    console.error("Rejected /reminder: bad or missing X-Reminder-Token");
+    return res.sendStatus(403);
+  }
+
   try {
     await remindersService.triggerReminders();
     res.sendStatus(200);
@@ -114,6 +134,11 @@ router.post("/reminder", verifySignature, webhookLimiter, async (req, res) => {
   }
 });
 
-router.get("/health", (req, res) => res.sendStatus(200));
+router.get("/health", (req, res) => {
+  const problems = warnings();
+  if (!problems.length) return res.sendStatus(200);
+  console.error("Health check failing on configuration: " + problems.join(" | "));
+  return res.status(503).json({ status: "misconfigured", problems });
+});
 
 module.exports = router;

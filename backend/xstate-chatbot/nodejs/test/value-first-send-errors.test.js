@@ -28,6 +28,13 @@ stub("../env-variables", channelDir, {
 let nextFetch = null;
 stub("node-fetch", channelDir, async () => nextFetch());
 
+// Number conversion reads MDMS through node-fetch, which would consume the scripted
+// responses above; it is covered by phone-numbers.test.js.
+stub("../phone-numbers", channelDir, {
+  toNationalNumber: async (value) => String(value ?? "").replace(/\D/g, ""),
+  toInternationalNumber: async (value) => String(value ?? "").replace(/\D/g, ""),
+});
+
 const provider = require(p("src/channel/value-first.js"));
 
 const jsonResponse = (status, body) => () =>

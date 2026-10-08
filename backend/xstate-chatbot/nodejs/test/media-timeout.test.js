@@ -78,3 +78,17 @@ test("no media url means no work at all", async () => {
   assert.equal(await twilio.processMediaInput({}, "mz"), " ");
   assert.equal(called, false);
 });
+
+test("axios's own size limit is reported as too large, not as a failed download", async () => {
+  // maxContentLength rejects before the explicit size check runs.
+  twilio.downloadMediaFromUrl = async () => {
+    throw new Error("maxContentLength size of 5242880 exceeded");
+  };
+  let uploaded = false;
+  twilio.uploadMediaToFileStore = async () => { uploaded = true; return "filestore-id"; };
+
+  const result = await twilio.processMediaInput({ MediaUrl0: MEDIA_URL }, "mz");
+
+  assert.equal(result, "FILE_TOO_LARGE");
+  assert.equal(uploaded, false);
+});

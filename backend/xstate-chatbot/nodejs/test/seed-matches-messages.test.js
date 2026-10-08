@@ -14,7 +14,8 @@ require.cache[p("src/machine/util/localisation-service.js")] = {
   exports: { getMessageBundleForCode: () => undefined, getLocales: () => [] },
 };
 
-// Every {code, <locale>} bundle the machine can actually resolve.
+// Every {code, <locale>} bundle the machine can actually resolve. A code can be
+// defined more than once, so each locale keeps every text, not just the last one.
 function codeBundles() {
   const bundles = {};
   const walk = (node, seen = new Set()) => {
@@ -24,7 +25,7 @@ function codeBundles() {
       for (const locale of ["pt_PT", "en_IN"]) {
         if (typeof node[locale] === "string") {
           bundles[node.code] = bundles[node.code] || {};
-          bundles[node.code][locale] = node[locale];
+          (bundles[node.code][locale] = bundles[node.code][locale] || []).push(node[locale].trim());
         }
       }
     }
@@ -38,6 +39,18 @@ function codeBundles() {
 
 const bundles = codeBundles();
 
+test("no message code is defined twice with different text", () => {
+  // Only one text per code can be seeded; a second definition would silently
+  // lose to it on every deployment.
+  const conflicts = [];
+  for (const [code, locales] of Object.entries(bundles)) {
+    for (const [locale, texts] of Object.entries(locales)) {
+      if (new Set(texts).size > 1) conflicts.push(`${code} (${locale})`);
+    }
+  }
+  assert.deepEqual(conflicts, [], `codes with conflicting definitions: ${conflicts.join(", ")}`);
+});
+
 for (const locale of ["pt_PT", "en_IN"]) {
   const seedPath = path.join(seedDir, locale, "rainmaker-pgr-chatbot.json");
   const rows = JSON.parse(fs.readFileSync(seedPath, "utf-8"));
@@ -48,7 +61,7 @@ for (const locale of ["pt_PT", "en_IN"]) {
     // wording — that is how "reclamação" shipped over "manifestação".
     const drift = rows
       .filter((row) => bundles[row.code]?.[locale] !== undefined)
-      .filter((row) => bundles[row.code][locale].trim() !== row.message.trim())
+      .filter((row) => bundles[row.code][locale].some((text) => text !== row.message.trim()))
       .map((row) => row.code);
 
     assert.deepEqual(drift, [], `seed rows disagree with the in-code text: ${drift.join(", ")}`);

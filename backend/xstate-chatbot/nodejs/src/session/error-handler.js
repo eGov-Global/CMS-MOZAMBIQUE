@@ -20,7 +20,7 @@ async function handleError(error, inboundRequestModel) {
 
   try {
     await channelProvider.sendMessageToUser(
-      { mobileNumber },
+      { mobileNumber, whatsAppAddress: inboundRequestModel?.user?.whatsAppAddress },
       [userMessage],
       inboundRequestModel?.extraInfo
     );

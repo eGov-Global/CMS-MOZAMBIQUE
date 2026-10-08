@@ -76,6 +76,7 @@ function model({ input = "1", cancel = false, reset = false } = {}) {
   return {
     user,
     extraInfo: { tenantId: "mz", whatsAppBusinessNumber: "258840000001" },
+    message: { type: "text", input },   // what InboundRequestModel carries
     getMessage: () => ({
       getInputMessage: () => input,
       isCancel: () => cancel,

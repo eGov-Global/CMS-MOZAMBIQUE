@@ -1,7 +1,7 @@
 name: xstate-chatbot CI
 
 # build.yml only builds the image, so the test suite never ran anywhere but a
-# developer's machine — where .env supplies COUNTRY_CODE, RESET_WORDS and the
+# developer's machine — where .env supplies DEFAULT_COUNTRY_CODE, RESET_WORDS and the
 # rest, and hides any test that depends on them. .env is gitignored, so a CI
 # checkout is the clean-checkout case by construction.
 
@@ -10,11 +10,15 @@ on:
     branches: [master, develop, main]
     paths:
       - 'backend/xstate-chatbot/**'
+      # seed-matches-messages.test.js reads these bundles
+      - 'utilities/default-data-handler/src/main/resources/localisations/*/rainmaker-pgr-chatbot.json'
       - '.github/workflows/xstate-chatbot-ci.yml'
   pull_request:
     branches: [master, develop, main]
     paths:
       - 'backend/xstate-chatbot/**'
+      # seed-matches-messages.test.js reads these bundles
+      - 'utilities/default-data-handler/src/main/resources/localisations/*/rainmaker-pgr-chatbot.json'
       - '.github/workflows/xstate-chatbot-ci.yml'
   workflow_dispatch:
 

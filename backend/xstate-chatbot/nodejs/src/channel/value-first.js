@@ -55,10 +55,10 @@ class ValueFirstWhatsAppProvider {
     };
 
     reformattedMessage.user = {
-      mobileNumber: toNationalNumber(requestBody.mobile_number),
+      mobileNumber: await toNationalNumber(requestBody.mobile_number),
     };
     reformattedMessage.extraInfo = {
-      whatsAppBusinessNumber: toNationalNumber(config.whatsAppBusinessNumber),
+      whatsAppBusinessNumber: await toNationalNumber(config.whatsAppBusinessNumber),
       tenantId: config.rootTenantId,
       missedCall: true,
     };
@@ -191,11 +191,11 @@ class ValueFirstWhatsAppProvider {
       // metadata: metadata
     };
     reformattedMessage.user = {
-      mobileNumber: toNationalNumber(requestBody.from),
+      mobileNumber: await toNationalNumber(requestBody.from),
       //mobileNumber: requestBody.user.mobileNumber.slice(2)
     };
     reformattedMessage.extraInfo = {
-      whatsAppBusinessNumber: toNationalNumber(requestBody.to),
+      whatsAppBusinessNumber: await toNationalNumber(requestBody.to),
       //whatsAppBusinessNumber: requestBody.extraInfo.whatsAppBusinessNumber.slice(2),
       tenantId: config.rootTenantId,
     };
@@ -205,7 +205,7 @@ class ValueFirstWhatsAppProvider {
 
   async isValid(requestBody) {
     try {
-      if (requestBody.media_type && requestBody.media_type === "button")
+      if (requestBody.media_type === "button" && !requestBody.buttonLabel)
         return false;
       if (requestBody.buttonLabel && requestBody.buttonLabel == "$btnLabel")
         return false;
@@ -297,7 +297,7 @@ class ValueFirstWhatsAppProvider {
   async getTransformedResponse(user, messages, extraInfo) {
     let userMobile = user.mobileNumber;
 
-    let fromMobileNumber = toInternationalNumber(extraInfo.whatsAppBusinessNumber);
+    let fromMobileNumber = await toInternationalNumber(extraInfo.whatsAppBusinessNumber);
     if (!fromMobileNumber) console.error("Receipient number can not be empty");
 
     let requestBody = JSON.parse(valueFirstRequestBody);
@@ -377,7 +377,7 @@ class ValueFirstWhatsAppProvider {
         messageBody["@ID"] = uniqueImageMessageId;
       }
       messageBody["ADDRESS"][0]["@FROM"] = fromMobileNumber;
-      messageBody["ADDRESS"][0]["@TO"] = toInternationalNumber(userMobile);
+      messageBody["ADDRESS"][0]["@TO"] = await toInternationalNumber(userMobile);
 
       requestBody["SMS"].push(messageBody);
     }
@@ -497,7 +497,7 @@ class ValueFirstWhatsAppProvider {
         messageBody["@TEMPLATEINFO"] = combinedStringForTemplateInfo;
 
         messageBody["ADDRESS"][0]["@FROM"] = config.whatsAppBusinessNumber;
-        messageBody["ADDRESS"][0]["@TO"] = toInternationalNumber(userMobile);
+        messageBody["ADDRESS"][0]["@TO"] = await toInternationalNumber(userMobile);
 
         requestBody["SMS"].push(messageBody);
       }

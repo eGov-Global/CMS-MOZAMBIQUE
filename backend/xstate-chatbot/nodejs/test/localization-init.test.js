@@ -6,6 +6,7 @@ const projectRoot = path.resolve(__dirname, "..");
 const p = (rel) => path.join(projectRoot, rel);
 
 let messageRows = [];
+let localisationStatus = 200;
 
 require.cache[require.resolve("node-fetch")] = {
   id: require.resolve("node-fetch"),
@@ -17,6 +18,7 @@ require.cache[require.resolve("node-fetch")] = {
     if (String(url).includes("mdms")) {
       return { status: 200, ok: true, json: async () => ({}) };
     }
+    if (localisationStatus !== 200) return { status: localisationStatus, ok: false, json: async () => ({}) };
     return { status: 200, ok: true, json: async () => ({ messages: messageRows }) };
   },
 };
@@ -35,6 +37,18 @@ test("init reports only the locales it actually loaded", async () => {
 
   assert.ok(localisationService.supportedLocales.length > 0);
   assert.equal(localisationService.getMessageForCode("chatbot.welcome", localisationService.supportedLocales[0]), "Bem-vindo");
+});
+
+test("a failed localisation request aborts init instead of loading a partial table", async () => {
+  // Swallowed as "no messages", one unreachable tenant let init succeed on the
+  // others' rows, and the service ran without the fallback messages until restarted.
+  messageRows = [{ code: "chatbot.welcome", message: "Bem-vindo" }];
+  localisationStatus = 503;
+  try {
+    await assert.rejects(() => localisationService.init(), /status 503/);
+  } finally {
+    localisationStatus = 200;
+  }
 });
 
 test("an exhausted boot exits so the orchestrator can restart the service", async () => {

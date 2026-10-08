@@ -26,19 +26,28 @@ If your eGov host serves an incomplete TLS chain, Node will reject it with `UNAB
 
 ### Configuration
 
-Every tenant- and country-specific value is an environment variable, so the same build serves any deployment. `.env.example` lists all of them; these are the ones you will always set:
+Every tenant- and country-specific value is an environment variable, so the same build serves any deployment. `.env.example` lists the ones a deployment actually sets — `env-variables.js` reads about twice as many, the remainder being dormant config for flows this build does not use (bills, payments, the ValueFirst notification templates). These are the ones you will always set:
 
 | Variable | What it controls |
 |---|---|
 | `ROOT_TENANTID` | tenant the chatbot files complaints under |
 | `SUPPORTED_LOCALES` | locales offered in the language menu |
-| `COUNTRY_CODE`, `MOBILE_NUMBER_LENGTH` | number parsing and validation |
+| `DEFAULT_COUNTRY_CODE`, `DEFAULT_MOBILE_REGEX` | number rule used when the tenant has no MDMS `MobileNumberValidation` row, or MDMS is unreachable |
+| `MOBILE_NUMBER_LENGTH` | digit count shown in the invalid-number reply |
 | `BOUNDARY_HIERARCHY_TYPE` | which MDMS boundary hierarchy to walk |
 | `WHATSAPP_PROVIDER` and the provider's credentials | outbound channel |
 | `ALLOWED_MOBILE_NUMBERS` | whitelist gating the welcome step; empty allows all |
 | `CANCEL_WORDS`, `RESET_WORDS` | words that cancel or restart a session |
 | `TWILIO_VERIFY_WEBHOOK_SIGNATURE`, `TWILIO_WEBHOOK_BASE_URL` | inbound authenticity on Twilio |
 | `WEBHOOK_SHARED_SECRET`, `VERIFY_WEBHOOK_SIGNATURE` | inbound authenticity on ValueFirst and Kaleyra |
+
+**Required at boot.** With any provider other than `Console`, the service refuses to start unless `DEFAULT_COUNTRY_CODE`, `DEFAULT_MOBILE_REGEX` and `MOBILE_NUMBER_LENGTH` are set explicitly. Their code defaults are India's (`+91`, ten digits). The fallback rule is cached whenever MDMS fails, so an India default on another country's deployment would drop every inbound message until the cache expired. Set them to your country's values, for Mozambique:
+
+```
+DEFAULT_COUNTRY_CODE=+258
+DEFAULT_MOBILE_REGEX=^8[0-9]{8}$
+MOBILE_NUMBER_LENGTH=9
+```
 
 Four deadlines govern how long anything may take. `REQUEST_TIMEOUT_MS` caps one outbound service call and `MEDIA_PROCESSING_TIMEOUT_MS` caps an attachment fetch; `DISPATCH_SETTLE_TIMEOUT_MS` supervises both and **must stay above them**, or a request and its supervisor expire together and the citizen's lock is released while the call may still be resolving. `REPLY_COOLDOWN_MS` is the pause after a turn settles.
 
@@ -116,7 +125,7 @@ The session layer was split along the same lines: login flows are separate from 
 
 ## Localization and tenancy
 
-Nothing in the dialogue assumes a country or a tenant. The default locale comes from configuration rather than a hardcoded `en_IN`, and the language menu is built from the tenant's own MDMS `StateInfo`, so a deployment offers exactly the languages it has declared. Mobile-number validation and the outbound sender number are derived from configured country settings, and India-specific naming (`seva`, `mseva`) was renamed to generic terms.
+Nothing in the dialogue assumes a country or a tenant. The default locale comes from configuration rather than a hardcoded `en_IN`, and the language menu is built from the tenant's own MDMS `StateInfo`, so a deployment offers exactly the languages it has declared. Mobile-number validation is per tenant: the country code and the valid-number rule come from that tenant's MDMS `common-masters.MobileNumberValidation` row, cached briefly, so adding a country is an MDMS edit rather than a redeploy. `DEFAULT_COUNTRY_CODE` and `DEFAULT_MOBILE_REGEX` are the fallback when a tenant has no row — their code defaults are India's, so the service refuses to boot with any real channel until both are set explicitly. The outbound sender is the Twilio account's own number and is deliberately not run through the citizen tenant's rule.
 
 Adding a language is an MDMS and localization change; it needs no code edit.
 
@@ -142,13 +151,19 @@ Media uploads time out instead of hanging the conversation, and oversized attach
 
 Inbound messages are filtered before any session work happens.
 
-**Authenticity comes first.** Every channel provider must implement `verifyRequest`, and the service refuses to start if the configured one does not — a missing check used to be indistinguishable from a deliberate opt-out, which left three of the four providers wide open. Twilio verifies the `X-Twilio-Signature` HMAC. ValueFirst and Kaleyra sign nothing, so they verify a shared secret sent as `X-Webhook-Secret` or `?webhookSecret=`; both **fail closed** when no secret is configured, so an unconfigured deployment rejects traffic loudly instead of accepting it silently. The console provider is exempt on purpose and says so at startup, since it is only selected for local development.
+**Authenticity comes first.** Every channel provider must implement `verifyRequest`, and the service refuses to start if the configured one does not — a missing check used to be indistinguishable from a deliberate opt-out, which left three of the four providers wide open. Twilio verifies the `X-Twilio-Signature` HMAC. ValueFirst and Kaleyra sign nothing, so they verify a shared secret sent as `X-Webhook-Secret` (header only — the query form was dropped, because a secret in a url lands in every proxy access log upstream); both **fail closed** when no secret is configured, so an unconfigured deployment rejects traffic loudly instead of accepting it silently. The console provider is exempt on purpose and says so at startup, since it is only selected for local development.
 
 Verification runs *before* the rate limiter, and the limiter counts the signed sender rather than the source address. Keyed on the address it was a denial-of-service lever rather than a defence: behind a tunnel every citizen shares one, so a flood of unsigned requests would have locked everyone out for the rest of the window.
 
 A configurable mobile-number whitelist then gates the welcome step, messages from numbers outside the configured country are dropped, and the reset path does not bypass the whitelist.
 
 Citizen records are provisioned through a service account, so the chatbot files complaints without a citizen ever holding credentials. That account's token is stripped from anything persisted or published — including the event history inside a serialized machine state, where it is easy to miss.
+
+### Operational endpoints
+
+`/reminder` fans a message out to every active session, so it is gated on its own secret rather than a provider signature — no cron or operator can produce one of those. Set `REMINDER_AUTH_TOKEN` and send it as `X-Reminder-Token`; while the variable is unset the route answers 404 and does nothing, which is the safe default for a route nobody has wired up yet.
+
+`/health` returns 200 only when the configuration can actually serve citizens. It returns **503** and names the problems when it cannot — a missing Twilio sender, verification switched off, sessions held in memory. Point the container healthcheck and Gatus at it, so a deployment that boots but drops every reply shows up red instead of green.
 
 ## Remote Debugging
 

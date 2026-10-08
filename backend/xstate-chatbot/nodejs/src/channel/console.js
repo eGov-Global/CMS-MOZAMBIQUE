@@ -20,7 +20,7 @@ class ConsoleProvider {
                 mobileNumber: rawMessage.user.mobileNumber
             },
             extraInfo: {
-                whatsAppBusinessNumber: rawMessage.extraInfo.whatsAppBusinessNumber,
+                whatsAppBusinessNumber: rawMessage.extraInfo?.whatsAppBusinessNumber,
                 tenantId: config.rootTenantId
             }
         }

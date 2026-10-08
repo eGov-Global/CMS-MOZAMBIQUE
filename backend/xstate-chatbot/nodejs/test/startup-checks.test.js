@@ -15,8 +15,14 @@ function config(overrides = {}) {
   const base = {
     whatsAppProvider: "Twilio",
     serviceAccount: { username: "svc", password: "pw", tenantId: "mz" },
-    twilio: { accountSid: "AC1", authToken: "tok", webhookBaseUrl: "https://x.example", verifyWebhookSignature: true },
+    twilio: { accountSid: "AC1", authToken: "tok", whatsappNumber: "whatsapp:+14155238886", webhookBaseUrl: "https://x.example", verifyWebhookSignature: true },
+    whatsAppBusinessNumber: "whatsapp:+14155238886",
+    kaleyra: { sid: "K1", apikey: "KEY" },
+    valueFirstWhatsAppProvider: { valueFirstUsername: "vfuser", valueFirstPassword: "vfpass" },
     webhook: { sharedSecret: "s3cret", verify: true },
+    mobileValidation: { defaultCountryCodeSet: true, defaultRegexSet: true },
+    mobileNumberLengthSet: true,
+    timeouts: { request: 20000, mediaProcessing: 13000, dispatchSettle: 30000 },
   };
   return { ...base, ...overrides };
 }
@@ -38,24 +44,26 @@ test("the service account is required whatever the channel", () => {
   cfg.serviceAccount = { username: "", password: "" };
   assert.deepEqual(missingWith(cfg), ["USER_SERVICE_ACCOUNT_USERNAME", "USER_SERVICE_ACCOUNT_PASSWORD"]);
 
-  const onConsole = config({ whatsAppProvider: "console" });
+  const onConsole = config({ whatsAppProvider: "Console" });
   onConsole.serviceAccount = { username: "", password: "" };
   assert.deepEqual(missingWith(onConsole), ["USER_SERVICE_ACCOUNT_USERNAME", "USER_SERVICE_ACCOUNT_PASSWORD"]);
 });
 
 test("Twilio credentials are required, and the base url only when verifying", () => {
   const cfg = config();
-  cfg.twilio = { accountSid: "", authToken: "", webhookBaseUrl: "", verifyWebhookSignature: true };
-  assert.deepEqual(missingWith(cfg), ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WEBHOOK_BASE_URL"]);
+  cfg.twilio = { accountSid: "", authToken: "", whatsappNumber: "", webhookBaseUrl: "", verifyWebhookSignature: true };
+  assert.deepEqual(missingWith(cfg), [
+    "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_NUMBER", "TWILIO_WEBHOOK_BASE_URL",
+  ]);
 
   // Verification off is a deliberate local-testing choice; the url is then unused.
   const unverified = config();
-  unverified.twilio = { accountSid: "AC1", authToken: "tok", webhookBaseUrl: "", verifyWebhookSignature: false };
+  unverified.twilio = { accountSid: "AC1", authToken: "tok", whatsappNumber: "whatsapp:+1", webhookBaseUrl: "", verifyWebhookSignature: false };
   assert.deepEqual(missingWith(unverified), []);
 });
 
 test("the console provider needs no channel credentials", () => {
-  const cfg = config({ whatsAppProvider: "console" });
+  const cfg = config({ whatsAppProvider: "Console" });
   cfg.twilio = { accountSid: "", authToken: "", webhookBaseUrl: "", verifyWebhookSignature: true };
   assert.deepEqual(missingWith(cfg), [], "local development stays runnable");
 });
@@ -73,8 +81,78 @@ test("ValueFirst and Kaleyra need the shared secret they verify against", () => 
   }
 });
 
+test("no provider demands COUNTRY_CODE: numbers follow the tenant's MDMS rule", () => {
+  for (const provider of ["Twilio", "ValueFirst", "Kaleyra"]) {
+    assert.ok(!missingWith(config({ whatsAppProvider: provider })).includes("COUNTRY_CODE"), provider);
+  }
+});
+
+test("the MDMS fallback rule and the digit hint must be set, not defaulted to India's", () => {
+  // The fallback is cached for the TTL whenever MDMS fails, so a +91 default on a
+  // +258 deployment drops every inbound message until it expires.
+  for (const provider of ["Twilio", "ValueFirst", "Kaleyra"]) {
+    const cfg = config({
+      whatsAppProvider: provider,
+      mobileValidation: { defaultCountryCodeSet: false, defaultRegexSet: false },
+      mobileNumberLengthSet: false,
+    });
+    const missing = missingWith(cfg);
+    for (const name of ["DEFAULT_COUNTRY_CODE", "DEFAULT_MOBILE_REGEX", "MOBILE_NUMBER_LENGTH"]) {
+      assert.ok(missing.includes(name), `${provider}: ${name}`);
+    }
+  }
+
+  const console_ = config({ whatsAppProvider: "Console", mobileValidation: {}, mobileNumberLengthSet: false });
+  for (const name of ["DEFAULT_COUNTRY_CODE", "DEFAULT_MOBILE_REGEX", "MOBILE_NUMBER_LENGTH"]) {
+    assert.ok(!missingWith(console_).includes(name), `Console: ${name}`);
+  }
+});
+
+test("each provider's own credentials are required", () => {
+  const kaleyra = config({ whatsAppProvider: "Kaleyra" });
+  kaleyra.kaleyra = { sid: "", apikey: "" };
+  assert.deepEqual(missingWith(kaleyra), ["KALEYRA_SID", "KALEYRA_API_KEY"]);
+
+  // ValueFirst ships 'demo' defaults: present, so a blank check passes, and
+  // every send fails against the real endpoint.
+  const valueFirst = config({ whatsAppProvider: "ValueFirst" });
+  valueFirst.valueFirstWhatsAppProvider = { valueFirstUsername: "demo", valueFirstPassword: "demo" };
+  assert.deepEqual(missingWith(valueFirst), ["VALUEFIRST_USERNAME", "VALUEFIRST_PASSWORD"]);
+
+  // Twilio cannot reply without its number, so it is fatal rather than a warning.
+  const twilio = config();
+  twilio.twilio = { ...twilio.twilio, whatsappNumber: "" };
+  assert.deepEqual(missingWith(twilio), ["TWILIO_WHATSAPP_NUMBER"]);
+});
+
 test("Twilio settings are not demanded of a ValueFirst deployment", () => {
   const cfg = config({ whatsAppProvider: "ValueFirst" });
   cfg.twilio = { accountSid: "", authToken: "", webhookBaseUrl: "", verifyWebhookSignature: true };
   assert.deepEqual(missingWith(cfg), []);
+});
+
+test("a settle deadline at or below a call deadline is fatal", () => {
+  // Abandoning a turn whose backend call is still running releases the
+  // per-citizen lock, so a retry can file the same complaint twice.
+  const invalidWith = (timeouts) => {
+    const cfg = config();
+    cfg.timeouts = timeouts;
+    stub("src/env-variables.js", cfg);
+    delete require.cache[p("src/startup-checks.js")];
+    return require(p("src/startup-checks.js")).invalidConfig();
+  };
+
+  assert.match(
+    invalidWith({ request: 20000, mediaProcessing: 13000, dispatchSettle: 20000 })[0],
+    /must exceed REQUEST_TIMEOUT_MS/
+  );
+  assert.match(
+    invalidWith({ request: 5000, mediaProcessing: 13000, dispatchSettle: 10000 })[0],
+    /must exceed MEDIA_PROCESSING_TIMEOUT_MS/
+  );
+  assert.deepEqual(
+    invalidWith({ request: 20000, mediaProcessing: 13000, dispatchSettle: 30000 }),
+    [],
+    "the shipped defaults are ordered correctly"
+  );
 });

@@ -16,11 +16,13 @@ stub("src/machine/util/localisation-service.js", { getMessageBundleForCode: () =
 
 const sent = [];
 stub("src/channel/index.js", {
-  sendMessageToUser: async (user, messages) => { sent.push({ to: user.mobileNumber, text: messages[0] }); },
+  sendMessageToUser: async (user, messages) => {
+    sent.push({ to: user.mobileNumber, address: user.whatsAppAddress, text: messages[0] });
+  },
 });
 
 const { handleError } = require(p("src/session/error-handler.js"));
-const { ValidationError, AuthenticationError, ExternalServiceError } =
+const { ValidationError, InvalidMobileNumberError, AuthenticationError, ExternalServiceError } =
   require(p("src/session/errors.js"));
 
 const model = (locale) => ({
@@ -35,7 +37,7 @@ async function messageFor(error, locale) {
 }
 
 test("a validation failure names the configured digit count, not ten", async () => {
-  const text = await messageFor(new ValidationError("Invalid mobile number format"));
+  const text = await messageFor(new InvalidMobileNumberError("Invalid mobile number format"));
 
   assert.match(text, /9 dígitos/, "9, from config.mobileNumberLength");
   assert.doesNotMatch(text, /10 digits/);
@@ -43,16 +45,25 @@ test("a validation failure names the configured digit count, not ten", async () 
 });
 
 test("the citizen is answered in Portuguese by default, not English", async () => {
-  const text = await messageFor(new ValidationError("Invalid mobile number format"));
+  const text = await messageFor(new InvalidMobileNumberError("Invalid mobile number format"));
 
   assert.match(text, /telemóvel/, "pt_PT, and telemóvel rather than celular");
   assert.doesNotMatch(text, /Sorry/);
 });
 
 test("a citizen whose locale is known is answered in it", async () => {
-  const text = await messageFor(new ValidationError("Invalid mobile number format"), "en_IN");
+  const text = await messageFor(new InvalidMobileNumberError("Invalid mobile number format"), "en_IN");
 
   assert.match(text, /9 digits/, "English, and still the configured count");
+});
+
+test("a validation failure that is not about the number does not blame the number", async () => {
+  // Missing tenant, missing provider and upload metadata are ValidationErrors too;
+  // telling the citizen to check their number sent them to fix the wrong thing.
+  const text = await messageFor(new ValidationError("Mobile number and tenant ID are required"));
+
+  assert.doesNotMatch(text, /telemóvel|dígitos/);
+  assert.match(text, /ocorreu um erro/);
 });
 
 test("each operational failure has its own wording", async () => {
@@ -69,4 +80,15 @@ test("an unexpected error still gets a localized generic message", async () => {
 
   assert.match(text, /ocorreu um erro/, "not the English fallback");
   assert.doesNotMatch(text, /undefined is not a function/, "and never the internal detail");
+});
+
+test("an error reply goes to the address the citizen wrote from", async () => {
+  // A +91 sender on a +254 tenant: the national number alone would be re-prefixed
+  // with the tenant's country code and the reply would go to a number that is not theirs.
+  sent.length = 0;
+  await handleError(new TypeError("boom"), {
+    user: { mobileNumber: "6307817430", whatsAppAddress: "whatsapp:+916307817430" },
+    extraInfo: { tenantId: "ke" },
+  });
+  assert.equal(sent[0].address, "whatsapp:+916307817430");
 });

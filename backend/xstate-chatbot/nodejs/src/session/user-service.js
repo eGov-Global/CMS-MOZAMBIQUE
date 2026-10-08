@@ -1,7 +1,8 @@
 const config = require('../env-variables');
+const mobileValidation = require('../machine/service/mobile-validation-service');
 const fetch = require('node-fetch');
 require('url-search-params-polyfill');
-const { ValidationError, AuthenticationError, ExternalServiceError } = require('./errors');
+const { ValidationError, InvalidMobileNumberError, AuthenticationError, ExternalServiceError } = require('./errors');
 const { maskMobile } = require('../privacy');
 const { StatusCodes } = require('http-status-codes');
 
@@ -106,12 +107,13 @@ class UserService {
   // Finds a citizen by mobile number and tenant ID using the service account.
   // Returns the citizen's auth token and user info if found, otherwise undefined.
     async findCitizen(mobileNumber, tenantId) {
-    const cleanMobileNumber = this.sanitizeMobileNumber(mobileNumber) || mobileNumber;
+    const cleanMobileNumber = (await this.sanitizeMobileNumber(mobileNumber, tenantId)) || mobileNumber;
     const url = config.egovServices.userServiceHost + config.egovServices.userServiceSearchPath;
 
     const { response, account } = await this.withServiceAccount(({ authToken, userInfo }) =>
       fetch(url, {
         method: 'POST',
+        timeout: config.timeouts.request,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           RequestInfo: this.serviceRequestInfo(authToken, userInfo),
@@ -134,12 +136,13 @@ class UserService {
 
   
   async findInactiveCitizen(mobileNumber, tenantId) {
-    const cleanMobileNumber = this.sanitizeMobileNumber(mobileNumber) || mobileNumber;
+    const cleanMobileNumber = (await this.sanitizeMobileNumber(mobileNumber, tenantId)) || mobileNumber;
     const url = config.egovServices.userServiceHost + config.egovServices.userServiceSearchPath;
 
     const { response } = await this.withServiceAccount(({ authToken, userInfo }) =>
       fetch(url, {
         method: 'POST',
+        timeout: config.timeouts.request,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           RequestInfo: this.serviceRequestInfo(authToken, userInfo),
@@ -171,6 +174,7 @@ class UserService {
     const url = config.egovServices.userServiceHost + config.egovServices.userServiceOAuthPath;
     const response = await fetch(url, {
       method: 'POST',
+      timeout: config.timeouts.request,
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Authorization': config.userService.userLoginAuthorizationHeader
@@ -184,6 +188,11 @@ class UserService {
     }
 
     const body = await response.json();
+    if (!body.access_token) {
+      throw new AuthenticationError(
+        'Service account login returned 200 without an access_token; refusing to cache it'
+      );
+    }
     this._serviceAccount = { authToken: body.access_token, userInfo: body.UserRequest };
     this._serviceAccountExpiry = Date.now() + Math.max((body.expires_in || 3600) - 60, 60) * 1000;
     return this._serviceAccount;
@@ -198,17 +207,19 @@ class UserService {
   
   async createUser(mobileNumber, tenantId) {
 
-    const cleanMobileNumber = this.sanitizeMobileNumber(mobileNumber);
+    const cleanMobileNumber = await this.sanitizeMobileNumber(mobileNumber, tenantId);
     if (!cleanMobileNumber)
-        throw new ValidationError(`Invalid mobile number format: ${maskMobile(mobileNumber)}. Expected ${config.mobileNumberLength} digits, optionally prefixed with ${config.countryCode}.`);
+      throw new InvalidMobileNumberError(`Invalid mobile number format: ${maskMobile(mobileNumber)} does not match the tenant's MobileNumberValidation rule.`);
 
     const url = config.egovServices.userServiceHost + config.egovServices.userServiceCreateNoValidatePath;
 
     const { response, account } = await this.withServiceAccount(({ authToken, userInfo }) =>
       fetch(url, {
         method: 'POST',
+        timeout: config.timeouts.request,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // egov-user's create DTO is @JsonProperty("requestInfo"), lowercase — unlike _search.
           requestInfo: this.serviceRequestInfo(authToken, userInfo),
           user: {
             userName: cleanMobileNumber,
@@ -243,24 +254,12 @@ class UserService {
   // Accepts the national number, or the same number prefixed with the country
   // code, and always returns the national form — that is what DIGIT stores as
   // the citizen's identity.
-  // Example: 
-  //   sanitizeMobileNumber('919876543210') => '9876543210'
-  //   sanitizeMobileNumber('9876543210') => '9876543210'
-  sanitizeMobileNumber(mobileNumber) {
+  // Per-tenant rule from MDMS (common-masters.MobileNumberValidation), falling
+  // back to DEFAULT_COUNTRY_CODE / DEFAULT_MOBILE_REGEX when the tenant has none.
+  async sanitizeMobileNumber(mobileNumber, tenantId) {
     if (!mobileNumber) return null;
-
-    const digitsOnly = String(mobileNumber).replace(/\D/g, '');
-    const countryCode = String(config.countryCode).replace(/\D/g, '');
-    const nationalLength = config.mobileNumberLength;
-
-    if (digitsOnly.length === nationalLength) {
-      return digitsOnly;
-    }
-    if (countryCode && digitsOnly.length === countryCode.length + nationalLength
-        && digitsOnly.startsWith(countryCode)) {
-      return digitsOnly.slice(countryCode.length);
-    }
-    return null;
+    const mobileConfig = await mobileValidation.getConfig(tenantId || config.rootTenantId);
+    return mobileValidation.toNational(mobileNumber, mobileConfig);
   }
 }
 

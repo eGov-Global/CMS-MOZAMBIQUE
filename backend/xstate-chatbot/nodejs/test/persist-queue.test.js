@@ -48,15 +48,19 @@ test("different citizens are not serialized against each other", async () => {
   assert.equal(active.peak, 2, "one citizen's write does not wait on another's");
 });
 
-test("a failed write does not block the transition behind it", async () => {
+test("a failed write does not block the transition behind it, but is reported", async () => {
+  // Resolving here released the per-citizen lock with a stale row stored, so the
+  // next message could apply its answer to the wrong step.
   const landed = [];
 
   enqueuePersist("u-5", async () => { throw new Error("db down"); });
   enqueuePersist("u-5", async () => { landed.push("after"); });
 
-  await pendingPersist("u-5");
-
+  await assert.rejects(() => pendingPersist("u-5"), /was not saved: db down/);
   assert.deepEqual(landed, ["after"], "the next state is still written");
+
+  // reported once: the next turn starts clean
+  await assert.doesNotReject(() => pendingPersist("u-5"));
 });
 
 test("the queue does not grow once it drains", async () => {
