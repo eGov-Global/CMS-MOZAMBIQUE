@@ -20,12 +20,12 @@ initContainers:
     schemaTable: "xstate_chatbot_schema"
     image:
       repository: "xstate-chatbot-db"
-      tag: "2.12-5137119"
+      tag: DIGIT-2.9-LTS-44558a0602-3
 
 # Container Configs
 image:
   repository: "xstate-chatbot"
-  tag: "2.12-5137119"
+  tag: DIGIT-2.9-LTS-44558a0602-3
 # Must stay 1. Conversation state is a read-modify-write on one row per
 # citizen, serialised only within a process (session/persist-queue.js) and
 # written last-writer-wins (session/repo/postgres-repo.js updateState).
@@ -163,8 +163,10 @@ env: |
         key: valuefirst-password
   - name: TRACER_OPENTRACING_ENABLED
     value: "true"
-  - name: FLOW_RESET_KEYWORDS
-    value: "Hi,Hey,Hello,mseva,Start,missedCall"
+  - name: RESET_WORDS
+    value: "reiniciar,reinicie,restart,reset,ola,oi,hello,hi"
+  - name: CANCEL_WORDS
+    value: "cancelar,cancele,cancel,parar,pare,stop"
   {{- if index .Values "contact-card-whatsapp-number" }}
   - name: CONTACT_CARD_WHATSAPP_NUMBER
     value: {{ index .Values "contact-card-whatsapp-number" | quote }}
