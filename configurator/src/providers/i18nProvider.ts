@@ -28,7 +28,8 @@ import { digitClient } from './bridge';
 export const AVAILABLE_LOCALES: Locale[] = [
   { locale: 'en_IN', name: 'EN' },
   { locale: 'hi_IN', name: 'HI' },
-  { locale: 'pt_BR', name: 'PT' },
+  { locale: 'pt_PT', name: 'PT' },
+  { locale: 'pt_BR', name: 'PT-BR' },
   { locale: 'fr_FR', name: 'FR' },
 ];
 
@@ -38,9 +39,8 @@ export const AVAILABLE_LOCALES: Locale[] = [
  * default is derived from LOCALE_DEFAULT/LOCALE_REGION exactly like the
  * portal's getDefaultLanguage(). One host_vars setting drives BOTH apps.
  *
- * Mapping: the portal's locale codes differ from the Studio's (portal
- * Portuguese is pt_PT, the Studio ships pt_BR), so resolve exact first, then
- * by language prefix ("pt" -> pt_BR). Unknown/absent config falls back to
+ * Mapping: resolve exact first, then by language prefix ("pt" -> pt_PT, the
+ * first pt_* entry). Unknown/absent config falls back to
  * en_IN (previous hardcoded behaviour, and the right answer on boxes that
  * don't serve the portal's globalConfigs at all). A user's manual language
  * pick is persisted by react-admin's store and always wins over this default.
@@ -465,6 +465,85 @@ const RA_BUNDLES: Record<string, { ra: Record<string, unknown> }> = {
         remove_dialog_title: 'Remover consulta salva?',
         remove_message: 'Tem certeza de que deseja remover este item da lista de consultas salvas?',
         help: 'Filtre a lista e salve esta consulta para depois',
+      },
+    },
+  },
+  pt_PT: {
+    ra: {
+      action: {
+        add_filter: 'Adicionar filtro', add: 'Adicionar', back: 'Voltar',
+        bulk_actions: '1 item selecionado |||| %{smart_count} itens selecionados',
+        cancel: 'Cancelar', clear_array_input: 'Limpar lista', clear_input_value: 'Limpar valor',
+        clone: 'Clonar', confirm: 'Confirmar', create: 'Criar', create_item: 'Criar %{item}',
+        delete: 'Eliminar', edit: 'Editar', export: 'Exportar', list: 'Lista',
+        refresh: 'Atualizar', remove_filter: 'Remover este filtro', remove_all_filters: 'Remover todos os filtros',
+        remove: 'Remover', reset: 'Restaurar', save: 'Guardar', search: 'Pesquisar',
+        select_all: 'Selecionar tudo', select_row: 'Selecionar esta linha', show: 'Mostrar',
+        sort: 'Ordenar', undo: 'Desfazer', unselect: 'Desmarcar',
+        expand: 'Expandir', close: 'Fechar', open_menu: 'Abrir menu', close_menu: 'Fechar menu',
+        update: 'Atualizar', open: 'Abrir', toggle_theme: 'Alternar modo claro/escuro', select_columns: 'Colunas',
+      },
+      boolean: { true: 'Sim', false: 'Não', null: ' ' },
+      page: {
+        create: 'Criar %{name}', dashboard: 'Painel', edit: '%{name} %{recordRepresentation}',
+        error: 'Ocorreu um erro', list: '%{name}', loading: 'A carregar', not_found: 'Não encontrado',
+        show: '%{name} %{recordRepresentation}', empty: 'Ainda não existe nenhum %{name}.',
+        invite: 'Deseja adicionar um?',
+      },
+      navigation: {
+        clear_filters: 'Limpar filtros',
+        no_filtered_results: 'Nenhum %{name} encontrado com os filtros atuais.',
+        no_results: 'Nenhum %{name} encontrado',
+        no_more_results: 'A página %{page} está fora dos limites.',
+        page_out_of_boundaries: 'Página %{page} fora dos limites',
+        page_out_from_end: 'Não é possível avançar além da última página',
+        page_out_from_begin: 'Não é possível recuar antes da página 1',
+        page_range_info: '%{offsetBegin}-%{offsetEnd} de %{total}',
+        partial_page_range_info: '%{offsetBegin}-%{offsetEnd} de mais de %{offsetEnd}',
+        current_page: 'Página %{page}', page: 'Ir para a página %{page}',
+        first: 'Ir para a primeira página', last: 'Ir para a última página',
+        next: 'Ir para a página seguinte', previous: 'Ir para a página anterior',
+        page_rows_per_page: 'Linhas por página:', skip_nav: 'Ir para o conteúdo',
+      },
+      sort: { sort_by: 'Ordenar por %{field_lower_first} %{order}', ASC: 'Crescente', DESC: 'Decrescente' },
+      auth: {
+        auth_check_error: 'Inicie sessão para continuar', user_menu: 'Perfil',
+        username: 'Utilizador', password: 'Palavra-passe', sign_in: 'Iniciar sessão',
+        sign_in_error: 'A autenticação falhou, tente novamente', logout: 'Terminar sessão',
+      },
+      notification: {
+        updated: 'Elemento atualizado |||| %{smart_count} elementos atualizados',
+        created: 'Elemento criado', deleted: 'Elemento eliminado |||| %{smart_count} elementos eliminados',
+        bad_item: 'Elemento incorreto', item_doesnt_exist: 'O elemento não existe',
+        http_error: 'Erro de comunicação com o servidor',
+        data_provider_error: 'Erro do dataProvider. Consulte a consola para mais detalhes.',
+        canceled: 'Ação cancelada', logged_out: 'A sua sessão expirou, inicie sessão novamente.',
+      },
+      validation: {
+        required: 'Obrigatório', minLength: 'Deve ter no mínimo %{min} caracteres',
+        maxLength: 'Deve ter no máximo %{max} caracteres', minValue: 'Deve ser no mínimo %{min}',
+        maxValue: 'Deve ser no máximo %{max}', number: 'Deve ser um número',
+        email: 'Deve ser um e-mail válido', oneOf: 'Deve ser um dos seguintes: %{options}',
+        regex: 'Deve corresponder ao formato (regexp): %{pattern}',
+      },
+      message: {
+        about: 'Sobre', are_you_sure: 'Tem a certeza?',
+        bulk_delete_content: 'Tem a certeza de que quer eliminar este %{name}? |||| Tem a certeza de que quer eliminar estes %{smart_count} itens?',
+        bulk_delete_title: 'Eliminar %{name} |||| Eliminar %{smart_count} %{name}',
+        delete_content: 'Tem a certeza de que quer eliminar este %{name}?',
+        delete_title: 'Eliminar %{name} %{recordRepresentation}', details: 'Detalhes',
+        error: 'Ocorreu um erro no cliente e o seu pedido não pôde ser concluído.',
+        invalid_form: 'O formulário não é válido. Verifique os erros',
+        loading: 'Aguarde, por favor', no: 'Não',
+        not_found: 'Introduziu um endereço incorreto ou seguiu uma ligação inválida.',
+        unsaved_changes: 'Algumas alterações não foram guardadas. Quer ignorá-las?', yes: 'Sim',
+      },
+      saved_queries: {
+        label: 'Consultas guardadas', query_name: 'Nome da consulta', new_label: 'Guardar consulta atual...',
+        new_dialog_title: 'Guardar consulta atual como', remove_label: 'Remover consulta guardada',
+        remove_dialog_title: 'Remover consulta guardada?',
+        remove_message: 'Tem a certeza de que quer remover este item da lista de consultas guardadas?',
+        help: 'Filtre a lista e guarde esta consulta para mais tarde',
       },
     },
   },
