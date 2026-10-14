@@ -207,9 +207,11 @@ class UserService {
   
   async createUser(mobileNumber, tenantId) {
 
-    const cleanMobileNumber = await this.sanitizeMobileNumber(mobileNumber, tenantId);
-    if (!cleanMobileNumber)
+    const mobileConfig = await mobileValidation.getConfig(tenantId || config.rootTenantId);
+    const resolved = mobileValidation.resolveNational(mobileNumber, mobileConfig);
+    if (!resolved)
       throw new InvalidMobileNumberError(`Invalid mobile number format: ${maskMobile(mobileNumber)} does not match the tenant's MobileNumberValidation rule.`);
+    const cleanMobileNumber = resolved.national;
 
     const url = config.egovServices.userServiceHost + config.egovServices.userServiceCreateNoValidatePath;
 
@@ -224,6 +226,7 @@ class UserService {
           user: {
             userName: cleanMobileNumber,
             mobileNumber: cleanMobileNumber,
+            countryCode: resolved.rule.countryCode,
             name: config.citizenPlaceholderName,
             type: "CITIZEN",
             active: true,
