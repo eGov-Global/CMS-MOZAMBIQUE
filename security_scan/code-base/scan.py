@@ -14,7 +14,7 @@ Env:
   SECSCAN_TOKEN   upload token (never committed); without it the scan runs but does not upload
   GITHUB_REPOSITORY / GITHUB_REF_NAME / GITHUB_SHA   provided by Actions (fallbacks below)
 """
-import os, sys, json, subprocess, datetime, base64, collections, re, argparse, tempfile
+import os, sys, json, subprocess, datetime, base64, collections, argparse, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -80,6 +80,7 @@ def line_in_manifest(pkg_name, rel_path):
             if out.stdout:
                 line = int(out.stdout.split(":", 1)[0])
         except Exception:
+            # best-effort: a missing file:line ref must never fail the scan
             pass
     _line_cache[key] = line
     return line
@@ -177,11 +178,13 @@ def upload(run, runfile):
     user = os.environ.get("SCAN_USER") or os.environ.get("GITHUB_ACTOR") or "code-scan"
     base = run_label(user)
     owner_repo = [x for x in run["meta"]["repo"].split("/") if x]
+    with open(runfile, "rb") as f:
+        run_json_b64 = base64.b64encode(f.read()).decode()
     payload = {
         "token": TOKEN, "repo": run["meta"]["repo"], "branch": run["meta"]["branch"],
         "base": base, "kind": "source-code",
         "folders": [DRIVE_ROOT] + owner_repo + ["source-code"],
-        "runJsonBase64": base64.b64encode(open(runfile, "rb").read()).decode(),
+        "runJsonBase64": run_json_b64,
         "xlsxBase64": "",
     }
     print(f"  uploading '{base}' (kind=source-code) to Drive + gh-pages...")
@@ -224,7 +227,8 @@ def main():
           f"[C {bs['CRITICAL']} · H {bs['HIGH']} · M {bs['MEDIUM']} · L {bs['LOW']}]")
 
     outfile = args.out or os.path.join(tempfile.mkdtemp(prefix="codescan-"), f"{meta['runId']}.json")
-    json.dump(run, open(outfile, "w"), indent=1)
+    with open(outfile, "w") as f:
+        json.dump(run, f, indent=1)
     print(f"run.json -> {outfile}")
 
     if not args.local:

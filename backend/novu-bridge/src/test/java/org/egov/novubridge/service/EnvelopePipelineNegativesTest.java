@@ -54,7 +54,7 @@ class EnvelopePipelineNegativesTest {
         mdmsServiceClient = mock(MdmsServiceClient.class);
         directDeliveryService = mock(DirectDeliveryService.class);
         service = new DispatchPipelineService(envelopeValidator, preferenceServiceClient, novuClient,
-                dispatchLogRepository, config, mdmsServiceClient, directDeliveryService);
+                null, dispatchLogRepository, config, mdmsServiceClient, directDeliveryService);
     }
 
     private ComplaintsDomainEvent validEvent() {

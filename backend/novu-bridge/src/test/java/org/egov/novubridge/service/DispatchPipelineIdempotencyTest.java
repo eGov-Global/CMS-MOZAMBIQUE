@@ -63,7 +63,7 @@ class DispatchPipelineIdempotencyTest {
                 .thenReturn(NovuClient.NovuResponse.builder().statusCode(201).response(Map.of("acknowledged", true)).build());
 
         service = new DispatchPipelineService(envelopeValidator, preferenceServiceClient, novuClient,
-                dispatchLogRepository, config, mdmsServiceClient, directDeliveryService);
+                null, dispatchLogRepository, config, mdmsServiceClient, directDeliveryService);
     }
 
     private ComplaintsDomainEvent smsEvent() {

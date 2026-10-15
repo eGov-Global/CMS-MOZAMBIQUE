@@ -7,11 +7,13 @@ import { useResourceLabel } from '@/providers/useResourceLabel';
 import { useSchemaDefinition } from '@/hooks/useSchemaDefinition';
 import { useCanWriteResource } from '@/hooks/useCanWriteResource';
 import { generateColumns, getRefMap, generateFilterElements } from './schemaUtils';
+import { useMastersCapability } from '@/hooks/useMastersCapability';
 
 export function MdmsResourcePage() {
   const resource = useResourceContext() ?? '';
   const config = getResourceConfig(resource);
   const label = useResourceLabel()(resource);
+  const { canEditResource } = useMastersCapability();
   const { definition } = useSchemaDefinition(config?.schema);
   // Role gate (CCSD-1998): hide Create on write-restricted resources.
   const canWrite = useCanWriteResource(resource);
@@ -36,7 +38,7 @@ export function MdmsResourcePage() {
   const subtitle = config?.schema ? `Schema: ${config.schema}` : undefined;
 
   return (
-    <DigitList title={label} subtitle={subtitle} filters={filterElements} hasCreate={canWrite}>
+    <DigitList title={label} subtitle={subtitle} filters={filterElements} hasCreate={canWrite && canEditResource(resource)}>
       {schemaColumns ? (
         <DigitDatagrid columns={schemaColumns} rowClick="show" />
       ) : (
