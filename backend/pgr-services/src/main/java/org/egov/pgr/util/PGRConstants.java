@@ -30,6 +30,11 @@ public class PGRConstants {
 
     public static final String MDMS_DEPT_MASTER = "Department";
 
+    // Access-control policy conditions (Tier-2 PDP source of truth) — see org.egov.pgr.policy.
+    // Resolved via egov-accesscontrol's own /access/v1/actions/mdms/_get API (role-scoped), not a
+    // raw MDMS call, so only the actionMaster name is needed here.
+    public static final String MDMS_ACCESSCONTROL_ACTIONS_MASTER = "actions-test";
+
     // Leaf complaint types now live in the merged ComplaintHierarchy master; a leaf is matched by its
     // `code` (== the serviceCode stored on a complaint). Codes are globally unique across the merged
     // interior+leaf keyspace (enforced by the masters migration), so matching `code` is unambiguous.
@@ -179,6 +184,14 @@ public class PGRConstants {
 
     public static final String MDMS_DATA_SLA_KEYWORD = "slaHours";
 
+    // --- Reopen window (RAINMAKER-PGR.UIConstants.REOPENSLA) ---
+    // REOPENSLA is the millisecond window after resolution/rejection during which a complaint
+    // may still be reopened. It is the single source of truth for both the citizen and the
+    // employee/CSR path — the UI gates on it and validateReOpen() enforces it server-side.
+    public static final String MDMS_UI_CONSTANTS_MASTER = "UIConstants";
+    public static final String MDMS_UI_CONSTANTS_JSONPATH = "$.MdmsRes.RAINMAKER-PGR.UIConstants";
+    public static final String MDMS_REOPEN_SLA_KEYWORD = "REOPENSLA";
+
     // --- Config-driven notifications (RAINMAKER-PGR.NotificationRouting / NotificationTemplate) ---
     public static final String MDMS_NOTIFICATION_ROUTING_MASTER = "NotificationRouting";
     public static final String MDMS_NOTIFICATION_TEMPLATE_MASTER = "NotificationTemplate";
@@ -219,11 +232,9 @@ public class PGRConstants {
 
     public static final String ESCALATE = "ESCALATE";
 
-    // MDMS master under module RAINMAKER-PGR (mdms-v2 schema code
-    // RAINMAKER-PGR.MDMS_ESCALATION_CONFIG, seeded by default-data-handler):
-    // the per-tenant visibility feature flag + resolver config. The JSONPATH
-    // constant is where that master lands in an MdmsRes payload.
-    
+    // One escalation policy master under RAINMAKER-PGR (MDMS v2 schema code
+    // RAINMAKER-PGR.EscalationConfig). The JSONPath constant is where that
+    // master lands in an MdmsRes payload.
     public static final String MDMS_ESCALATION_CONFIG = "EscalationConfig";
 
     // MDMS master under module RAINMAKER-PGR (mdms-v2 schema code

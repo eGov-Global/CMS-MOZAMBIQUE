@@ -28,14 +28,12 @@ import {
 /** The shim lives in the sibling package, outside this app's Vite root, so it
  *  cannot be imported (`?raw` is refused by Vite's fs policy) — it is read from
  *  disk instead. The app tsconfig deliberately limits ambient types to
- *  vite/client, and widening that so one test can see node builtins would also
- *  let application code reach for them; hence the single local suppression. */
+ *  vite/client; the explicit `node:` imports below still resolve, so no local
+ *  suppression is needed. */
 let shimSource = '';
 
 beforeAll(async () => {
-  // @ts-expect-error node:fs is intentionally outside this app's ambient types
   const fs = await import('node:fs');
-  // @ts-expect-error node:process is intentionally outside this app's ambient types
   const proc = await import('node:process');
   // import.meta.url is not a file: URL under the vitest module runner, so resolve
   // from the run root instead and accept either the package root or the repo root.
@@ -129,6 +127,19 @@ const FIXTURES: Array<{ name: string; rec: AnalyticsProviderRecord; customEnable
     rec: { code: 'x', type: 'MATOMO', enabled: true, siteId: '1', scriptUrl: 'https://evil.example.com/m.js' },
   },
   { name: 'matomo valid', rec: MATOMO_OK },
+  {
+    // The drift this table exists to catch: an allowlisted script with an
+    // off-allowlist beacon destination. The shim has always refused it
+    // (CWE-201); the Configurator used to call it ok, so a record could save,
+    // enable and count as live while the portal silently dropped it.
+    name: 'matomo with off-allowlist endpointUrl',
+    rec: { ...MATOMO_OK, endpointUrl: 'https://evil.example.com/collect' },
+  },
+  {
+    name: 'matomo with same-origin endpointUrl',
+    rec: { ...MATOMO_OK, endpointUrl: '/matomo/matomo.php' },
+  },
+
   { name: 'matomo bad sampleRate', rec: { ...MATOMO_OK, sampleRate: 2 } },
   { name: 'matomo sampleRate 0.5', rec: { ...MATOMO_OK, sampleRate: 0.5 } },
   { name: 'ga4 without measurementId', rec: { code: 'g', type: 'GA4', enabled: true } },

@@ -6,7 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.validator.constraints.SafeHtml;
+import org.egov.pgr.annotation.SafeHtml;
 
 import jakarta.validation.constraints.NotNull;
 import java.util.Set;
@@ -22,13 +22,13 @@ public class RequestSearchCriteria {
     private String tenantId;
 
     @JsonProperty("tenantIds")
-    private Set<String> tenantIds;
+    private Set<@SafeHtml String> tenantIds;
 
     @JsonProperty("serviceCode")
-    private Set<String> serviceCode;
+    private Set<@SafeHtml String> serviceCode;
 
     @JsonProperty("applicationStatus")
-    private Set<String> applicationStatus;
+    private Set<@SafeHtml String> applicationStatus;
 
     @SafeHtml
     @JsonProperty("mobileNumber")
@@ -54,10 +54,10 @@ public class RequestSearchCriteria {
     private SortOrder sortOrder;
   
     @JsonProperty("locality")
-    private Set<String> locality;
+    private Set<@SafeHtml String> locality;
 
     @JsonProperty("ids")
-    private Set<String> ids;
+    private Set<@SafeHtml String> ids;
 
     @JsonProperty("fromDate")
     private Long fromDate;
@@ -76,10 +76,10 @@ public class RequestSearchCriteria {
      * result set; they can't widen a search.
      */
     @JsonIgnore
-    private Set<String> visibilityIds;
+    private Set<@SafeHtml String> visibilityIds;
 
     @JsonIgnore
-    private Set<String> visibilityUnassignedStates;
+    private Set<@SafeHtml String> visibilityUnassignedStates;
 
     @JsonProperty("slaDeltaMinLimit")
     private Long slaDeltaMinLimit;
@@ -91,10 +91,17 @@ public class RequestSearchCriteria {
     private Integer offset;
 
     @JsonIgnore
-    private Set<String> userIds;
+    private Set<@SafeHtml String> userIds;
 
     @JsonIgnore
     private Boolean isPlainSearch;
+
+    /** Internal keyset cursor used by long-running scheduler scans. */
+    @JsonIgnore
+    private Long createdTimeBefore;
+
+    @JsonIgnore
+    private String serviceRequestIdBefore;
 
 
     public enum SortOrder {
@@ -124,7 +131,7 @@ public class RequestSearchCriteria {
     private String department;
 
     @JsonIgnore
-    private Set<String> serviceRequestIds;
+    private Set<@SafeHtml String> serviceRequestIds;
 
     // Server-resolved only — never bound from the request body. Matches against the complaint's
     // stored additionaldetails.department. Set by EmployeeDepartmentScopeService to restrict an

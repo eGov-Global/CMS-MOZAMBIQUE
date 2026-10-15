@@ -39,6 +39,7 @@ public class DispatchPipelineService {
     private final EnvelopeValidator envelopeValidator;
     private final PreferenceServiceClient preferenceServiceClient;
     private final NovuClient novuClient;
+    private final SmsCountryClient smsCountryClient;
     private final DispatchLogRepository dispatchLogRepository;
     private final NovuBridgeConfiguration config;
     private final MdmsServiceClient mdmsServiceClient;
@@ -47,6 +48,7 @@ public class DispatchPipelineService {
     public DispatchPipelineService(EnvelopeValidator envelopeValidator,
                                    PreferenceServiceClient preferenceServiceClient,
                                    NovuClient novuClient,
+                                   SmsCountryClient smsCountryClient,
                                    DispatchLogRepository dispatchLogRepository,
                                    NovuBridgeConfiguration config,
                                    MdmsServiceClient mdmsServiceClient,
@@ -54,6 +56,7 @@ public class DispatchPipelineService {
         this.envelopeValidator = envelopeValidator;
         this.preferenceServiceClient = preferenceServiceClient;
         this.novuClient = novuClient;
+        this.smsCountryClient = smsCountryClient;
         this.dispatchLogRepository = dispatchLogRepository;
         this.config = config;
         this.mdmsServiceClient = mdmsServiceClient;
@@ -202,6 +205,13 @@ public class DispatchPipelineService {
                 response = directDeliveryService.sendSms(contact.getPhone(), context.getRenderedBody(), context.getTransactionId());
             } else if ("EMAIL".equalsIgnoreCase(channel) && viaDirect) {
                 response = directDeliveryService.sendEmail(contact.getEmail(), context.getRenderedSubject(),
+                        context.getRenderedBody(), context.getTransactionId());
+            } else if ("SMS".equalsIgnoreCase(channel) && config.isSmsCountryDirect()) {
+                // SMSCountry's legacy API is form-encoded with a plain-text reply, which
+                // Novu's generic-sms provider cannot express, so that gateway is driven
+                // directly. Every other channel and gateway still goes through Novu.
+                response = smsCountryClient.send(
+                        contact != null ? contact.getPhone() : null,
                         context.getRenderedBody(), context.getTransactionId());
             } else {
                 // WHATSAPP always lands here, regardless of novu.bridge.direct.channels —
