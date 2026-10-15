@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { InboxSearchComposer, HeaderComponent, Toast, Loader } from "@egovernments/digit-ui-components";
 import { useTranslation } from "react-i18next";
+import { translateOr } from "../../utils/selectPlaceholder";
 import _ from "lodash";
 import PGRSearchInboxConfig from "../../configs/PGRSearchInboxConfig";
 import { useLocation } from "react-router-dom";
@@ -9,6 +10,7 @@ import useBusinessServiceStates from "../../hooks/pgr/useBusinessServiceStates";
 import useInboxVisibility from "../../hooks/pgr/useInboxVisibility";
 import PGRInboxTabs from "../../components/PGRInboxTabs";
 import Urls from "../../utils/urls";
+import { revealMenusIn } from "../../utils/revealMenu";
 
 // Defense-in-depth against a misconfigured MDMS regex causing catastrophic
 // backtracking (ReDoS, CWE-1333) when compiled below. Mobile-number patterns
@@ -49,7 +51,7 @@ function isSafeMobilePattern(pattern) {
  */
 
 const PGRSearchInbox = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   // Detect if the user is on a mobile device
   const isMobile = window.Digit.Utils.browser.isMobile();
@@ -171,6 +173,41 @@ const PGRSearchInbox = () => {
     };
   }
 
+  // The search card's reset reads "Clear", and the phone search sheet has a
+  // "Search By" header. The composer translates both itself, so they arrive as
+  // text: a tenant that hasn't seeded a key would otherwise show it raw.
+  if (configs?.sections?.search?.uiConfig?.secondaryLabel === "CS_COMMON_CLEAR") {
+    const uiConfig = configs.sections.search.uiConfig;
+    configs = {
+      ...configs,
+      sections: {
+        ...configs.sections,
+        search: {
+          ...configs.sections.search,
+          uiConfig: {
+            ...uiConfig,
+            secondaryLabel: translateOr(t, "CS_COMMON_CLEAR", "Clear"),
+            headerLabel: translateOr(t, uiConfig.headerLabel || "ES_COMMON_SEARCH_BY", "Search By"),
+          },
+        },
+      },
+    };
+  }
+  // The phone filter sheet is the same component as the search sheet, so
+  // without a header of its own it was titled "Search By".
+  if (configs?.sections?.filter?.uiConfig && !configs.sections.filter.uiConfig.headerLabel) {
+    configs = {
+      ...configs,
+      sections: {
+        ...configs.sections,
+        filter: {
+          ...configs.sections.filter,
+          uiConfig: { ...configs.sections.filter.uiConfig, headerLabel: translateOr(t, "ES_COMMON_FILTER_BY", "Filter By") },
+        },
+      },
+    };
+  }
+
   // Fetch the list of service definitions (e.g., complaint types) for current tenant
   const serviceDefs = Digit.Hooks.pgr.useServiceDefs(tenantId, "PGR");
 
@@ -222,8 +259,15 @@ const PGRSearchInbox = () => {
    */
   useEffect(() => {
     if (!visLoading) setPageConfig(_.cloneDeep(configs));
+    // The language is a dependency because the Clear label above is baked in
+    // as text, not a key the composer translates on each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location, visLoading, visibilityEnabled]);
+  }, [location, visLoading, visibilityEnabled, i18n?.language]);
+
+  // On desktop the filter's fields scroll inside their card (overrides.css);
+  // a dropdown opened near its bottom brings its menu into view.
+  const [pageRoot, setPageRoot] = useState(null);
+  useEffect(() => revealMenusIn(pageRoot, ".digit-section.filter .content-container"), [pageRoot]);
 
   /**
    * Show loader until necessary data is available
@@ -257,7 +301,7 @@ const PGRSearchInbox = () => {
   })();
 
   return (
-    <div className="v2-pgr-inbox v2-scope">
+    <div className="v2-pgr-inbox v2-scope" ref={setPageRoot}>
       {/* CCSD-2086: the system-name card in the inbox's left links panel read
           flush top-left. The shipped digit-inbox-search-links-container has NO
           padding / height / centering rule (only the legacy non-"digit-"
@@ -289,12 +333,12 @@ const PGRSearchInbox = () => {
         }
         /* Title and quick-links (e.g. "New Complaint") are both LEFT-aligned and
            share the same left edge, so they line up. The card content is still
-           vertically centred (container justify-content:center below); only the
-           horizontal alignment is left. Collapse the empty logo span so the
-           title starts at the true left edge, matching the link. */
+           vertically centred (container justify-content:center above); only the
+           horizontal alignment is left. The empty logo slot is NOT collapsed:
+           overrides.css fills it with the module icon and indents the links by
+           its width (#2038). */
         .v2-pgr-inbox .digit-inbox-search-links-header { justify-content: flex-start; text-align: left; margin-bottom: 0; }
         .v2-pgr-inbox .digit-inbox-search-links-header-text { text-align: left; }
-        .v2-pgr-inbox .digit-inbox-search-links-header-logo:empty { display: none; }
         .v2-pgr-inbox .digit-inbox-search-links-contents { align-items: flex-start; text-align: left; }
         .v2-pgr-inbox .digit-inbox-search-links-contents:not(:empty) { margin-top: 1rem; }
         /* Page title sat flush in the top-left corner (header padding 12px 0 8px

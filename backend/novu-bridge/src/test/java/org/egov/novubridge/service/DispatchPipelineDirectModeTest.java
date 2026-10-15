@@ -70,7 +70,7 @@ class DispatchPipelineDirectModeTest {
                 .thenReturn(NovuClient.NovuResponse.builder().statusCode(200).response(Map.of()).build());
 
         service = new DispatchPipelineService(envelopeValidator, preferenceServiceClient, novuClient,
-                dispatchLogRepository, config, mdmsServiceClient, directDeliveryService);
+                null, dispatchLogRepository, config, mdmsServiceClient, directDeliveryService);
     }
 
     private ComplaintsDomainEvent smsEvent() {

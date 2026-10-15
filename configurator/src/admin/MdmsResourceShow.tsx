@@ -11,6 +11,7 @@ import { useCanWriteResource } from '@/hooks/useCanWriteResource';
 import { groupShowFields, getRefMap, formatFieldLabel } from './schemaUtils';
 import type { SchemaDefinition, RefMapEntry } from './schemaUtils';
 import type { ReverseRef } from '@/hooks/useReverseRefs';
+import { useMastersCapability } from '@/hooks/useMastersCapability';
 
 export function MdmsResourceShow() {
   const resource = useResourceContext() ?? '';
@@ -19,13 +20,14 @@ export function MdmsResourceShow() {
   const { record } = useShowController();
   // Role gate (CCSD-1998): hide the Edit button on write-restricted resources.
   const canWrite = useCanWriteResource(resource);
+  const { canEditResource } = useMastersCapability();
 
   // Fetch schema definition and reverse refs
   const { definition } = useSchemaDefinition(config?.schema);
   const { refs: reverseRefs } = useReverseRefs(config?.schema);
 
   return (
-    <DigitShow title={record ? `${label}: ${record[config?.idField ?? 'id'] ?? record.id}` : label} hasEdit={canWrite}>
+    <DigitShow title={record ? `${label}: ${record[config?.idField ?? 'id'] ?? record.id}` : label} hasEdit={canWrite && canEditResource(resource)}>
       {(rec: Record<string, unknown>) => {
         if (definition) {
           return <SchemaShowContent rec={rec} definition={definition} reverseRefs={reverseRefs} />;
