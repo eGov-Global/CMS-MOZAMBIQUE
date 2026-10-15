@@ -70,6 +70,9 @@
     "*.posthog.com"
   ];
 
+  /* PostHog's own identity/session keys. See sanitize_properties below. */
+  var PH_ID_KEYS = ["distinct_id", "$device_id", "$session_id", "$window_id", "$anon_distinct_id"];
+
   /* Globals a CUSTOM record may never claim. */
   var GLOBAL_DENYLIST = [
     "Digit", "eGov", "globalConfigs", "contextPath", "globalPath", "i18next",
@@ -80,7 +83,7 @@
   /* The complete set of placeholders a CUSTOM template may use. Deliberately
    * no errorMessage, no href, no user, no token, no storage access. */
   var PLACEHOLDERS = [
-    "surface", "entrance", "stateTenant", "cityTenant", "page", "locale",
+    "surface", "entrance", "stateTenant", "cityTenant", "page", "url", "locale",
     "module", "contextPath", "referrerHost", "now", "eventName",
     "eventCategory", "eventAction", "eventLabel", "eventValue", "errorName"
   ];
@@ -307,7 +310,14 @@
    * including `ts` (a cache-buster with unbounded cardinality) and every id. */
   var QUERY_ALLOW = [
     "tenantId", "module", "moduleName", "masterName", "key", "locale",
-    "preview", "builderPreview"
+    "preview", "builderPreview",
+    /* `type` is what makes an error page legible: /user/error carries
+     * ?type=notfound|maintenance|error and without it every failure collapses
+     * into one indistinguishable row. Audited before allowing a key this
+     * generic — every `type=` the app puts in a URL is a closed enum
+     * (add, update, notfound, maintenance, performing-metric), none of it
+     * user data, and values still go through scrub() like any other. */
+    "type"
   ];
 
   var extraScrubbers = []; /* compiled from operator scrubPatterns, appended */
@@ -366,6 +376,42 @@
     var q = "";
     try { q = scrubQuery(window.location.search || ""); } catch (e) {}
     return scrub(path) + q;
+  }
+
+  /* The page path as actually served, context prefix intact.
+   *
+   * currentPage() strips the prefix on purpose so one route is one report row
+   * whichever entrance served it, and that is the right key to group and to
+   * derive a title from. It is the wrong thing to hand a provider as the page
+   * URL: Matomo resolves setCustomUrl relative to the origin, so the stripped
+   * path recorded https://host/employee/... — a 404, because the app is served
+   * under /digit-ui. Every row in Page URLs was unclickable.
+   *
+   * Taken from location.pathname rather than rebuilt from CONTEXT_PATH so it
+   * cannot disagree with the address bar on an entrance that serves some other
+   * prefix. Scrubbed on the same path as currentPage, so it carries no more
+   * than the grouping key does. */
+  function currentUrl() {
+    var path = "";
+    /* "/" and not "": an empty custom URL makes Matomo and PostHog fall back to
+     * document.URL, which is the raw address with the complaint id and any
+     * query still on it — the one path that bypasses scrub() entirely. */
+    try { path = window.location.pathname || "/"; } catch (e) { return "/"; }
+    var q = "";
+    try { q = scrubQuery(window.location.search || ""); } catch (e) {}
+    return scrub(path || "/") + q;
+  }
+
+  /* The served URL for a VIRTUAL pageview (trackPageView). The virtual path is
+   * app-relative like currentPage(), so it gets back exactly the prefix
+   * currentPage() would have stripped from the address bar — otherwise every
+   * wizard step would record the real route's URL and collapse into one row. */
+  function virtualUrl(appPath) {
+    var path = "";
+    try { path = window.location.pathname || ""; } catch (e) {}
+    var cp = contextPath();
+    var prefix = cp && path.indexOf("/" + cp) === 0 ? "/" + cp : "";
+    return prefix + appPath;
   }
 
   /* Shell-free public pages mounted directly under the context path (the PGR
@@ -584,7 +630,8 @@
       stateTenant: stateTenant(),
       cityTenant: city,
       tenantKnown: !!city,
-      page: currentPage(),
+      page: currentPage(),   /* grouping key: prefix stripped */
+      url: currentUrl(),     /* what a provider records: resolves as served */
       title: "",            /* filled per-record below: overrides are per-record */
       locale: currentLocale(),
       module: currentModule(),
@@ -789,19 +836,24 @@
    * total; the caller wraps every call and self-mutes after MAX_THROWS.  *
    * ------------------------------------------------------------------ */
 
-  /* THE ARRAY CHECK MUST ACCEPT NON-ARRAYS. Once matomo.js loads it REPLACES
-   * window._paq with a TrackerProxy OBJECT whose push() applies commands
-   * immediately. The old `isArray -> window[name] = []` test destroyed that
-   * proxy on the first post-load call, so only the initial queued pageview of
-   * each HARD page load ever reached Matomo — every SPA route change, virtual
-   * pageview and event after script load was silently dropped (the live
-   * "success pages are missing" bug). Anything with a callable push is a
-   * valid sink; only a missing/broken global is re-initialised. */
   function pushTo(name, args) {
     try {
       var q = window[name];
-      if (q && typeof q.push === "function") { q.push(args); return; }
-      window[name] = [args];
+      /* Only create the queue when there is nothing usable there.
+       *
+       * The array test was wrong once the vendor script loads. Matomo replaces
+       * window._paq with a TrackerProxy: not an array, but it does have push(),
+       * and pushing to it executes the command immediately. Testing isArray
+       * therefore threw that live proxy away on the very next call and put a
+       * fresh [] in its place — an array nothing drains. Everything after
+       * matomo.js finished loading went into it and was silently lost: every
+       * SPA route change, every trackEvent, every tagged click. Only the first
+       * pageview of a full page load survived, because that one is queued
+       * before the vendor script arrives and is drained when it does.
+       *
+       * GA4's dataLayer stays a real array, so it is unaffected either way. */
+      if (!q || typeof q.push !== "function") { q = []; window[name] = q; }
+      q.push(args);
     } catch (e) {}
   }
 
@@ -895,7 +947,7 @@
         pushTo("_paq", ["setTrackerUrl", endpoint]);
         pushTo("_paq", ["setSiteId", String(rec.siteId)]);
         matomoSetDimensions(rec, ctx);
-        pushTo("_paq", ["setCustomUrl", ctx.page]);
+        pushTo("_paq", ["setCustomUrl", ctx.url]);
         pushTo("_paq", ["setDocumentTitle", ctx.title || ctx.module || ctx.surface]);
         /* Matomo's own param exclusion, belt to the scrubber's braces. */
         pushTo("_paq", ["setExcludedQueryParams", ["mobileNumber", "mobileNo", "otp", "token", "authToken", "access_token", "uuid", "id", "individualId"]]);
@@ -909,7 +961,7 @@
       pageView: function (rec, ctx) {
         /* Re-set on every view: locale and city can change mid-session. */
         matomoSetDimensions(rec, ctx);
-        pushTo("_paq", ["setCustomUrl", ctx.page]);
+        pushTo("_paq", ["setCustomUrl", ctx.url]);
         if (ctx.title) pushTo("_paq", ["setDocumentTitle", ctx.title]);
         pushTo("_paq", ["trackPageView"]);
       },
@@ -937,7 +989,7 @@
         loadScript("https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(rec.measurementId));
       },
       pageView: function (rec, ctx) {
-        gtag("event", "page_view", { page_path: ctx.page, page_location: undefined, page_title: ctx.title || ctx.module || ctx.surface });
+        gtag("event", "page_view", { page_path: ctx.url, page_location: undefined, page_title: ctx.title || ctx.module || ctx.surface });
       },
       event: function (rec, ctx) {
         var e = ctx.event || {};
@@ -978,6 +1030,16 @@
                 for (var k in props) {
                   if (!props.hasOwnProperty(k)) continue;
                   var v = props[k];
+                  /* PostHog's own machine-generated ids pass through untouched.
+                   * They are opaque values PostHog created, not anything from
+                   * our app, and they are what every per-visitor and
+                   * per-session number is built on. They also happen to look
+                   * exactly like the UUIDs scrub() exists to redact, so
+                   * scrubbing them rewrote EVERY visitor to the literal
+                   * ":uuid" — one person for the entire audience, sessions
+                   * collapsed with it, and person_mode stuck at propertyless.
+                   * Everything else is still scrubbed. */
+                  if (indexOf(PH_ID_KEYS, k) !== -1) { out[k] = v; continue; }
                   out[k] = isStr(v) ? scrub(v) : v;
                 }
                 /* Vendor-injected URL properties are not covered by our page
@@ -995,15 +1057,15 @@
         });
       },
       pageView: function (rec, ctx) {
-        phCall("capture", ["$pageview", { $current_url: ctx.page, page_title: ctx.title, tenant: ctx.cityTenant || ctx.stateTenant, state_tenant: ctx.stateTenant, entrance: ctx.entrance, surface: ctx.surface, locale: ctx.locale }]);
+        phCall("capture", ["$pageview", { $current_url: ctx.url, page_title: ctx.title, tenant: ctx.cityTenant || ctx.stateTenant, state_tenant: ctx.stateTenant, entrance: ctx.entrance, surface: ctx.surface, locale: ctx.locale }]);
       },
       event: function (rec, ctx) {
         var e = ctx.event || {};
-        phCall("capture", [e.name || e.action || "event", { category: e.category || "ui", label: e.label || "", value: e.value, $current_url: ctx.page, tenant: ctx.cityTenant || ctx.stateTenant, entrance: ctx.entrance }]);
+        phCall("capture", [e.name || e.action || "event", { category: e.category || "ui", label: e.label || "", value: e.value, $current_url: ctx.url, tenant: ctx.cityTenant || ctx.stateTenant, entrance: ctx.entrance }]);
       },
       captureError: function (rec, ctx) {
         var er = ctx.error || {};
-        phCall("capture", ["error", { error_name: er.name || "Error", error_message: er.message || "", $current_url: ctx.page }]);
+        phCall("capture", ["error", { error_name: er.name || "Error", error_message: er.message || "", $current_url: ctx.url }]);
       }
     },
 
@@ -1129,6 +1191,10 @@
     m.stateTenant = ctx.stateTenant;
     m.cityTenant = ctx.cityTenant;
     m.page = ctx.page;
+    /* The path as served. `page` is the grouping key with the app prefix
+     * stripped, which is the shape that recorded 404s; a CUSTOM adapter
+     * pointing its own collector at a URL wants this one. */
+    m.url = ctx.url;
     m.locale = ctx.locale;
     m.module = ctx.module;
     m.contextPath = ctx.contextPath;
@@ -1346,7 +1412,7 @@
     var ctx = buildCtx(null);
     if (ctx.dnt) return;
     if (isStr(overridePage) && overridePage) {
-      ctx = extendCtx(ctx, { page: overridePage, title: isStr(overrideTitle) ? overrideTitle : "" });
+      ctx = extendCtx(ctx, { page: overridePage, url: virtualUrl(overridePage), title: isStr(overrideTitle) ? overrideTitle : "" });
     }
     for (var i = 0; i < live.length; i++) {
       if (live[i].record.disablePageViews === true) continue;

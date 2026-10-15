@@ -18,11 +18,9 @@ const App = () => {
   return (
     <React.Fragment>
       <div className="pgr-citizen-wrapper">
-        {/* Hide the top Back on the response page AND the create-complaint wizard
-            (the wizard has its own footer Back/Cancel — a second one up top is redundant). */}
-        {!location.pathname.includes("/response") && !location.pathname.includes("/create-complaint") && (
-          <BackButton>{t("CS_COMMON_BACK")}</BackButton>
-        )}
+        {/* Filing has its own Back in the step footer and a complaint has its
+            breadcrumb (#2038 design); the other screens keep this one. */}
+        {!/\/(response|create-complaint|complaints\/.+)/.test(location.pathname) && <BackButton>{t("CS_COMMON_BACK")}</BackButton>}
         <Switch>
           <PrivateRoute path={`${path}/create-complaint`} component={CreatePGRFlow} />
           {/* <PrivateRoute path={`${path}/create-complaint`} component={CreateComplaint} /> */}

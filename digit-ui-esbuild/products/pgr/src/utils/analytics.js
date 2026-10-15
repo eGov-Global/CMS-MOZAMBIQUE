@@ -7,6 +7,11 @@
 // must never assume it exists, and a tracking call must never throw into a
 // render or a submit handler.
 //
+// Most controls are tagged declaratively with `data-analytics-event`, which the
+// shim's click listener picks up (CCRS#2007). This module is for what a click
+// listener structurally cannot see: an option chosen inside a menu component,
+// or the outcome of a request that happens long after the click.
+//
 // NAMING — one style only (mirrors Matomo's Category / Action / Name):
 //   Category: PascalCase noun    — Complaint, Authentication, Navigation,
 //                                  Search, Error, Attachment, Workflow
@@ -116,8 +121,13 @@ export function trackPage(virtualPath, title) {
  *  compatibility with earlier call sites. */
 export function trackEvent(name, props) {
   try {
-    window?.DigitAnalytics?.trackEvent?.(name, props);
+    if (typeof window === "undefined") return;
+    const api = window.DigitAnalytics;
+    if (!api || typeof api.trackEvent !== "function") return;
+    api.trackEvent(name, props || {});
   } catch (e) {
     /* analytics must never break the page */
   }
 }
+
+export default trackEvent;
