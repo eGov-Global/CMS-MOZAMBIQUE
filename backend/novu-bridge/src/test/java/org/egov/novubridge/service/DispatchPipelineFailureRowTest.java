@@ -72,7 +72,7 @@ class DispatchPipelineFailureRowTest {
         when(preferenceServiceClient.isChannelAllowed(anyString(), any(), any(), anyString()))
                 .thenReturn(true);
 
-        service = new DispatchPipelineService(envelopeValidator, preferenceServiceClient, novuClient,
+        service = new DispatchPipelineService(envelopeValidator, preferenceServiceClient, novuClient, null,
                 dispatchLogRepository, config, mdmsServiceClient, directDeliveryService);
     }
 

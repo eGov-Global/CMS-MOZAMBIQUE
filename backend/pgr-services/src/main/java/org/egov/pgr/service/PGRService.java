@@ -4,7 +4,11 @@ package org.egov.pgr.service;
 import com.jayway.jsonpath.JsonPath;
 import lombok.extern.slf4j.Slf4j;
 import org.egov.common.contract.request.RequestInfo;
+import org.egov.pgr.policy.PgrSearchScope;
 import org.egov.pgr.config.PGRConfiguration;
+import org.egov.pgr.policy.AccessPolicyRegistry;
+import org.egov.pgr.policy.FieldVisibilityService;
+import org.egov.pgr.policy.SearchAccessPolicyService;
 import org.egov.pgr.producer.Producer;
 import org.egov.pgr.repository.PGRRepository;
 import org.egov.pgr.util.MDMSUtils;
@@ -23,7 +27,6 @@ import org.springframework.util.CollectionUtils;
 import java.util.*;
 
 import static org.egov.pgr.util.PGRConstants.MDMS_DEPARTMENT_SEARCH;
-import static org.egov.pgr.util.PGRConstants.MDMS_DEPARTMENT_NAME_SEARCH;
 import static org.egov.pgr.util.PGRConstants.MDMS_SERVICENAME_SEARCH;
 import static org.egov.pgr.util.PGRConstants.ROLE_CONFIDENTIAL_VIEWER;
 import static org.egov.pgr.util.PGRConstants.MASK_SENTINEL;
@@ -42,8 +45,6 @@ public class PGRService {
     private UserService userService;
 
     private WorkflowService workflowService;
-
-    private ServiceRequestValidator serviceRequestValidator;
 
     private ServiceRequestValidator validator;
 
@@ -66,20 +67,30 @@ public class PGRService {
     private EmployeeDepartmentScopeService employeeDepartmentScopeService;
 
     private EmployeeJurisdictionScopeService employeeJurisdictionScopeService;
+    private SearchAccessPolicyService searchAccessPolicyService;
+
+    private FieldVisibilityService fieldVisibilityService;
+
+    private EscalationService escalationService;
+
+    private EscalationLockManager escalationLockManager;
 
     @Autowired
     public PGRService(EnrichmentService enrichmentService, UserService userService, WorkflowService workflowService,
-                      ServiceRequestValidator serviceRequestValidator, ServiceRequestValidator validator, Producer producer,
+                      ServiceRequestValidator validator, Producer producer,
                       PGRConfiguration config, PGRRepository repository, MDMSUtils mdmsUtils,
                       ComplaintDomainEventService complaintDomainEventService, PGRUtils pgrUtils,
                       ExtendedAttributesValidationService extendedAttributesValidationService,
                       EncryptionDecryptionService encryptionDecryptionService,
                       EmployeeDepartmentScopeService employeeDepartmentScopeService,
-                      EmployeeJurisdictionScopeService employeeJurisdictionScopeService) {
+                      EmployeeJurisdictionScopeService employeeJurisdictionScopeService,
+                      SearchAccessPolicyService searchAccessPolicyService,
+                      FieldVisibilityService fieldVisibilityService,
+                      EscalationService escalationService,
+                      EscalationLockManager escalationLockManager) {
         this.enrichmentService = enrichmentService;
         this.userService = userService;
         this.workflowService = workflowService;
-        this.serviceRequestValidator = serviceRequestValidator;
         this.validator = validator;
         this.producer = producer;
         this.config = config;
@@ -91,6 +102,10 @@ public class PGRService {
         this.encryptionDecryptionService = encryptionDecryptionService;
         this.employeeDepartmentScopeService = employeeDepartmentScopeService;
         this.employeeJurisdictionScopeService = employeeJurisdictionScopeService;
+        this.searchAccessPolicyService = searchAccessPolicyService;
+        this.fieldVisibilityService = fieldVisibilityService;
+        this.escalationService = escalationService;
+        this.escalationLockManager = escalationLockManager;
     }
 
 
@@ -105,7 +120,7 @@ public class PGRService {
 		Object mdmsData = mdmsUtils.mDMSCall(request);
 		validator.validateCreate(request, mdmsData);
 		enrichmentService.enrichCreateRequest(request);
-		workflowService.updateWorkflowStatus(request);
+		escalationService.prepareCreate(request.getService());
 
 		Service service = request.getService();
 
@@ -120,6 +135,7 @@ public class PGRService {
 		ExtendedAttributes ext = service.getExtendedAttributes();
 		ComplaintTemplateTypeConfig cfg = null;
 		ExtendedAttributes plainExt = null;
+		EnrichmentService.UserContactDetails pendingContact = null;
 		if (ext != null) {
 			if (ext.getIsConfidential() == null) ext.setIsConfidential(false);
 			cfg = mdmsUtils.fetchComplaintTemplateTypeConfig(
@@ -131,8 +147,11 @@ public class PGRService {
 			plainExt = ext.copy(); // snapshot before encrypt — avoids decrypt round-trip for response
 			service.setExtendedAttributes(
 					encryptionDecryptionService.encrypt(ext, cfg, tenantId));
-			enrichmentService.enrichUserContactDetails(request);
+			pendingContact = enrichmentService.detachUserContactDetails(request);
+			enrichmentService.syncUserContactDetails(request, pendingContact);
 		}
+
+		workflowService.updateWorkflowStatus(request);
 
 		complaintDomainEventService.publishWorkflowTransitionEvent(request, fromState);
 
@@ -169,6 +188,9 @@ public class PGRService {
         if(criteria.getMobileNumber()!=null && CollectionUtils.isEmpty(criteria.getUserIds()))
             return new ArrayList<>();
 
+        String tenantIdForScope = criteria.getTenantId() != null ? criteria.getTenantId() : requestInfo.getUserInfo().getTenantId();
+        PgrSearchScope scope = searchAccessPolicyService.resolveScope(requestInfo, tenantIdForScope, config.getStateLevelTenantIdLength());
+
         if (criteria.getAssignee() != null) {
             String tenantId = criteria.getTenantId() != null ? criteria.getTenantId()
                     : (requestInfo.getUserInfo() != null ? requestInfo.getUserInfo().getTenantId() : null);
@@ -181,10 +203,15 @@ public class PGRService {
 
         criteria.setIsPlainSearch(false);
 
-        List<ServiceWrapper> serviceWrappers = repository.getServiceWrappers(criteria);
+        List<ServiceWrapper> serviceWrappers = repository.getServiceWrappers(criteria, scope);
 
         if(CollectionUtils.isEmpty(serviceWrappers))
             return new ArrayList<>();;
+
+        serviceWrappers = searchAccessPolicyService.enforce(requestInfo, tenantIdForScope, scope, serviceWrappers);
+
+        if(CollectionUtils.isEmpty(serviceWrappers))
+            return new ArrayList<>();
 
         userService.enrichUsers(serviceWrappers, requestInfo);
         List<ServiceWrapper> enrichedServiceWrappers = workflowService.enrichWorkflow(requestInfo,serviceWrappers);
@@ -193,6 +220,8 @@ public class PGRService {
                 : (requestInfo.getUserInfo() != null ? requestInfo.getUserInfo().getTenantId() : null);
         Map<String, ComplaintTemplateTypeConfig> configCache = buildConfigCache(requestInfo, tenantIdForMdms, enrichedServiceWrappers);
         applyDecryptOrMask(enrichedServiceWrappers, requestInfo, configCache);
+        fieldVisibilityService.apply(requestInfo, tenantIdForScope, scope,
+                AccessPolicyRegistry.PGR_REQUEST_SEARCH_URL, "complaint", enrichedServiceWrappers);
 
         // NOTE: do not re-sort enrichedServiceWrappers here. It used to be
         // regrouped into a createdTime-descending TreeMap unconditionally,
@@ -210,17 +239,43 @@ public class PGRService {
 
 
     /**
-     * Updates the complaint (used to forward the complaint from one application status to another)
+     * Updates a complaint through the normal validation, workflow, persistence,
+     * inbox, domain-event, and notification pipeline.
      * @param request The request containing the complaint to be updated
      * @return
      */
     public ServiceRequest update(ServiceRequest request){
+        return updateWithEscalationLock(request, false);
+    }
+
+    /** Scheduler entry point: same update pipeline, with unchanged encrypted fields preserved. */
+    public ServiceRequest updateAutomaticEscalation(ServiceRequest request) {
+        return updateWithEscalationLock(request, true);
+    }
+
+    private ServiceRequest updateWithEscalationLock(ServiceRequest request, boolean automaticEscalation) {
+        boolean escalation = request.getWorkflow() != null
+                && org.egov.pgr.util.PGRConstants.ESCALATE.equalsIgnoreCase(request.getWorkflow().getAction());
+        if (!escalation) {
+            return updateInternal(request, false);
+        }
+        Service service = request.getService();
+        return escalationLockManager.withComplaintLock(service.getTenantId(), service.getId(),
+                () -> updateInternal(request, automaticEscalation));
+    }
+
+    private ServiceRequest updateInternal(ServiceRequest request, boolean automaticEscalation) {
         String tenantId = request.getService().getTenantId();
         String fromState = request.getService().getApplicationStatus();
         Object mdmsData = mdmsUtils.mDMSCall(request);
-        validator.validateUpdate(request, mdmsData);
+        Service persistedService = validator.validateUpdate(request, mdmsData);
+        fromState = persistedService.getApplicationStatus();
+        if (automaticEscalation) {
+            escalationService.prepareUpdate(request, persistedService, true);
+        } else {
+            escalationService.prepareUpdate(request, persistedService);
+        }
         enrichmentService.enrichUpdateRequest(request);
-        workflowService.updateWorkflowStatus(request);
 
         Service updateService = request.getService();
 		Map<String, Object> existing = pgrUtils.extractAdditionalDetails(updateService.getAdditionalDetail());
@@ -237,7 +292,8 @@ public class PGRService {
 		ExtendedAttributes updatedExt = updateService.getExtendedAttributes();
 		ComplaintTemplateTypeConfig cfg = null;
 		ExtendedAttributes plainExt = null;
-		if (updatedExt != null) {
+		EnrichmentService.UserContactDetails pendingContact = null;
+		if (updatedExt != null && !automaticEscalation) {
 			if (updatedExt.getIsConfidential() == null) updatedExt.setIsConfidential(false);
 			cfg = mdmsUtils.fetchComplaintTemplateTypeConfig(
 					request.getRequestInfo(), tenantId, updatedExt.getCaseRelatedTo());
@@ -253,12 +309,20 @@ public class PGRService {
 				encryptionDecryptionService.maskAllPlaintext(plainExt, cfg);
 			updateService.setExtendedAttributes(
 					encryptionDecryptionService.encrypt(updatedExt, cfg, tenantId));
-			enrichmentService.enrichUserContactDetails(request);
+			pendingContact = enrichmentService.detachUserContactDetails(request);
+			enrichmentService.syncUserContactDetails(request, pendingContact);
 		}
+
+        workflowService.updateWorkflowStatus(request);
 
         complaintDomainEventService.publishWorkflowTransitionEvent(request, fromState);
         producer.push(tenantId, config.getUpdateTopic(), request);
         producer.push(tenantId, config.getInboxUpdateTopic(), request);
+        if (request.getWorkflow() != null
+                && org.egov.pgr.util.PGRConstants.ESCALATE.equalsIgnoreCase(request.getWorkflow().getAction())) {
+            producer.push(tenantId, config.getEscalationKafkaTopic(),
+                    escalationService.buildEscalationEvent(request));
+        }
 
 		if (plainExt != null)
 			updateService.setExtendedAttributes(plainExt);
@@ -318,7 +382,9 @@ public class PGRService {
         if (!applyEmployeeJurisdictionScope(requestInfo, criteria))
             return 0;
 
-        Integer count = repository.getCount(criteria);
+        String tenantIdForScope = criteria.getTenantId() != null ? criteria.getTenantId() : requestInfo.getUserInfo().getTenantId();
+        PgrSearchScope scope = searchAccessPolicyService.resolveScope(requestInfo, tenantIdForScope, config.getStateLevelTenantIdLength());
+        Integer count = repository.getCount(criteria, scope);
         return count;
     }
 
@@ -413,6 +479,14 @@ public class PGRService {
                 : (requestInfo.getUserInfo() != null ? requestInfo.getUserInfo().getTenantId() : null);
         Map<String, ComplaintTemplateTypeConfig> configCache = buildConfigCache(requestInfo, tenantIdForMdms, enrichedServiceWrappers);
         applyDecryptOrMask(enrichedServiceWrappers, requestInfo, configCache);
+
+        // plainSearch stays record-level unrestricted (see PGRRepository/PGRQueryBuilder — no scope
+        // threaded into the query) AND, deliberately, unrestricted at the field-visibility level too:
+        // _plainsearch is a distinct endpoint from _search and must not reuse _search's
+        // ACCESSCONTROL-ACTIONS-TEST action/policy (id 2008) for field masking here — that policy's
+        // scope/attributes were authored for _search's semantics, not this endpoint's. If
+        // _plainsearch needs field-level masking, it needs its own action + policy end-to-end
+        // (row AND field), not a borrowed one.
 
         Map<Long, List<ServiceWrapper>> sortedWrappers = new TreeMap<>(Collections.reverseOrder());
         for(ServiceWrapper svc : enrichedServiceWrappers){
@@ -559,19 +633,15 @@ public class PGRService {
                 return "NA";
             }
 
+            // Stored as the MDMS department CODE, not its display name: PGRQueryBuilder's
+            // department scope filter and the assignment flow (PGRDetails.js stamping the
+            // assignee's raw HRMS department code onto this same field) both compare against
+            // the code, and HRMS employee assignments only ever carry the code.
             String departmentCode = departmentCodeList.get(0);
-            String nameJsonPath = MDMS_DEPARTMENT_NAME_SEARCH.replace("{CODE}", departmentCode);
-
-            try {
-                List<String> departmentNameList = JsonPath.read(mdmsData, nameJsonPath);
-                if (departmentNameList != null && !departmentNameList.isEmpty()) {
-                    return departmentNameList.get(0);
-                }
-            } catch (Exception e) {
-                log.warn("Failed to parse MDMS response for department name lookup, code: {}. Falling back to code.", departmentCode, e);
-            }
-
-            return departmentCode;
+            if (departmentCode == null)
+                return "NA";
+            String normalized = departmentCode.trim();
+            return normalized.isEmpty() || normalized.equalsIgnoreCase("NA") ? "NA" : normalized;
         } catch (Exception e) {
             log.warn("Failed to parse MDMS response for department lookup, service: {}. Defaulting to NA.", serviceCode, e);
             return "NA";

@@ -122,6 +122,18 @@ public class NovuBridgeConfiguration {
     @Value("${novu.bridge.workflow.id.email:complaints-email}")
     private String novuWorkflowEmail;
 
+    // ---- WhatsApp needs its own Twilio integration, explicitly targeted ----
+    // Novu resolves which integration to use per channel by picking the PRIMARY
+    // one for that channel UNLESS the trigger names an explicit
+    // overrides.<channel>.integrationIdentifier. Twilio WhatsApp delivery is
+    // modeled in Novu as an "sms"-channel step (see TwilioProviderStrategy), so
+    // a second, WhatsApp-registered Twilio integration living alongside the
+    // primary (plain SMS) one on that same "sms" channel is otherwise never
+    // picked. Set this to the identifier of that distinct WhatsApp integration
+    // to route WHATSAPP triggers there. Blank (the default) = no override.
+    @Value("${novu.bridge.integration.id.whatsapp:}")
+    private String whatsappIntegrationId;
+
     // ---- OTP delivery via Ozeki (independent of the PGR pass-through above) ----
     // Empty (default) = OTP triggers plain, Novu's primary SMS integration
     // delivers. "ozeki" = attach the Ozeki generic-sms overrides envelope
@@ -159,6 +171,30 @@ public class NovuBridgeConfiguration {
         return smsProvider != null && "ozeki".equalsIgnoreCase(smsProvider.trim());
     }
 
+    // ---- SMSCountry legacy bulk API (direct, not via Novu) ----
+    // smsProvider = "smscountry" sends the PGR SMS leg straight to SMSCountry.
+    // Its form-encoded request and plain-text response cannot ride Novu's
+    // generic-sms provider, which injects a JSON _passthrough body, so
+    // SmsCountryClient talks to the gateway directly. Credentials are the
+    // SMSCountry panel login; that account type issues no API key.
+    // Registered sender id / header the gateway sends from.
+    @Value("${novu.bridge.sms.sender.id:}")
+    private String smsSenderId;
+
+    @Value("${novu.bridge.smscountry.url:http://api.smscountry.com/SMSCwebservice_bulk.aspx}")
+    private String smsCountryUrl;
+
+    @Value("${novu.bridge.smscountry.user:}")
+    private String smsCountryUser;
+
+    @Value("${novu.bridge.smscountry.password:}")
+    private String smsCountryPassword;
+
+    /** True when the SMS leg should bypass Novu and go straight to SMSCountry. */
+    public boolean isSmsCountryDirect() {
+        return "smscountry".equalsIgnoreCase(smsProvider == null ? "" : smsProvider.trim());
+    }
+
     // ---- Direct delivery (bypass Novu entirely) ----
     // Per-channel: a channel listed here is delivered WITHOUT Novu at all (SMS via
     // Ozeki's HTTP API directly, EMAIL via SMTP directly), independent of
@@ -193,7 +229,12 @@ public class NovuBridgeConfiguration {
     // (e.g. WHATSAPP until a legitimate provider is onboarded as a Novu
     // integration) is persisted as SKIPPED / NB_NO_PROVIDER — an honest,
     // debuggable outcome, never a fallback to another channel.
-    @Value("#{'${novu.bridge.channels.enabled:SMS,EMAIL}'.split(',')}")
+    // No default channel. An empty list matches nothing in isChannelEnabled, so
+    // every event is SKIPPED/NB_NO_PROVIDER until an operator names the channels
+    // they have actually configured a provider for. Defaulting to SMS,EMAIL meant
+    // a deployment that never set this attempted email dispatch with no SMTP
+    // provider onboarded, and failed silently on every complaint.
+    @Value("#{'${novu.bridge.channels.enabled:}'.split(',')}")
     private java.util.List<String> channelsEnabled;
 
     public boolean isChannelEnabled(String channel) {
