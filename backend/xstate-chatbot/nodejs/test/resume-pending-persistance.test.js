@@ -145,3 +145,16 @@ test("answering 1 reads the expired state back from the row and clears the marke
   assert.equal(repo.row.state, '{"resumed":true}');
   assert.deepEqual(sent, ["Onde?"], "the citizen gets the prompt they were on");
 });
+
+test("an expired session resting at the menu starts fresh without asking", async () => {
+  repo.calls = [];
+  repo.row = { chatState: { value: { pgr: { menu: "question" } }, toPersistableState: () => ({ state: "{}" }), context: {} }, resumePendingAt: null, lastActivity: Date.now() - AVG_SESSION_MINUTES * 60 * 1000 * 2 };
+  sent.length = 0;
+
+  const result = await chatService.getOrCreateChatState("u1", user, model({ input: "Olá" }));
+
+  assert.ok(result, "the turn continues with a fresh session");
+  assert.ok(!repo.calls.includes("setResumePending"), "no resume prompt is marked");
+  assert.ok(repo.calls.includes("updateState"), "the row is reset to the fresh state");
+  assert.deepEqual(sent, [], "the citizen is not asked to resume");
+});

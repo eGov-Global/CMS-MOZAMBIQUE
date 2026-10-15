@@ -10,6 +10,9 @@ const messages = require("../machine/flow/shell-messages");
 const { hasActiveInvoke, waitUntilSettled } = require("./invoke-state");
 const { enqueuePersist, pendingPersist } = require("./persist-queue");
 
+// Where a finished or untouched conversation waits for the citizen's next message.
+const RESTING_STATES = [JSON.stringify("start"), JSON.stringify({ pgr: { menu: "question" } })];
+
 
 class ChatService {
   constructor(sessionManager) {
@@ -111,6 +114,14 @@ class ChatService {
       return existingState;
     }
 
+    // Expired at a resting point (main menu, or the start gate): nothing to
+    // resume, so start fresh instead of asking.
+    if (existingState && isExpiredSession && this.isAtRest(existingState)) {
+      const chatState = this.createChatStateFor(user);
+      await chatStateRepository.updateState(sessionUserId, true, chatState.toPersistableState().state, new Date().getTime());
+      return chatState;
+    }
+
     if (existingState && isExpiredSession) {
       // The expired blob stays in the row untouched; only the "awaiting an answer"
       // marker is new, so a restart resumes the prompt rather than losing it.
@@ -175,6 +186,11 @@ class ChatService {
   }
 
 
+
+  isAtRest(chatState) {
+    const value = JSON.stringify(chatState && chatState.value);
+    return RESTING_STATES.includes(value);
+  }
 
   // Postgres tracks last-activity time_stamp; InMemory doesn't need this
   // feature, so it simply has no getLastActivityTimestamp to call.
