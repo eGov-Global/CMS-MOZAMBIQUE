@@ -1,6 +1,9 @@
 # OpenSSF Scorecard - supply-chain security health check for eGov-Global/CMS-MOZAMBIQUE.
 # Runs the Scorecard analysis and publishes results to the GitHub Security tab (code scanning)
 # and to the public OpenSSF viewer (https://scorecard.dev/viewer/?uri=github.com/eGov-Global/CMS-MOZAMBIQUE).
+# OpenSSF Scorecard - supply-chain security health check for egovernments/Citizen-Complaint-Resolution-System.
+# Runs the Scorecard analysis and publishes results to the GitHub Security tab (code scanning)
+# and to the public OpenSSF viewer (https://scorecard.dev/viewer/?uri=github.com/egovernments/Citizen-Complaint-Resolution-System).
 # Aligned with the eGov OpenSSF guideline. All actions are pinned to full commit SHAs.
 name: Scorecard supply-chain security
 

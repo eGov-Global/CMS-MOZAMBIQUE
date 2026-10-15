@@ -11082,7 +11082,8 @@ img {
   width: 3.875rem;
   height: 4rem;
   -o-object-fit: cover;
-  object-fit: cover; }
+  object-fit: cover; 
+  border-radius: 50%; }
 
 .tooltip-wrapper {
   position: relative;

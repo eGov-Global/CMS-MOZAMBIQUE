@@ -1,0 +1,205 @@
+package org.egov.pgr.service;
+
+import org.egov.common.contract.request.RequestInfo;
+import org.egov.common.contract.request.User;
+import org.egov.pgr.config.PGRConfiguration;
+import org.egov.pgr.policy.FieldVisibilityService;
+import org.egov.pgr.policy.PgrSearchScope;
+import org.egov.pgr.policy.SearchAccessPolicyService;
+import org.egov.pgr.producer.Producer;
+import org.egov.pgr.repository.PGRRepository;
+import org.egov.pgr.util.MDMSUtils;
+import org.egov.pgr.util.PGRUtils;
+import org.egov.pgr.validator.ServiceRequestValidator;
+import org.egov.pgr.web.models.AuditDetails;
+import org.egov.pgr.web.models.RequestSearchCriteria;
+import org.egov.pgr.web.models.Service;
+import org.egov.pgr.web.models.ServiceWrapper;
+import org.egov.pgr.web.models.ServiceRequest;
+import org.egov.pgr.web.models.Workflow;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+/**
+ * Verifies PGRService.search()/count() resolve an RBAC scope via SearchAccessPolicyService,
+ * thread it into the repository call, and re-check the fetched page through policy enforcement —
+ * the end-to-end wiring for the access-control policy reference rule.
+ */
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
+class PGRServiceTest {
+
+    @Mock private EnrichmentService enrichmentService;
+    @Mock private UserService userService;
+    @Mock private WorkflowService workflowService;
+    @Mock private ServiceRequestValidator validator;
+    @Mock private Producer producer;
+    @Mock private PGRConfiguration config;
+    @Mock private PGRRepository repository;
+    @Mock private MDMSUtils mdmsUtils;
+    @Mock private ComplaintDomainEventService complaintDomainEventService;
+    @Mock private PGRUtils pgrUtils;
+    @Mock private ExtendedAttributesValidationService extendedAttributesValidationService;
+    @Mock private EncryptionDecryptionService encryptionDecryptionService;
+    @Mock private SearchAccessPolicyService searchAccessPolicyService;
+    @Mock private FieldVisibilityService fieldVisibilityService;
+    @Mock private EscalationService escalationService;
+    @Mock private EscalationLockManager escalationLockManager;
+    @Mock private EmployeeDepartmentScopeService employeeDepartmentScopeService;
+    @Mock private EmployeeJurisdictionScopeService employeeJurisdictionScopeService;
+
+    private PGRService pgrService;
+
+    @BeforeEach
+    void setup() {
+        when(config.getStateLevelTenantIdLength()).thenReturn(2);
+        pgrService = new PGRService(enrichmentService, userService, workflowService, validator, producer,
+                config, repository, mdmsUtils, complaintDomainEventService, pgrUtils,
+                extendedAttributesValidationService, encryptionDecryptionService,
+                employeeDepartmentScopeService, employeeJurisdictionScopeService, searchAccessPolicyService,
+                fieldVisibilityService, escalationService, escalationLockManager);
+        // Department/jurisdiction scoping is opt-in per deployment and covered by its own tests;
+        // leave criteria untouched here so these tests exercise only the access-policy scope.
+        when(employeeDepartmentScopeService.applyScope(any(), any(), any())).thenReturn(true);
+        when(employeeJurisdictionScopeService.applyScope(any(), any(), any())).thenReturn(true);
+    }
+
+    @Test
+    void searchResolvesScopeAndKeepsPolicyAllowedResults() {
+        RequestInfo requestInfo = requestInfo("citizen-1", "CITIZEN", "pg.city");
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").serviceRequestId("SR-1").build();
+        PgrSearchScope scope = new PgrSearchScope("pg.city", false, "citizen-1", null, null);
+        ServiceWrapper wrapper = wrapper("citizen-1");
+
+        when(searchAccessPolicyService.resolveScope(eq(requestInfo), eq("pg.city"), anyInt())).thenReturn(scope);
+        when(repository.getServiceWrappers(criteria, scope)).thenReturn(new ArrayList<>(List.of(wrapper)));
+        when(searchAccessPolicyService.enforce(eq(requestInfo), eq("pg.city"), eq(scope), anyList())).thenReturn(List.of(wrapper));
+        when(workflowService.enrichWorkflow(eq(requestInfo), anyList())).thenAnswer(inv -> inv.getArgument(1));
+
+        List<ServiceWrapper> result = pgrService.search(requestInfo, criteria);
+
+        assertEquals(1, result.size());
+        verify(repository).getServiceWrappers(criteria, scope);
+        verify(searchAccessPolicyService).enforce(requestInfo, "pg.city", scope, List.of(wrapper));
+    }
+
+    @Test
+    void searchReturnsEmptyWhenPolicyEnforcementDropsEverything() {
+        RequestInfo requestInfo = requestInfo("citizen-1", "CITIZEN", "pg.city");
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").serviceRequestId("SR-1").build();
+        PgrSearchScope scope = new PgrSearchScope("pg.city", false, "citizen-1", null, null);
+        ServiceWrapper wrapper = wrapper("citizen-2");
+
+        when(searchAccessPolicyService.resolveScope(any(), any(), anyInt())).thenReturn(scope);
+        when(repository.getServiceWrappers(criteria, scope)).thenReturn(new ArrayList<>(List.of(wrapper)));
+        when(searchAccessPolicyService.enforce(eq(requestInfo), eq("pg.city"), eq(scope), anyList())).thenReturn(new ArrayList<>());
+
+        List<ServiceWrapper> result = pgrService.search(requestInfo, criteria);
+
+        assertTrue(result.isEmpty());
+        verify(userService, never()).enrichUsers(any(), any());
+    }
+
+    @Test
+    void countResolvesScopeAndPassesItToTheRepository() {
+        RequestInfo requestInfo = requestInfo("emp-1", "EMPLOYEE", "pg.city");
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").build();
+        PgrSearchScope scope = new PgrSearchScope("pg.city", false, null, List.of("SANITATION"), null);
+
+        when(searchAccessPolicyService.resolveScope(eq(requestInfo), eq("pg.city"), anyInt())).thenReturn(scope);
+        when(repository.getCount(criteria, scope)).thenReturn(3);
+
+        Integer count = pgrService.count(requestInfo, criteria);
+
+        assertEquals(3, count);
+        verify(repository).getCount(criteria, scope);
+    }
+
+    @Test
+    void escalationUsesTheNormalUpdatePipelineAndPublishesOneEscalationEvent() {
+        RequestInfo requestInfo = requestInfo("employee-1", "EMPLOYEE", "ke.bomet");
+        Service incoming = Service.builder()
+                .id("id-1")
+                .tenantId("ke.bomet")
+                .serviceCode("ROAD.POTHOLE")
+                .serviceRequestId("PGR-1")
+                .source("web")
+                .additionalDetail(Map.of("department", "ROADS"))
+                .build();
+        Service persisted = Service.builder()
+                .id("id-1")
+                .tenantId("ke.bomet")
+                .serviceCode("ROAD.POTHOLE")
+                .serviceRequestId("PGR-1")
+                .applicationStatus("PENDINGATLME")
+                .additionalDetail(Map.of("department", "ROADS"))
+                .build();
+        ServiceRequest request = ServiceRequest.builder()
+                .requestInfo(requestInfo)
+                .service(incoming)
+                .workflow(Workflow.builder().action("ESCALATE").build())
+                .build();
+
+        when(mdmsUtils.mDMSCall(request)).thenReturn(Map.of());
+        when(validator.validateUpdate(request, Map.of())).thenReturn(persisted);
+        when(pgrUtils.extractAdditionalDetails(any())).thenReturn(Map.of("department", "ROADS"));
+        when(pgrUtils.deepMerge(any(), any())).thenReturn(Map.of("department", "ROADS"));
+        when(config.getUpdateTopic()).thenReturn("pgr-update");
+        when(config.getInboxUpdateTopic()).thenReturn("pgr-inbox-update");
+        when(config.getEscalationKafkaTopic()).thenReturn("pgr-escalation-events");
+        when(escalationService.buildEscalationEvent(request)).thenReturn(Map.of("serviceRequestId", "PGR-1"));
+        when(escalationLockManager.withComplaintLock(any(), any(), any())).thenAnswer(invocation -> {
+            Supplier<ServiceRequest> operation = invocation.getArgument(2);
+            return operation.get();
+        });
+
+        pgrService.update(request);
+
+        verify(escalationService).prepareUpdate(request, persisted);
+        verify(enrichmentService).enrichUpdateRequest(request);
+        verify(workflowService).updateWorkflowStatus(request);
+        verify(complaintDomainEventService).publishWorkflowTransitionEvent(request, "PENDINGATLME");
+        verify(producer).push("ke.bomet", "pgr-update", request);
+        verify(producer).push("ke.bomet", "pgr-inbox-update", request);
+        verify(producer).push(eq("ke.bomet"), eq("pgr-escalation-events"), any());
+    }
+
+    private RequestInfo requestInfo(String uuid, String type, String tenantId) {
+        User user = new User();
+        user.setUuid(uuid);
+        user.setType(type);
+        user.setTenantId(tenantId);
+        RequestInfo requestInfo = new RequestInfo();
+        requestInfo.setUserInfo(user);
+        return requestInfo;
+    }
+
+    private ServiceWrapper wrapper(String accountId) {
+        Service service = Service.builder()
+                .accountId(accountId)
+                .tenantId("pg.city")
+                .auditDetails(AuditDetails.builder().createdTime(1L).build())
+                .build();
+        return ServiceWrapper.builder().service(service).build();
+    }
+}

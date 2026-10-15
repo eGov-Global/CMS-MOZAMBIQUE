@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useLocaleState, useLocales, useTranslate } from 'ra-core';
 import { useApp } from '../App';
@@ -45,8 +45,11 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import DocsPane from '@/components/layout/DocsPane';
 import { getGenericMdmsResources, getResourceLabel } from '@/providers/bridge';
+import { useMastersCapability } from '@/hooks/useMastersCapability';
 import { useTheme } from '@/providers/ThemeProvider';
 import { THEMES } from '@/themes';
+import { LEGACY_PGR_DASHBOARD_ENABLED } from '@/config/featureFlags';
+import { DigitFooter } from '@/components/DigitFooter';
 
 /** Sidebar navigation groups — names are i18n keys resolved at render time */
 const navGroups = [
@@ -125,21 +128,40 @@ const advancedResources = Object.keys(getGenericMdmsResources()).map((name) => (
 export function DigitLayout({ children }: { children?: ReactNode }) {
   const { state, logout, setMode, toggleHelp } = useApp();
 
-  // Hide nav items that declare requiredRoles from users who hold none of them.
-  // navGroups is a module-level constant, so the filter runs here where the
-  // session's roles are known.
   const userRoles = state.user?.roles ?? [];
-  const visibleNavGroups = navGroups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter(
-        (item) => !('requiredRoles' in item) || (item as { requiredRoles?: string[] }).requiredRoles?.some((r) => userRoles.includes(r))
-      ),
-    }))
-    .filter((group) => group.items.length > 0);
   const navigate = useNavigate();
   const location = useLocation();
   const translate = useTranslate();
+  const { canViewResource } = useMastersCapability();
+
+  // Masters the current role can't see (per resource.masters conditions on
+  // the shared MDMS search action) drop out of nav entirely — UI-level only,
+  // see docs/design/masters-configurator-access-policy-design.md §3.3.
+  // Two independent gates, and a nav item must clear BOTH. `canViewResource` is
+  // master's masters-capability gate; `requiredRoles` is #1584's tidiness gate for
+  // items that are only useful to a couple of roles. The rebase brought both in
+  // under the same name, which is why they are composed here rather than picked.
+  const roleKey = userRoles.join(',');
+  const visibleNavGroups = useMemo(
+    () =>
+      navGroups
+        .map((group) => ({
+          ...group,
+          items: group.items.filter(
+            (item) =>
+              canViewResource(item.id) &&
+              (!('requiredRoles' in item) ||
+                !!(item as { requiredRoles?: string[] }).requiredRoles?.some((r) => roleKey.split(',').includes(r))),
+          ),
+        }))
+        .filter((group) => group.items.length > 0),
+    [canViewResource, roleKey],
+  );
+  const visibleAdvancedResources = useMemo(
+    () => advancedResources.filter((r) => canViewResource(r.id)),
+    [canViewResource],
+  );
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // CCSD-2009 (Builder v2 polish): the Builder is a full-canvas workspace —
   // auto-collapse the nav sidebar and hide the docs pane while it's open,
@@ -254,19 +276,21 @@ export function DigitLayout({ children }: { children?: ReactNode }) {
               <LayoutDashboard className="w-5 h-5 flex-shrink-0" />
               {!sidebarCollapsed && <span className="text-sm font-medium">{translate('app.nav.dashboard')}</span>}
             </button>
-            <button
-              onClick={() => navigate('/manage/pgr-dashboard')}
-              className={`
-                w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors
-                ${location.pathname === '/manage/pgr-dashboard'
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'}
-              `}
-              title={sidebarCollapsed ? translate('app.nav.pgr_dashboard') : undefined}
-            >
-              <BarChart3 className="w-5 h-5 flex-shrink-0" />
-              {!sidebarCollapsed && <span className="text-sm font-medium">{translate('app.nav.pgr_dashboard')}</span>}
-            </button>
+            {LEGACY_PGR_DASHBOARD_ENABLED && (
+              <button
+                onClick={() => navigate('/manage/pgr-dashboard')}
+                className={`
+                  w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors
+                  ${location.pathname === '/manage/pgr-dashboard'
+                    ? 'bg-primary/10 text-primary border-l-2 border-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'}
+                `}
+                title={sidebarCollapsed ? translate('app.nav.pgr_dashboard') : undefined}
+              >
+                <BarChart3 className="w-5 h-5 flex-shrink-0" />
+                {!sidebarCollapsed && <span className="text-sm font-medium">{translate('app.nav.pgr_dashboard')}</span>}
+              </button>
+            )}
             <button
               onClick={() => navigate('/manage/public-dashboard')}
               className={`
@@ -369,7 +393,7 @@ export function DigitLayout({ children }: { children?: ReactNode }) {
 
             {!sidebarCollapsed && advancedExpanded && (
               <div className="mt-1 space-y-0.5 ml-2">
-                {advancedResources.map((item) => {
+                {visibleAdvancedResources.map((item) => {
                   const isActive = location.pathname.startsWith(item.path);
                   return (
                     <button
@@ -496,6 +520,11 @@ export function DigitLayout({ children }: { children?: ReactNode }) {
         <main id="main-content" className="flex-1 p-6 overflow-auto min-h-0">
           {children}
         </main>
+
+        {/* Powered by DIGIT (CCRS#1841) */}
+        <footer className="flex-shrink-0 flex items-center justify-center border-t border-border bg-card py-2">
+          <DigitFooter />
+        </footer>
       </div>
 
       {/* Documentation Pane */}

@@ -751,6 +751,9 @@ async function phasePgrMasters() {
 
 /* ═══════════════════════════ PHASE: landing ═══════════════════════════ */
 
+// create/update RAINMAKER-PGR.LandingSection + LandingPageConfig (DDH action catalog).
+const LANDING_ACTION_IDS = [4623, 4624, 4625, 4626];
+
 async function phaseLanding() {
   let sections, config, locEn, locPt;
   try {
@@ -810,6 +813,36 @@ async function phaseLanding() {
     (f ? warn : ok)(`localization ${locale}: seeded ${success} missing keys (${msgs.length - missing.length} existing kept)${f ? `, ${f} failed` : ''}`);
     if (f) { failed += f; failures.push(`localization ${locale}: ${f} failed`); }
   }
+
+  // ACCESSCONTROL rows for the two Landing write paths. The Configurator only
+  // shows Create/Edit on an mdms master when a /mdms-v2/v2/_create|_update/<schema>
+  // action is granted to one of the user's roles (useMastersCapability), so
+  // without these the Landing masters read as uneditable. Add-if-missing, like
+  // phaseAnalytics; grants are limited to roles that exist on the target, since
+  // a roleaction must reference a defined role.
+  const catalog = new Map(readJson(SEED.actionsTest).map((a) => [Number(a.id), a]));
+  const wantActions = LANDING_ACTION_IDS.filter((id) => catalog.has(id));
+  if (wantActions.length !== LANDING_ACTION_IDS.length) {
+    failures.push(`action catalog is missing ${LANDING_ACTION_IDS.filter((id) => !catalog.has(id)).join(', ')}`);
+  }
+  const haveActions = new Set((await cmsSearchAll('ACCESSCONTROL-ACTIONS-TEST.actions-test')).map((m) => Number(m.data && m.data.id)));
+  for (const id of wantActions.filter((id) => !haveActions.has(id))) {
+    if (CFG.dryRun) { info(`dry-run: would create action ${id} (${catalog.get(id).url})`); continue; }
+    const r = await mdmsCreate(CFG.state, 'ACCESSCONTROL-ACTIONS-TEST.actions-test', String(id), { ...catalog.get(id), tenantId: CFG.state });
+    if (!r.ok && !r.exists) { failed++; failures.push(`action ${id}: HTTP ${r.code}`); }
+  }
+  const haveRoles = new Set((await cmsSearchAll('ACCESSCONTROL-ROLES.roles')).map((m) => m.data && m.data.code));
+  const wantGrants = readJson(SEED.roleactions)
+    .filter((g) => LANDING_ACTION_IDS.includes(Number(g.actionid)) && haveRoles.has(g.rolecode));
+  const haveGrants = new Set((await cmsSearchAll('ACCESSCONTROL-ROLEACTIONS.roleactions'))
+    .map((m) => m.uniqueIdentifier || `${m.data && m.data.rolecode}.${m.data && m.data.actionid}`));
+  for (const g of wantGrants.filter((g) => !haveGrants.has(`${g.rolecode}.${g.actionid}`))) {
+    if (CFG.dryRun) { info(`dry-run: would grant ${g.rolecode} -> action ${g.actionid}`); continue; }
+    const r = await mdmsCreate(CFG.state, 'ACCESSCONTROL-ROLEACTIONS.roleactions', `${g.rolecode}.${g.actionid}`, { ...g, tenantId: CFG.state });
+    if (!r.ok && !r.exists) { failed++; failures.push(`grant ${g.rolecode}.${g.actionid}: HTTP ${r.code}`); }
+  }
+  ok(`write access: ${wantActions.length} action(s), ${wantGrants.length} grant(s) ensured`);
+
   if (CFG.dryRun) return record('landing', OUTCOME.SKIPPED, 'dry-run: plan printed above');
 
   const res = await v1Search(CFG.state, ['LandingSection', 'LandingPageConfig']);
@@ -1043,6 +1076,13 @@ async function phaseAnalytics() {
  */
 
 const MATOMO_NGINX_MARK = '# ccrs-matomo';
+// Names from local-setup/docker-compose.matomo.yml. The overlay is layered on
+// the base stack (its services join egov-network, which only the base file
+// defines) and every service carries `profiles: [matomo]` — so bring it up the
+// way the Ansible deploy does: base + overlay, profile selected.
+const MATOMO_CT = 'digit-matomo';
+const MATOMO_DB_CT = 'digit-matomo-db';
+const MATOMO_UP = 'cd /opt/digit && sudo docker compose --profile matomo -f docker-compose.egov-digit.yaml -f docker-compose.matomo.yml up -d matomo-db matomo matomo-archiver';
 
 async function phaseMatomo() {
   if (!CFG.matomo) return record('matomo', OUTCOME.SKIPPED, 'opt-in phase — pass --matomo to run');
@@ -1064,7 +1104,7 @@ async function phaseMatomo() {
   }
 
   /* ---- 1. compose stack ---- */
-  const running = () => { try { return sh("sudo docker ps --filter name='^matomo$' --format '{{.Names}}'").trim() === 'matomo'; } catch { return false; } };
+  const running = () => { try { return sh(`sudo docker ps --filter name='^${MATOMO_CT}$' --format '{{.Names}}'`).trim() === MATOMO_CT; } catch { return false; } };
   if (!running()) {
     if (CFG.dryRun) { info('dry-run: would install /opt/digit/docker-compose.matomo.yml and docker compose up -d'); }
     else {
@@ -1075,10 +1115,10 @@ async function phaseMatomo() {
         try { sh(`sudo cp ${q(SEED.matomoCompose)} /opt/digit/docker-compose.matomo.yml`); notes.push('compose file installed'); }
         catch (e) { return record('matomo', OUTCOME.FAILED, `cannot install compose file: ${truncate(e.message, 100)}`, 'MATOMO_COMPOSE_COPY', 'Check /opt/digit exists and sudo works.'); }
       }
-      try { sh('cd /opt/digit && sudo docker compose -f docker-compose.matomo.yml up -d', { timeout: 300000 }); }
+      try { sh(MATOMO_UP, { timeout: 300000 }); }
       catch (e) {
         return record('matomo', OUTCOME.FAILED, `docker compose up failed: ${truncate(e.message, 140)}`, 'MATOMO_COMPOSE_UP',
-          'Common cause: the digit_egov-network external network does not exist — is the DIGIT stack deployed on this box?');
+          'Common cause: /opt/digit has no docker-compose.egov-digit.yaml or .env — is the DIGIT stack deployed on this box?');
       }
     }
   } else { notes.push('containers already running'); }
@@ -1086,19 +1126,19 @@ async function phaseMatomo() {
   /* Matomo's admin origin: derive from the ACTUAL published port, never assume. */
   let origin = '';
   if (!CFG.dryRun) {
-    try { origin = 'http://' + sh("sudo docker port matomo 80/tcp").trim().split('\n')[0]; }
+    try { origin = 'http://' + sh(`sudo docker port ${MATOMO_CT} 80/tcp`).trim().split('\n')[0]; }
     catch { return record('matomo', OUTCOME.FAILED, 'matomo container has no published port 80', 'MATOMO_NO_PORT', 'Check docker-compose.matomo.yml ports.'); }
     // wait for apache+php to answer (first boot copies the whole app into the volume)
     let up = false;
     for (let i = 0; i < 40 && !up; i++) {
       try { const r = await fetch(origin + '/', { redirect: 'manual' }); up = r.status > 0; } catch { await new Promise((r) => setTimeout(r, 3000)); }
     }
-    if (!up) return record('matomo', OUTCOME.FAILED, `matomo did not answer on ${origin} within 120s`, 'MATOMO_NOT_UP', 'sudo docker logs matomo');
+    if (!up) return record('matomo', OUTCOME.FAILED, `matomo did not answer on ${origin} within 120s`, 'MATOMO_NOT_UP', `sudo docker logs ${MATOMO_CT}`);
     notes.push(`admin ui on ${origin} (box-local only; reach it via: ssh -L 8080:${origin.replace('http://', '')} <box>)`);
   }
 
   /* ---- 2. unattended install ---- */
-  const installed = () => { try { return sh("sudo docker exec matomo sh -c 'test -s /var/www/html/config/config.ini.php && grep -c trusted_hosts /var/www/html/config/config.ini.php'").trim() !== '0'; } catch { return false; } };
+  const installed = () => { try { return sh(`sudo docker exec ${MATOMO_CT} sh -c 'test -s /var/www/html/config/config.ini.php && grep -c trusted_hosts /var/www/html/config/config.ini.php'`).trim() !== '0'; } catch { return false; } };
   if (CFG.dryRun) { info('dry-run: would run the unattended web-wizard install if config.ini.php is absent'); }
   else if (installed()) { notes.push('already installed — wizard skipped'); }
   else {
@@ -1106,10 +1146,11 @@ async function phaseMatomo() {
       return record('matomo', OUTCOME.FAILED, 'fresh install needs --matomo-admin-pass (>= 8 chars) — no default superuser password, on purpose', 'MATOMO_NO_ADMIN_PASS',
         "Re-run with --matomo --matomo-admin-pass '<strong password>'.");
     }
-    // DB creds come from the compose file actually on disk, so an operator who
-    // rotated them there stays consistent without another flag.
+    // DB creds come from the RUNNING database container: the compose file only
+    // holds ${MATOMO_DB_PASSWORD:-…}, resolved from .env (written from OpenBao),
+    // so the container's env is the one value guaranteed to match.
     let dbPass = 'matomo_local_only';
-    try { const m = /MARIADB_PASSWORD:\s*(\S+)/.exec(sh('sudo cat /opt/digit/docker-compose.matomo.yml')); if (m) dbPass = m[1]; } catch {}
+    try { const v = sh(`sudo docker exec ${MATOMO_DB_CT} printenv MARIADB_PASSWORD`).trim(); if (v) dbPass = v; } catch {}
     const email = CFG.matomoAdminEmail || ('admin@' + U.hostname);
     const siteUrl = CFG.matomoSiteUrl || CFG.base;
     try {
@@ -1131,15 +1172,15 @@ async function phaseMatomo() {
    *         on a real box: login + 21 dashboard widgets + Visits Log, zero
    *         failed requests, nothing escaping the prefix. ---- */
   if (!CFG.dryRun) {
-    try { sh(`sudo docker exec matomo php /var/www/html/console config:set 'General.proxy_client_headers=["HTTP_X_FORWARDED_FOR"]'`); }
+    try { sh(`sudo docker exec ${MATOMO_CT} php /var/www/html/console config:set 'General.proxy_client_headers=["HTTP_X_FORWARDED_FOR"]'`); }
     catch (e) { failures.push(`config:set proxy_client_headers: ${truncate(e.message, 80)}`); }
     if (CFG.matomoDashboard) {
       // portal host (from --host) + the box-local origins the installer needs.
       const portalHost = U.host; // host[:port] of --host
       const hosts = JSON.stringify([portalHost, origin.replace('http://', ''), 'localhost', '127.0.0.1']);
       try {
-        sh(`sudo docker exec matomo php /var/www/html/console config:set 'General.proxy_uri_header=1'`);
-        sh(`sudo docker exec matomo php /var/www/html/console config:set 'General.trusted_hosts=${hosts.replace(/'/g, "'\\''")}'`);
+        sh(`sudo docker exec ${MATOMO_CT} php /var/www/html/console config:set 'General.proxy_uri_header=1'`);
+        sh(`sudo docker exec ${MATOMO_CT} php /var/www/html/console config:set 'General.trusted_hosts=${hosts.replace(/'/g, "'\\''")}'`);
         notes.push(`dashboard proxy config set (trusted_hosts include ${portalHost})`);
       } catch (e) { failures.push(`dashboard config:set: ${truncate(e.message, 80)}`); }
     }

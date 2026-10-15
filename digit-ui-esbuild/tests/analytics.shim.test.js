@@ -48,6 +48,7 @@ function loadShim(opts) {
   const xhrCalls = [];
   const scripts = [];
   const timers = [];
+  const documentListeners = {};
 
   const sandbox = {};
   sandbox.window = sandbox;
@@ -89,7 +90,10 @@ function loadShim(opts) {
     },
     documentElement: { appendChild(el) { scripts.push(el); } },
     createElement: makeEl,
-    addEventListener(type, fn) { if (type === "click") this._clickListener = fn; },
+    addEventListener(name, handler) {
+      documentListeners[name] = handler;
+      if (name === "click") this._clickListener = handler;
+    },
     referrer: "",
   };
   // The real bundle captures the history OBJECT, so the shim's later patch still
@@ -132,6 +136,9 @@ function loadShim(opts) {
     xhrCalls, scripts, sandbox, session, local,
     flush: () => { while (timers.length) timers.shift()(); },
     loadScripts: () => { while (deferred.length) deferred.shift().onload(); },
+    dispatchDocument: (name, event) => {
+      if (documentListeners[name]) documentListeners[name](event);
+    },
   };
 }
 
@@ -450,6 +457,31 @@ test("an enabled Matomo record initialises exactly one allowlisted script", () =
   assert.ok(paq.indexOf("setSiteId") !== -1 && paq.indexOf("trackPageView") !== -1);
 });
 
+test("a vendor queue that is no longer an array is never replaced", () => {
+  /* Regression. matomo.js swaps window._paq for a TrackerProxy once it loads:
+     not an array, but it has push(), and pushing executes the command. The
+     queue helper used to test isArray, so the first push after the vendor
+     script landed threw the live proxy away and installed a fresh []. Nothing
+     drains that, so every SPA route change, every trackEvent and every tagged
+     click was silently lost — only the first pageview of a full page load
+     survived. Verified against the Bomet deployment before fixing: the tracker
+     was healthy and correctly configured, with four events stranded in a dead
+     array. */
+  const t = loadShim({ respond: (tenant) => (tenant === "mz" ? [row("mz", MATOMO_OK)] : []) });
+
+  const executed = [];
+  const proxy = { push: (args) => executed.push(args) };
+  t.sandbox._paq = proxy;
+
+  t.sandbox.DigitAnalytics.trackEvent("pgr.test.event", { category: "pgr" });
+
+  assert.strictEqual(t.sandbox._paq, proxy, "the live tracker proxy must survive");
+  assert.ok(
+    executed.some((c) => c[0] === "trackEvent"),
+    "the event must reach the live tracker rather than a dead queue"
+  );
+});
+
 test("a record whose script host is not allowlisted loads nothing", () => {
   const bad = Object.assign({}, MATOMO_OK, { code: "evil", scriptUrl: "https://evil.example.com/m.js" });
   const t = loadShim({ respond: (tenant) => (tenant === "mz" ? [row("mz", bad)] : []) });
@@ -561,7 +593,10 @@ test("a pageview emitted before array.js lands is replayed, not dropped", () => 
   assert.equal(t.sandbox.__phInit.key, "phc_test", "init got the project key");
   assert.equal(captured.length, 1, "the queued pageview was replayed after init");
   assert.equal(captured[0].name, "$pageview");
-  assert.equal(captured[0].props.$current_url, "/employee/pgr/inbox");
+  // The real served path, not the context-stripped grouping key: $current_url
+  // is what PostHog links back to, and /employee/... 404s under a /digit-ui
+  // entrance. {{page}} keeps the stripped form for grouping.
+  assert.equal(captured[0].props.$current_url, "/digit-ui/employee/pgr/inbox");
 });
 
 test("PostHog init forces every restraint, and no record can loosen them", () => {
@@ -585,6 +620,35 @@ test("PostHog init forces every restraint, and no record can loosen them", () =>
   assert.equal(cfg.person_profiles, "identified_only");
   assert.equal(cfg.respect_dnt, true);
   assert.equal(typeof cfg.sanitize_properties, "function");
+});
+
+test("sanitize_properties scrubs content but not PostHog's own identity keys", () => {
+  /* Regression. PostHog's distinct_id, $device_id and $session_id are UUIDs it
+     generates itself. scrub() redacts anything UUID-shaped, so sanitising them
+     rewrote every visitor to the literal ":uuid": one person for the whole
+     audience, sessions collapsed with it, person_mode stuck at propertyless.
+     Observed on the Bomet deployment before fixing. They are opaque ids from
+     the vendor, not anything from our app, so they pass through while real
+     content is still scrubbed. */
+  const t = loadShim({
+    deferScriptLoad: true,
+    respond: (tenant) => (tenant === "mz" ? [row("mz", POSTHOG_OK)] : []),
+  });
+  t.sandbox.posthog = { init: (key, cfg) => { t.sandbox.__cfg = cfg; }, capture: () => {} };
+  t.loadScripts();
+  const sanitize = t.sandbox.__cfg.sanitize_properties;
+
+  const out = sanitize({
+    distinct_id: "01a08c48-1198-79a0-b276-5f84fa6ddd7a",
+    $device_id: "01a08c48-1198-79a0-b276-5f84fa6ddd7b",
+    $session_id: "01a08c48-1198-79a0-b276-5f84fa6ddd7c",
+    page_title: "Complaint 01a08c48-1198-79a0-b276-5f84fa6ddd7a",
+  });
+
+  assert.equal(out.distinct_id, "01a08c48-1198-79a0-b276-5f84fa6ddd7a", "identity must survive");
+  assert.equal(out.$device_id, "01a08c48-1198-79a0-b276-5f84fa6ddd7b");
+  assert.equal(out.$session_id, "01a08c48-1198-79a0-b276-5f84fa6ddd7c");
+  assert.ok(out.page_title.indexOf(":uuid") !== -1, "real content is still scrubbed");
 });
 
 test("the pending queue is bounded so a script that never loads cannot grow it", () => {
@@ -811,7 +875,7 @@ test("the public landing page activates providers and reports its pageview", () 
   });
   assert.equal(t.internal.providers(), 1, "landing must activate providers");
   const urls = t.sandbox._paq.filter((c) => c[0] === "setCustomUrl").map((c) => c[1]);
-  assert.ok(urls.indexOf("/landing") !== -1, "the landing pageview must be reported");
+  assert.ok(urls.indexOf("/digit-ui/landing") !== -1, "the landing pageview must be reported");
 });
 
 test("a record scoped to employee stays inert on the landing page", () => {
@@ -833,7 +897,7 @@ test("trackPageView emits a virtual pageview with a derived title", () => {
   const after = t.sandbox._paq.slice(before);
   const url = after.filter((c) => c[0] === "setCustomUrl")[0];
   assert.ok(url, "a virtual pageview must set the custom url");
-  assert.equal(url[1], "/citizen/pgr/create-complaint/step/where");
+  assert.equal(url[1], "/digit-ui/citizen/pgr/create-complaint/step/where");
   assert.ok(after.some((c) => c[0] === "trackPageView"));
   const title = after.filter((c) => c[0] === "setDocumentTitle")[0];
   assert.ok(title && /Complaints/.test(title[1]), "derivation must apply to virtual paths too");
@@ -847,7 +911,7 @@ test("trackPageView scrubs identity, drops the query, honours a scrubbed title o
   let before = t.sandbox._paq.length;
   t.api.trackPageView("/citizen/pgr/complaints/PRD-2026-000023?mobileNumber=841234567");
   const url = t.sandbox._paq.slice(before).filter((c) => c[0] === "setCustomUrl")[0];
-  assert.equal(url[1], "/citizen/pgr/complaints/:id", "id parameterised, query dropped");
+  assert.equal(url[1], "/digit-ui/citizen/pgr/complaints/:id", "id parameterised, query dropped");
 
   before = t.sandbox._paq.length;
   t.api.trackPageView("/citizen/pgr/create-complaint/step/details", "Details step 841234567");
@@ -909,12 +973,12 @@ test("a post-load _paq TrackerProxy (non-array) keeps receiving pushes", () => {
   t.sandbox.history.pushState({}, "", "/digit-ui/employee/pgr/complaint-details/PRD-2026-000023");
   t.flush();
   let urls = applied.filter((c) => c[0] === "setCustomUrl").map((c) => c[1]);
-  assert.ok(urls.indexOf("/employee/pgr/complaint-details/:id") !== -1, "route pageview must reach the proxy");
+  assert.ok(urls.indexOf("/digit-ui/employee/pgr/complaint-details/:id") !== -1, "route pageview must reach the proxy");
   assert.ok(applied.some((c) => c[0] === "trackPageView"));
 
   t.api.trackPageView("/employee/pgr/virtual");
   urls = applied.filter((c) => c[0] === "setCustomUrl").map((c) => c[1]);
-  assert.ok(urls.indexOf("/employee/pgr/virtual") !== -1, "virtual pageview must reach the proxy");
+  assert.ok(urls.indexOf("/digit-ui/employee/pgr/virtual") !== -1, "virtual pageview must reach the proxy");
 
   t.api.trackEvent("save_clicked", { category: "pgr" });
   assert.ok(applied.some((c) => c[0] === "trackEvent"), "events must reach the proxy");
@@ -976,4 +1040,110 @@ test("declared clicks emit catalogue-shaped Navigation/Clicked events", () => {
   assert.equal(ev[1], "Navigation");
   assert.equal(ev[2], "Clicked");
   assert.equal(ev[3], "landing_link:/citizen/login");
+});
+
+/* ───────────────────── tracked URL must resolve ───────────────────── */
+
+test("the URL handed to a provider resolves to the real page, context path and all", () => {
+  // currentPage() strips the context prefix so a report row reads
+  // /employee/pgr/inbox-v2 regardless of which prefix served it. That is the
+  // right key to GROUP by, but Matomo resolves setCustomUrl relative to the
+  // origin, so handing it the stripped path records
+  // https://host/employee/pgr/inbox-v2 — a 404, because the app is served at
+  // /digit-ui/employee/... Every row in Page URLs was unclickable.
+  const t = loadShim({
+    pathname: "/digit-ui/employee/pgr/inbox-v2",
+    respond: (tenant) => (tenant === "mz" ? [row("mz", MATOMO_OK)] : []),
+  });
+  const urls = t.sandbox._paq.filter((c) => c[0] === "setCustomUrl").map((c) => c[1]);
+  assert.ok(urls.length > 0, "Matomo must be told which URL it is tracking");
+  for (const u of urls) {
+    assert.ok(
+      u.indexOf("/digit-ui/") === 0,
+      `tracked URL must keep the context path so it resolves, got ${u}`
+    );
+  }
+});
+
+test("the grouping key stays stripped even though the tracked URL is not", () => {
+  // {{page}} is what templates and derived titles key on, and it must stay
+  // prefix-free so one route is one row across entrances.
+  const t = loadShim({
+    config: { ANALYTICS_CUSTOM_ENABLED: true },
+    pathname: "/digit-ui/employee/pgr/inbox-v2",
+    respond: (tenant) =>
+      tenant === "mz"
+        ? [row("mz", {
+            code: "c", type: "CUSTOM", enabled: true,
+            adapter: {
+              scriptUrl: "https://matomo.mz.gov.mz/x.js", globalName: "_xq",
+              callTemplates: { pageView: [["p", "{{page}}"]] },
+            },
+          })]
+        : [],
+  });
+  const calls = (t.sandbox._xq || []).filter((c) => c[0] === "p").map((c) => c[1]);
+  assert.ok(calls.length > 0, "the custom provider should have been called");
+  assert.equal(calls[0], "/employee/pgr/inbox-v2", "{{page}} stays context-free");
+});
+
+test("an error page records which error it was", () => {
+  // /user/error?type=notfound&module=PGR is how the app signals a failure.
+  // `type` was not allowlisted, so every error — not found, maintenance,
+  // crash — recorded as the same bare /employee/user/error row with nothing
+  // to tell them apart (#2007).
+  const t = loadShim({
+    pathname: "/digit-ui/employee/user/error",
+    search: "?type=notfound&module=PGR&authToken=secret",
+    respond: (tenant) => (tenant === "mz" ? [row("mz", MATOMO_OK)] : []),
+  });
+  const url = t.sandbox._paq.filter((c) => c[0] === "setCustomUrl").map((c) => c[1])[0];
+  assert.ok(url.indexOf("type=notfound") !== -1, `error kind must survive, got ${url}`);
+  assert.ok(url.indexOf("module=PGR") !== -1, `module must survive, got ${url}`);
+  assert.ok(url.indexOf("authToken") === -1, "a token must never survive");
+  assert.ok(url.indexOf("secret") === -1, "a token value must never survive");
+});
+
+test("a redirect chain that settles in one tick records one pageview", () => {
+  // React Router <Redirect> is history.replace, and the shim wraps
+  // replaceState like pushState. The 50ms coalescing window is what keeps a
+  // same-tick chain honest: the timer reads the path when it FIRES, so the
+  // hops collapse and only the destination is recorded.
+  const t = loadShim({
+    pathname: "/digit-ui/employee",
+    respond: (tenant) => (tenant === "mz" ? [row("mz", MATOMO_OK)] : []),
+  });
+  const before = t.sandbox._paq.filter((c) => c[0] === "trackPageView").length;
+  t.sandbox.history.replaceState({}, "", "/digit-ui/employee/user/login");
+  t.sandbox.history.replaceState({}, "", "/digit-ui/employee/user/language-selection");
+  t.flush();
+  const after = t.sandbox._paq.filter((c) => c[0] === "trackPageView").length;
+  assert.equal(after - before, 1, "a same-tick redirect chain is one pageview");
+  const urls = t.sandbox._paq.filter((c) => c[0] === "setCustomUrl").map((c) => c[1]);
+  assert.equal(urls[urls.length - 1], "/digit-ui/employee/user/language-selection",
+    "and it is the destination that gets recorded, not a hop");
+});
+
+test("a redirect chain gated on async work records every hop it passes through", () => {
+  // Characterising the #2007 "circling around pages" pattern rather than
+  // asserting it is desirable. Once a hop waits on a token check or an MDMS
+  // round trip it lands outside the 50ms window, so the intermediate URL is
+  // recorded as a page the operator visited. A login bootstrap is exactly
+  // that shape, which is where the pattern shows up.
+  //
+  // Left as-is deliberately: suppressing replaceState pageviews outright
+  // would lose the DESTINATION of a slow chain, which the operator does see.
+  // The fix is a product call on the coalescing window, pending confirmation
+  // against the test environment.
+  const t = loadShim({
+    pathname: "/digit-ui/employee",
+    respond: (tenant) => (tenant === "mz" ? [row("mz", MATOMO_OK)] : []),
+  });
+  const before = t.sandbox._paq.filter((c) => c[0] === "trackPageView").length;
+  t.sandbox.history.replaceState({}, "", "/digit-ui/employee/user/login");
+  t.flush();
+  t.sandbox.history.replaceState({}, "", "/digit-ui/employee/user/language-selection");
+  t.flush();
+  const after = t.sandbox._paq.filter((c) => c[0] === "trackPageView").length;
+  assert.equal(after - before, 2, "each settled hop is its own pageview today");
 });
