@@ -18,9 +18,10 @@ import org.springframework.stereotype.Component;
 
 import org.egov.tracer.model.CustomException;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 import static org.egov.pgr.util.PGRConstants.MDMS_MODULE_NAME;
@@ -37,9 +38,12 @@ import static org.egov.pgr.util.PGRConstants.MDMS_NOTIFICATION_ROUTING_MASTER;
 import static org.egov.pgr.util.PGRConstants.MDMS_NOTIFICATION_TEMPLATE_MASTER;
 import static org.egov.pgr.util.PGRConstants.MDMS_NOTIFICATION_ROUTING_JSONPATH;
 import static org.egov.pgr.util.PGRConstants.MDMS_NOTIFICATION_TEMPLATE_JSONPATH;
+import static org.egov.pgr.util.PGRConstants.MDMS_ACCESSCONTROL_ACTIONS_MASTER;
 import static org.egov.pgr.util.PGRConstants.MDMS_NOTIFICATION_PROVIDER_TEMPLATE_MASTER;
 import static org.egov.pgr.util.PGRConstants.MDMS_NOTIFICATION_PROVIDER_TEMPLATE_JSONPATH;
-import static org.egov.pgr.util.PGRConstants.MDMS_ALL_DEPARTMENTS_JSONPATH;
+import static org.egov.pgr.util.PGRConstants.MDMS_UI_CONSTANTS_MASTER;
+import static org.egov.pgr.util.PGRConstants.MDMS_UI_CONSTANTS_JSONPATH;
+import static org.egov.pgr.util.PGRConstants.MDMS_REOPEN_SLA_KEYWORD;
 
 @Slf4j
 @Component
@@ -56,18 +60,22 @@ public class MDMSUtils {
 
     // serviceCode -> SLA millis (from RAINMAKER-PGR.ComplaintHierarchy LEAF rows' slaHours),
     // cached per state-level tenant. Backs per-complaint-type SLA ordering of the inbox (issue
-    // #432). Cache lives for the process lifetime — slaHours changes in MDMS need a
-    // pgr-services restart to take effect, same staleness window the migration map had.
-    private final Map<String, Map<String, Long>> serviceCodeToSlaCache = new ConcurrentHashMap<>();
-
-    // Department CODE -> NAME, cached per CITY tenant (see getDepartmentCodeToNameMap javadoc for
-    // why state-level keying would be wrong here). Backs EmployeeDepartmentScopeService, which
-    // must filter on both forms since PGRService#getDepartmentFromMDMS stores the NAME whenever
-    // resolvable, only falling back to the CODE on lookup failure. Same restart-to-refresh
-    // staleness window as serviceCodeToSlaCache above — but ONLY for non-empty results (see
-    // getDepartmentCodeToNameMap): an empty map is never cached, so a transient MDMS failure or
-    // not-yet-seeded tenant is retried on the next call instead of being stuck empty until restart.
-    private final Map<String, Map<String, String>> departmentCodeToNameCache = new ConcurrentHashMap<>();
+    // #432). Same TTL / never-cache-empty / serve-stale-on-failure semantics as the notification
+    // and department caches above — issue #1238: the previous process-lifetime cache pinned
+    // whatever the FIRST SLA-sorted search happened to see, so a transient MDMS miss cached an
+    // empty map forever, and a configurator slaHours edit never reached the ORDER BY without a
+    // restart. In both cases every complaint type fell back to the uniform business-level SLA
+    // while the UI kept displaying the real per-type budget, which collapses
+    // `sla - (now - createdtime)` to a constant minus elapsed — i.e. plain creation order. That
+    // is why the inbox SLA column stayed correctly ordered WITHIN a complaint type but not across
+    // types.
+    private static final class TimedSlaMap {
+        final Map<String, Long> value;
+        final long fetchedAt;
+        TimedSlaMap(Map<String, Long> value) { this.value = value; this.fetchedAt = System.currentTimeMillis(); }
+        boolean fresh(long ttlMs) { return System.currentTimeMillis() - fetchedAt < ttlMs; }
+    }
+    private final Map<String, TimedSlaMap> serviceCodeToSlaCache = new ConcurrentHashMap<>();
 
     // Config-driven notification masters, cached per state-level tenant with a short TTL
     // (pgr.notification.mdms.cache.ttl.ms, default 60s). Configurator edits to
@@ -86,81 +94,109 @@ public class MDMSUtils {
     private final Map<String, TimedRows> notificationTemplateCache = new ConcurrentHashMap<>();
     private final Map<String, TimedRows> notificationProviderTemplateCache = new ConcurrentHashMap<>();
 
+    // Reopen window (RAINMAKER-PGR.UIConstants.REOPENSLA) in millis, cached with the same short
+    // TTL as the notification masters so a configurator edit takes effect without a pgr-services
+    // restart. Keyed by the REQUESTING tenant, not the state tenant: UIConstants may be overridden
+    // city-side (data/<state>/<city>/RAINMAKER-PGR/UIConstants.json), so a state-keyed entry would
+    // serve one city's window to its siblings. Only successful lookups are cached — a transient
+    // MDMS miss is retried on the next reopen attempt rather than pinning the property fallback.
+    private final Map<String, TimedReopenWindow> reopenWindowCache = new ConcurrentHashMap<>();
+
+    private static final class TimedReopenWindow {
+        final Long millis;
+        final long fetchedAt;
+        TimedReopenWindow(Long millis) { this.millis = millis; this.fetchedAt = System.currentTimeMillis(); }
+        boolean fresh(long ttlMs) { return System.currentTimeMillis() - fetchedAt < ttlMs; }
+    }
+
+    // Department code->name map, cached per tenant with the same TTL/never-cache-empty/
+    // serve-stale-on-failure semantics as the notification masters above — a transient MDMS
+    // hiccup during department-scoped search (see getDepartmentCodeToNameMap) would otherwise
+    // silently drop dual-read matches for every request until the NEXT successful fetch, not just
+    // the one that hit the hiccup.
+    private static final class TimedMap {
+        final Map<String, String> value;
+        final long fetchedAt;
+        TimedMap(Map<String, String> value) { this.value = value; this.fetchedAt = System.currentTimeMillis(); }
+        boolean fresh(long ttlMs) { return System.currentTimeMillis() - fetchedAt < ttlMs; }
+    }
+    private final Map<String, TimedMap> departmentCodeToNameCache = new ConcurrentHashMap<>();
+
     /**
      * serviceCode -> SLA in millis, derived from MDMS RAINMAKER-PGR.ComplaintHierarchy leaf rows'
      * slaHours (interior nodes carry no slaHours and are skipped by the Number guard below).
-     * Cached per state-level tenant. Returns an empty map (never null) on MDMS failure,
-     * so callers can fall back to the uniform business-level SLA.
+     * Resolved as a complete city map followed by a complete state map, and cached by requesting
+     * tenant with the same short TTL as the notification masters. Returns an empty map (never
+     * null) on MDMS failure, so callers can use an explicit non-type-specific fallback.
      */
     public Map<String, Long> getServiceCodeToSlaMillis(String tenantId) {
+        if (tenantId == null || tenantId.isBlank()) {
+            return Collections.emptyMap();
+        }
+        String requestedTenant = tenantId.trim();
         String stateTenant = multiStateInstanceUtil.getStateLevelTenant(tenantId);
-        return serviceCodeToSlaCache.computeIfAbsent(stateTenant, this::fetchServiceCodeToSlaMillis);
+        long ttl = config.getNotificationMdmsCacheTtlMs();
+        TimedSlaMap cached = serviceCodeToSlaCache.get(requestedTenant);
+        if (cached != null && cached.fresh(ttl)) return cached.value;
+
+        Map<String, Long> fetched = fetchServiceCodeToSlaMillis(requestedTenant);
+        if (fetched.isEmpty() && !requestedTenant.equals(stateTenant)) {
+            fetched = fetchServiceCodeToSlaMillis(stateTenant);
+        }
+        if (!fetched.isEmpty()) {
+            serviceCodeToSlaCache.put(requestedTenant, new TimedSlaMap(fetched));
+            return fetched;
+        }
+        // Empty fetch = transient MDMS miss OR a hierarchy that genuinely carries no slaHours.
+        // Never cache an empty result (retry on the next SLA-sorted search); serve a stale
+        // non-empty entry if we have one rather than degrading the entire inbox ordering to
+        // creation order for the rest of the process lifetime because of one MDMS blip.
+        return cached != null ? cached.value : fetched;
     }
 
-    private Map<String, Long> fetchServiceCodeToSlaMillis(String stateTenant) {
+    private Map<String, Long> fetchServiceCodeToSlaMillis(String tenantId) {
         Map<String, Long> map = new LinkedHashMap<>();
         try {
-            MdmsCriteriaReq req = getMDMSRequest(new RequestInfo(), stateTenant);
+            MdmsCriteriaReq req = getMDMSRequest(new RequestInfo(), tenantId);
             Object result = serviceRequestRepository.fetchResult(getMdmsSearchUrl(), req);
             List<Map<String, Object>> defs = JsonPath.read(result, MDMS_DATA_JSONPATH);
             for (Map<String, Object> def : defs) {
                 Object code = def.get(MDMS_DATA_SERVICE_CODE_KEYWORD);
                 Object sla = def.get(MDMS_DATA_SLA_KEYWORD);
-                if (code != null && sla instanceof Number)
-                    map.put(code.toString(), TimeUnit.HOURS.toMillis(((Number) sla).longValue()));
+                if (code != null && sla instanceof Number number) {
+                    try {
+                        BigDecimal milliseconds = new BigDecimal(number.toString())
+                                .multiply(BigDecimal.valueOf(3_600_000L));
+                        if (milliseconds.signum() >= 0) {
+                            map.put(code.toString(), milliseconds
+                                    .setScale(0, RoundingMode.CEILING)
+                                    .longValueExact());
+                        }
+                    } catch (NumberFormatException | ArithmeticException invalidSla) {
+                        log.error("Ignoring invalid slaHours {} for serviceCode {} in tenant {}",
+                                sla, code, tenantId);
+                    }
+                }
             }
         } catch (Exception e) {
             log.error("Failed to load serviceCode->SLA map for tenant {}; inbox SLA sort will fall back "
-                    + "to the business-level SLA", stateTenant, e);
+                    + "to the configured absolute escalation threshold", tenantId, e);
         }
         return map;
     }
 
     /**
-     * Department CODE -> NAME for every row in the common-masters Department master, cached per
-     * CITY tenant (not state-level — a city's master can override the state's, so two cities
-     * under the same state must never share a cache entry). Returns an empty map (never null) on
-     * MDMS failure — that result is deliberately NOT cached (unlike a populated map), so a
-     * transient MDMS blip or not-yet-seeded tenant is retried on the next call instead of being
-     * stuck empty for the rest of the process lifetime.
+     * Department CODE -> NAME for the tenant's common-masters Department master, city tenant first
+     * (a city's master can override the state's) with the state tenant as fallback. Backs
+     * EmployeeDepartmentScopeService and AdminComplaintSearchService, which filter on both forms.
+     * Caching, never-cache-empty and serve-stale semantics come from
+     * {@link #getDepartmentCodeToNameMap(RequestInfo, String)}, keyed per requested tenant.
      */
     public Map<String, String> getDepartmentCodeToNameMap(String tenantId) {
-        Map<String, String> cached = departmentCodeToNameCache.get(tenantId);
-        if (cached != null)
-            return cached;
-
-        Map<String, String> fetched = fetchDepartmentCodeToNameMap(tenantId);
-        if (!fetched.isEmpty())
-            departmentCodeToNameCache.put(tenantId, fetched);
-        return fetched;
-    }
-
-    /** City tenant first (masters can be overridden per-city); state tenant as fallback. */
-    private Map<String, String> fetchDepartmentCodeToNameMap(String tenantId) {
-        Map<String, String> map = fetchDepartmentCodeToNameMapForTenant(tenantId);
+        Map<String, String> map = getDepartmentCodeToNameMap(new RequestInfo(), tenantId);
         String stateTenant = multiStateInstanceUtil.getStateLevelTenant(tenantId);
         if (map.isEmpty() && !tenantId.equals(stateTenant))
-            map = fetchDepartmentCodeToNameMapForTenant(stateTenant);
-        return map;
-    }
-
-    private Map<String, String> fetchDepartmentCodeToNameMapForTenant(String tenantId) {
-        Map<String, String> map = new LinkedHashMap<>();
-        try {
-            MdmsCriteriaReq req = getMDMSRequest(new RequestInfo(), tenantId);
-            Object result = serviceRequestRepository.fetchResult(getMdmsSearchUrl(), req);
-            List<Map<String, Object>> rows = JsonPath.read(result, MDMS_ALL_DEPARTMENTS_JSONPATH);
-            for (Map<String, Object> row : rows) {
-                Object code = row.get("code");
-                Object name = row.get("name");
-                if (code != null && name != null)
-                    map.put(code.toString(), name.toString());
-            }
-        } catch (Exception e) {
-            log.error("Failed to load department code->name map for tenant {} — department-scoped "
-                    + "search will filter on the HRMS code only, missing complaints stored under the "
-                    + "resolved department NAME", tenantId, e);
-        }
+            map = getDepartmentCodeToNameMap(new RequestInfo(), stateTenant);
         return map;
     }
 
@@ -229,6 +265,84 @@ public class MDMSUtils {
             return fetched;
         }
         return cached != null ? cached.rows : fetched;
+    }
+
+    /**
+     * The reopen window in millis for the tenant, read from MDMS
+     * RAINMAKER-PGR.UIConstants.REOPENSLA — the same knob the citizen UI gates on, so the
+     * employee/CSR path and the server-side check enforce exactly one configured window
+     * (issue #925). Cached per REQUESTING tenant (not the state tenant) with a short TTL,
+     * because UIConstants may be overridden city-side.
+     *
+     * Falls back to the pgr.complain.idle.time property only when MDMS has no usable
+     * REOPENSLA (unseeded tenant or MDMS outage) — reopen must not silently become
+     * unbounded, nor start rejecting everything, just because MDMS blipped.
+     */
+    public long getReopenWindowMillis(RequestInfo requestInfo, String tenantId) {
+        String stateTenant = multiStateInstanceUtil.getStateLevelTenant(tenantId);
+        long ttl = config.getNotificationMdmsCacheTtlMs();
+
+        TimedReopenWindow cached = reopenWindowCache.get(tenantId);
+        if (cached != null && cached.fresh(ttl)) return cached.millis;
+
+        Long fetched = fetchReopenWindowMillis(requestInfo, tenantId, stateTenant);
+        if (fetched != null) {
+            reopenWindowCache.put(tenantId, new TimedReopenWindow(fetched));
+            return fetched;
+        }
+        // Serve a stale-but-known value over the property fallback: it is the configured
+        // intent, whereas the property is only a deployment-level backstop.
+        if (cached != null) return cached.millis;
+
+        log.warn("REOPENSLA not available from MDMS for tenant {} — falling back to "
+                + "pgr.complain.idle.time ({} ms)", tenantId, config.getComplainMaxIdleTime());
+        return config.getComplainMaxIdleTime();
+    }
+
+    /**
+     * Reads REOPENSLA for the tenant, trying the city tenant first then the state tenant
+     * (mirrors mDMSCall's fallback). Returns null when MDMS yields no usable positive value,
+     * so the caller can apply its own fallback.
+     */
+    private Long fetchReopenWindowMillis(RequestInfo requestInfo, String tenantId, String stateTenant) {
+        Long value = doFetchReopenWindowMillis(requestInfo, tenantId);
+        if (value == null && !stateTenant.equals(tenantId))
+            value = doFetchReopenWindowMillis(requestInfo, stateTenant);
+        return value;
+    }
+
+    private Long doFetchReopenWindowMillis(RequestInfo requestInfo, String tenantId) {
+        try {
+            List<MasterDetail> masterDetails = new ArrayList<>();
+            masterDetails.add(MasterDetail.builder().name(MDMS_UI_CONSTANTS_MASTER).build());
+            ModuleDetail moduleDetail = ModuleDetail.builder().masterDetails(masterDetails)
+                    .moduleName(MDMS_MODULE_NAME).build();
+            MdmsCriteriaReq req = MdmsCriteriaReq.builder()
+                    .requestInfo(requestInfo != null ? requestInfo : new RequestInfo())
+                    .mdmsCriteria(MdmsCriteria.builder()
+                            .moduleDetails(Collections.singletonList(moduleDetail))
+                            .tenantId(tenantId).build())
+                    .build();
+
+            Object result = serviceRequestRepository.fetchResult(getMdmsSearchUrl(), req);
+            List<Map<String, Object>> rows = JsonPath.read(result, MDMS_UI_CONSTANTS_JSONPATH);
+            if (rows == null || rows.isEmpty()) return null;
+
+            Object raw = rows.get(0).get(MDMS_REOPEN_SLA_KEYWORD);
+            if (!(raw instanceof Number)) return null;
+
+            long millis = ((Number) raw).longValue();
+            // A non-positive window would silently block every reopen; treat it as misconfigured
+            // and let the caller fall back rather than bricking the action.
+            if (millis <= 0) {
+                log.warn("Ignoring non-positive REOPENSLA ({}) for tenant {}", millis, tenantId);
+                return null;
+            }
+            return millis;
+        } catch (Exception e) {
+            log.error("Failed to read REOPENSLA from RAINMAKER-PGR.UIConstants for tenant {}", tenantId, e);
+            return null;
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -363,6 +477,61 @@ public class MDMSUtils {
      */
     public StringBuilder getMdmsSearchUrl() {
         return new StringBuilder().append(config.getMdmsHost()).append(config.getMdmsEndPoint());
+    }
+
+    private static final String MDMS_DEPARTMENT_MASTER_JSONPATH = "$.MdmsRes.common-masters.Department";
+
+    /**
+     * Department CODE -> display-NAME map, for dual-read department-scoped search: complaints
+     * created before this system started storing the department CODE (see
+     * {@code PGRService#getDepartmentFromMDMS}) still have the display NAME stored, so a
+     * department-scope filter that only matches on code would never match those historical rows.
+     * Best-effort — returns an empty map (never throws) on any MDMS failure, degrading to
+     * code-only matching rather than failing the whole search over a lookup that's purely there to
+     * widen matches, not restrict them.
+     *
+     * <p>Cached per tenant with the same TTL ({@code pgr.notification.mdms.cache.ttl.ms}) and
+     * never-cache-empty/serve-stale-on-failure semantics as the notification masters above — the
+     * Department master changes about as often as those do, and without this, a single transient
+     * MDMS hiccup would silently drop dual-read matches for EVERY department-scoped search until
+     * the next successful fetch, not just the one request that hit the hiccup.
+     */
+    public Map<String, String> getDepartmentCodeToNameMap(RequestInfo requestInfo, String tenantId) {
+        long ttl = config.getNotificationMdmsCacheTtlMs();
+        TimedMap cached = departmentCodeToNameCache.get(tenantId);
+        if (cached != null && cached.fresh(ttl)) return cached.value;
+
+        Map<String, String> fetched = fetchDepartmentCodeToNameMap(requestInfo, tenantId);
+        if (!fetched.isEmpty()) {
+            departmentCodeToNameCache.put(tenantId, new TimedMap(fetched));
+            return fetched;
+        }
+        // Empty fetch = transient MDMS miss OR genuinely no Department master configured. Never
+        // cache an empty result (retry next search); serve a stale non-empty entry if we have one
+        // rather than dropping dual-read matches during an MDMS blip.
+        return cached != null ? cached.value : fetched;
+    }
+
+    private Map<String, String> fetchDepartmentCodeToNameMap(RequestInfo requestInfo, String tenantId) {
+        try {
+            MdmsCriteriaReq mdmsCriteriaReq = getMDMSRequest(requestInfo, tenantId);
+            Object result = serviceRequestRepository.fetchResult(getMdmsSearchUrl(), mdmsCriteriaReq);
+            List<Map<String, Object>> departments = JsonPath.read(result, MDMS_DEPARTMENT_MASTER_JSONPATH);
+            Map<String, String> codeToName = new LinkedHashMap<>();
+            if (departments != null) {
+                for (Map<String, Object> d : departments) {
+                    Object code = d.get("code");
+                    Object name = d.get("name");
+                    if (code instanceof String && name instanceof String)
+                        codeToName.put((String) code, (String) name);
+                }
+            }
+            return codeToName;
+        } catch (Exception e) {
+            log.warn("MDMSUtils: failed to fetch Department code->name map for tenant '{}' — department dual-read (name<->code) skipped: {}",
+                    tenantId, e.toString());
+            return Map.of();
+        }
     }
 
     /**
@@ -532,6 +701,128 @@ public class MDMSUtils {
         List<String> out = new ArrayList<>();
         for (Object o : (List<?>) raw) out.add(String.valueOf(o));
         return out;
+    }
+
+    /**
+     * Fetches the ACCESSCONTROL-ACTIONS-TEST.actions-test MDMS entry (id/url/method/resource/
+     * condition) for a given action url — the Tier-2 PDP's source of truth for JsonLogic
+     * conditions (see org.egov.pgr.policy.AccessPolicyRegistry). Returns an empty list (never
+     * null) when the call SUCCEEDED but no matching action is visible for the caller's roles —
+     * callers (AccessPolicyRegistry) treat that as "policy not defined" and allow, for backward
+     * compatibility with tenants that never configured this master.
+     *
+     * Throws {@link org.egov.pgr.policy.AccessControlUnavailableException} when the accesscontrol
+     * call itself fails (network error, non-2xx, malformed payload) — that is NOT the same as a
+     * confirmed absence of policy, and must NOT be treated as "not defined, allow": doing so would
+     * fail a whole tenant open during an accesscontrol outage. Callers fail closed on this.
+     *
+     * Deliberately omits the request's "enabled" field: egov-accesscontrol's
+     * /access/v1/actions/mdms/_get only constrains results by enabled status when that field is
+     * present, so leaving it out fetches every action mapped to the caller's roles regardless of
+     * its enabled flag, filtered only by roleCodes/tenantId/actionMaster.
+     */
+    public List<Map<String, Object>> fetchAccessControlActions(RequestInfo requestInfo, String tenantId, String actionUrl) {
+        List<String> roleCodes = extractRoleCodes(requestInfo);
+        if (roleCodes.isEmpty()) {
+            log.error("No roles on RequestInfo — cannot resolve access-control action for url='{}' tenant='{}'",
+                    actionUrl, tenantId);
+            // An unidentifiable caller is NOT the same as "call succeeded, no action visible for
+            // these roles" — that empty-list case is what callers treat as "policy not defined,
+            // allow" for backward compatibility. Collapsing the two here would disable the Tier-2
+            // per-row re-check for exactly the caller whose identity is least trustworthy.
+            throw new org.egov.pgr.policy.AccessControlUnavailableException(
+                    "no roles on RequestInfo; cannot resolve access-control action for url=" + actionUrl
+                            + " tenant=" + tenantId);
+        }
+
+        // egov-accesscontrol's ResponseInfoFactory NPEs on a null RequestInfo.ts (a Long/long
+        // ternary auto-unboxing trap) — the incoming search RequestInfo isn't guaranteed to
+        // carry one, so backfill it here rather than forward it as-is and 400 the call.
+        if (requestInfo.getTs() == null)
+            requestInfo.setTs(System.currentTimeMillis());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("roleCodes", roleCodes);
+        body.put("tenantId", tenantId);
+        body.put("actionMaster", MDMS_ACCESSCONTROL_ACTIONS_MASTER);
+        body.put("RequestInfo", requestInfo);
+
+        StringBuilder url = new StringBuilder(config.getAccessControlHost())
+                .append(config.getAccessControlActionsMdmsGetPath());
+        try {
+            Object result = serviceRequestRepository.fetchResult(url, body);
+            if (result == null)
+                return Collections.emptyList();
+
+            String safeUrl = actionUrl.replace("'", "\\'");
+            List<Map<String, Object>> actions = JsonPath.read(result, "$.actions[?(@.url=='" + safeUrl + "')]");
+            return actions == null ? Collections.emptyList() : actions;
+        } catch (Exception e) {
+            log.error("Failed to fetch access-control action for url='{}' tenant='{}' via {} — accesscontrol call failed",
+                    actionUrl, tenantId, config.getAccessControlActionsMdmsGetPath(), e);
+            throw new org.egov.pgr.policy.AccessControlUnavailableException(
+                    "access-control call failed for url=" + actionUrl + " tenant=" + tenantId, e);
+        }
+    }
+
+    /**
+     * Every action url visible to this caller's roles, in ONE call.
+     *
+     * <p>{@link #fetchAccessControlActions} already fetches the caller's whole role-scoped action
+     * list and then discards all but one url, so asking it N times fetches the same payload N
+     * times. Callers that need to test several urls at once — the dashboard's capability bootstrap
+     * asks about nine — use this instead and filter locally.
+     *
+     * <p>Same failure contract as its sibling: a successful call that simply matches nothing is an
+     * empty set, while a failed call raises {@link org.egov.pgr.policy.AccessControlUnavailableException}.
+     */
+    @SuppressWarnings("unchecked")
+    public Set<String> fetchVisibleActionUrls(RequestInfo requestInfo, String tenantId) {
+        List<String> roleCodes = extractRoleCodes(requestInfo);
+        if (roleCodes.isEmpty())
+            throw new org.egov.pgr.policy.AccessControlUnavailableException(
+                    "no roles on RequestInfo; cannot resolve access-control actions for tenant=" + tenantId);
+
+        if (requestInfo.getTs() == null)
+            requestInfo.setTs(System.currentTimeMillis());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("roleCodes", roleCodes);
+        body.put("tenantId", tenantId);
+        body.put("actionMaster", MDMS_ACCESSCONTROL_ACTIONS_MASTER);
+        body.put("RequestInfo", requestInfo);
+
+        StringBuilder url = new StringBuilder(config.getAccessControlHost())
+                .append(config.getAccessControlActionsMdmsGetPath());
+        try {
+            Object result = serviceRequestRepository.fetchResult(url, body);
+            if (result == null)
+                return Collections.emptySet();
+
+            List<Object> urls = JsonPath.read(result, "$.actions[*].url");
+            Set<String> visible = new LinkedHashSet<>();
+            if (urls != null)
+                for (Object each : urls)
+                    if (each != null)
+                        visible.add(String.valueOf(each));
+            return visible;
+        } catch (Exception e) {
+            log.error("Failed to fetch access-control actions for tenant='{}' via {} — accesscontrol call failed",
+                    tenantId, config.getAccessControlActionsMdmsGetPath(), e);
+            throw new org.egov.pgr.policy.AccessControlUnavailableException(
+                    "access-control call failed for tenant=" + tenantId, e);
+        }
+    }
+
+    /**
+     * Normalized (trim+uppercase, via {@link RoleCodes}) role codes for the outbound
+     * egov-accesscontrol request body — MUST use the same normalization
+     * {@code AccessPolicyRegistry}'s cache key is computed from, or a cached result for one
+     * caller's role spelling could be served to a different caller whose real (un-normalized)
+     * roles were never actually sent this way (#1441 review).
+     */
+    private List<String> extractRoleCodes(RequestInfo requestInfo) {
+        return new ArrayList<>(RoleCodes.normalize(requestInfo));
     }
 
 }

@@ -130,7 +130,29 @@ export const CreateComplaintConfig = {
         },
         {
           head: "CS_COMPLAINT_DETAILS_COMPLAINT_DETAILS",
+          // What happened first, then what kind of complaint it is.
           body: [
+            {
+              label: "CS_FILE_DESCRIBE",
+              isMandatory: true,
+              type: "textarea",
+              key: "ComplaintDescription",
+              populators: {
+                name: "description",
+                maxLength: 1000,
+                validation: {
+                  required: true,
+                  // CCSD-1956 + Moz QA: 20-1000 chars AND at least 3 letters, so
+                  // "00000000000000000000" (20 digits) and all-whitespace are
+                  // both rejected. The single `error` message below is worded to
+                  // cover both the length and the words requirement so a short or
+                  // numeric-only entry never reads as a bare "required" error.
+                  minLength: 20,
+                  pattern: /^(?=[\s\S]{20,1000}$)(?=(?:[\s\S]*?\p{L}){3})[\s\S]*$/u,
+                },
+                error: "CS_DESC_MIN_CHARS",
+              },
+            },
             {
               isMandatory: true,
               key: "SelectComplaintType",
@@ -144,6 +166,9 @@ export const CreateComplaintConfig = {
                 name: "SelectComplaintType",
                 optionsKey: "menuPathName",
                 error: "CORE_COMMON_REQUIRED_ERRMSG",
+                // Type-to-filter, as the hierarchy picker that replaces these
+                // on tenants with a complaint hierarchy (CCRS#941).
+                isSearchable: true,
               },
             },
             {
@@ -159,6 +184,7 @@ export const CreateComplaintConfig = {
                 name: "SelectSubComplaintType",
                 optionsKey: "i18nKey",
                 error: "CORE_COMMON_REQUIRED_ERRMSG",
+                isSearchable: true,
               },
             },
 
@@ -281,34 +307,6 @@ export const CreateComplaintConfig = {
 
           ],
         },
-
-        {
-          head: "CS_COMPLAINT_DETAILS_ADDITIONAL_DETAILS",
-          body: [
-            {
-              label: "CS_COMPLAINT_DETAILS_ADDITIONAL_DETAILS_DESCRIPTION",
-              isMandatory: true,
-              type: "textarea",
-              key: "ComplaintDescription",
-              populators: {
-                name: "description",
-                maxLength: 1000,
-                validation: {
-                  required: true,
-                  // CCSD-1956 + Moz QA: 20-1000 chars AND at least 3 letters, so
-                  // "00000000000000000000" (20 digits) and all-whitespace are
-                  // both rejected. The single `error` message below is worded to
-                  // cover both the length and the words requirement so a short or
-                  // numeric-only entry never reads as a bare "required" error.
-                  minLength: 20,
-                  pattern: /^(?=[\s\S]{20,1000}$)(?=(?:[\s\S]*?\p{L}){3})[\s\S]*$/u,
-                },
-                error: "CS_DESC_MIN_CHARS",
-              },
-            },
-          ],
-        },
-
       ],
     }
   ],

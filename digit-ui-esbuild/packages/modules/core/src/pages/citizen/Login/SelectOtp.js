@@ -7,12 +7,9 @@
 // feels modern but doesn't depend on the legacy <OTPInput> component.
 
 import React, { Fragment, useEffect, useRef, useState } from "react";
-import {
-  Button as V2Button,
-  Card as V2Card,
-} from "@egovernments/digit-ui-components-v2";
+import { Button as V2Button } from "@egovernments/digit-ui-components-v2";
 import useInterval from "../../../hooks/useInterval";
-import { V2LoginShell } from "./SelectMobileNumber";
+import { SignInCard, V2LoginShell, stepText } from "./SelectMobileNumber";
 
 const OTP_LENGTH = 6;
 
@@ -130,6 +127,7 @@ const SelectOtp = ({
   error,
   userType = "citizen",
   canSubmit,
+  recipient,
 }) => {
   const RESEND_COOLDOWN_SECS = 120;
   // m:ss — "2:00", "1:25", "0:07". With a 2-minute cooldown a raw seconds
@@ -188,65 +186,16 @@ const SelectOtp = ({
     );
   }
 
-  // QA #2: config.texts.* arrive ALREADY translated (see SelectMobileNumber) —
-  // and cardText is even composed with the phone number upstream. Consume
-  // directly instead of re-translating into the English fallback; raw
-  // ALL_CAPS keys (unseeded tenant/locale) still fall back to English.
-  const looksLikeRawKey = (s) => typeof s === "string" && /^[A-Z0-9_]{3,}$/.test(s.trim());
-  const pick = (v, fb) => (v && !looksLikeRawKey(v) ? v : fb);
-  const headerText = pick(config?.texts?.header, "Verify your number");
-  // cardText is composed upstream as "<translated> <mobileNumber>", so an
-  // unseeded key yields "CS_LOGIN_OTP_TEXT 2588…" — whole-string matching
-  // misses it. Test only the FIRST token; on a raw key fall back to the
-  // English default (the pre-existing tr() behaviour).
-  const cardTextValue = config?.texts?.cardText;
-  const cardText = cardTextValue
-    ? looksLikeRawKey(String(cardTextValue).trim().split(/\s+/)[0])
-      ? "Enter the 6-digit code we just sent."
-      : cardTextValue
-    : null;
+  const headerText = stepText(config?.texts?.header, "Verify your number");
+  // "Enter the OTP sent to" plus the number, the way the tenant's text reads.
+  const sentTo = stepText(config?.texts?.cardText, null);
+  const cardText = sentTo && recipient ? `${sentTo} ${recipient}` : recipient ? `Enter the 6-digit code sent to ${recipient}` : "Enter the 6-digit code we just sent.";
 
   const isReady = otp?.length === OTP_LENGTH && canSubmit;
 
   return (
     <V2LoginShell>
-      <V2Card
-        style={{
-          width: "100%",
-          maxWidth: "440px",
-          padding: "32px 28px 28px 28px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "20px",
-        }}
-      >
-        <header style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: "1.5rem",
-              fontWeight: 700,
-              color:
-                "var(--color-primary-1, var(--color-primary-main, #c84c0e))",
-              lineHeight: 1.2,
-            }}
-          >
-            {headerText}
-          </h1>
-          {cardText ? (
-            <p
-              style={{
-                margin: 0,
-                fontSize: "0.875rem",
-                color: "var(--color-text-secondary, #6B7280)",
-                lineHeight: 1.5,
-              }}
-            >
-              {cardText}
-            </p>
-          ) : null}
-        </header>
-
+      <SignInCard title={headerText} text={cardText}>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -268,7 +217,7 @@ const SelectOtp = ({
             </p>
           ) : null}
           <V2Button type="submit" disabled={!isReady} width="full">
-            {pick(config?.texts?.nextText, null) || tr("CS_COMMONS_NEXT", "Continue")}
+            {stepText(config?.texts?.nextText, null) || tr("CS_COMMONS_NEXT", "Continue")}
           </V2Button>
         </form>
 
@@ -294,9 +243,10 @@ const SelectOtp = ({
                 border: 0,
                 padding: 0,
                 cursor: "pointer",
-                color:
-                  "var(--color-primary-1, var(--color-primary-main, #c84c0e))",
-                fontWeight: 600,
+                // Clickable, so the link colour, as the employee card's
+                // "Forgot password?" is; the heading colour is for titles.
+                color: "var(--color-button-tertiary-text, var(--color-link-normal, #2563EB))",
+                fontWeight: 500,
                 fontSize: "0.875rem",
               }}
             >
@@ -304,7 +254,7 @@ const SelectOtp = ({
             </button>
           )}
         </div>
-      </V2Card>
+      </SignInCard>
     </V2LoginShell>
   );
 };

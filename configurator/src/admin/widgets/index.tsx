@@ -38,7 +38,7 @@ export function WidgetForFieldSpec({ spec, source }: WidgetDispatchProps) {
     case 'object-table':
       return <ObjectTableInput {...shared} columns={spec.columns ?? []} help={spec.help} />;
     case 'boolean':
-      return <BooleanInput {...shared} help={spec.help} />;
+      return <BooleanInput {...shared} help={spec.help} whenUnset={spec.whenUnset} />;
     case 'integer':
     case 'number':
       return <DigitFormInput {...shared} type="number" help={spec.help} />;

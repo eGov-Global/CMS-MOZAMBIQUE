@@ -1,45 +1,36 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Citizen file-complaint flow — v2 (Tailwind + shadcn-style chrome).
+// Citizen "File a Complaint": three steps, as in the #2038 design.
 //
-// This is a strangler-fig replacement for the FormExplorer.js + steps-config/*
-// + FormComposerV2 stack. The same 6-step shape is preserved so:
-//   - the data shape submitted to /pgr/v1/_create is byte-identical
-//   - the boundary, geolocation, and image-upload behaviour stays in the
-//     existing components (PGRBoundaryComponent, GeoLocations) + the V2
-//     PgrFileUpload, just rendered inside v2 chrome
-//   - server-side, redux, and post-submit response page see no change
+//   1. Complaint details: the authority the complaint is about (when
+//      RAINMAKER-PGR.ComplaintRelatedToMap is seeded), the description (typed,
+//      or spoken through the browser's speech recognition), attachments, the
+//      category, the category's additional fields, and the complainant's own
+//      details.
+//   2. Location: the map pin (optional), the boundary down to its last level,
+//      and a landmark. No postal code: it was retired (CCSD-2207) — the
+//      boundary already pins every complaint to a ward.
+//   3. Review and the declarations, then submit.
 //
-// What changes vs FormExplorer:
-//   - Tailwind / v2 components throughout the chrome (Stepper, ScreenContainer,
-//     FormFooter, Card, Button, Field, RadioCards, Select, Textarea).
-//   - Step 1 uses RadioCards for complaint type + sub-type instead of a tiny
-//     Dropdown — much better mobile tap targets.
-//   - Sticky action bar with Continue/Back, mobile-first layout.
-//   - State managed locally via React hooks — no FormComposerV2 / hidden
-//     react-hook-form coupling.
+// Each step is its own route (STEP_SLUGS) and the answers are mirrored into a
+// session draft that only a reload restores. All three steps stay mounted and
+// only the current one shows, so going Back finds the pickers as the citizen
+// left them. The response page's redux contract is unchanged.
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { complaintLabel } from "../../../utils/complaintLabel";
 import { isVisibleOnEntrance } from "../../../utils/testingTenant";
-import { EV, trackE, failureName } from "../../../utils/analytics";
+import { serializeGeoLocation } from "../../../utils/geoLocation";
+import { EV, trackE, failureName, trackEvent } from "../../../utils/analytics";
+import useVoiceInputEnabled from "../../../hooks/pgr/useVoiceInputEnabled";
 import PGRDatePicker from "../../../components/PGRDatePicker";
 import PgrFileUpload from "../../../components/PgrFileUpload";
 import { useDispatch } from "react-redux";
 import { useHistory, useLocation } from "react-router-dom";
 import { useQueryClient } from "react-query";
 
-import {
-  ScreenContainer,
-  ScreenHeader,
-  FormFooter,
-  Button,
-  Card,
-  Field,
-  Textarea,
-  Input,
-  Select,
-} from "@egovernments/digit-ui-components-v2";
+import { Button, ScreenContainer, ScreenHeader, Field, Input, Select, Textarea } from "@egovernments/digit-ui-components-v2";
+import { MicButton, VoiceSheet, speechToTextSupported } from "./VoiceInput";
 
 /**
  * Resolve a translation key with an English fallback.
@@ -111,6 +102,8 @@ interface BoundaryNode {
 interface GeoPoint {
   lat?: number | null;
   lng?: number | null;
+  /** Reverse-geocoded address, when the map found one. */
+  address?: string | null;
   ward?: { code?: string; name?: string } | null;
   pincode?: string | number | null;
 }
@@ -132,12 +125,19 @@ interface FormData {
   dynamicFields?: Record<string, unknown>;
   consents?: string[];
   isConfidential?: boolean; // doc "Keep details confidential" (backend-enforced later)
-  // Reporter identity (step 1, optional, prefilled from the citizen profile).
+  // Reporter identity (optional, prefilled from the citizen profile).
   // Travels in extendedAttributes — deliberately NOT citizen.name: posting an
   // edited name back to the user service triggers its masked-update rejection.
   complainantName?: string;
   complainantAddress?: string;
   email?: string;
+}
+
+/** The boundary picker's selection: the leaf, plus the node at each level. */
+interface BoundaryLevel {
+  code?: string;
+  name?: string;
+  boundaryType?: string;
 }
 
 // RAINMAKER-PGR.ComplaintRelatedToMap — the citizen-facing category lookup. Maps
@@ -224,6 +224,8 @@ const REQUIRED_CONSENTS: ReadonlyArray<{ code: string; labelKey: string; label: 
   { code: "DATA_PROCESSING", labelKey: "PGR_CONSENT_DATA_PROCESSING_LABEL", label: "I consent to my data being processed to handle this complaint." },
 ];
 
+const PRIMARY = "var(--color-primary-1, var(--color-primary-main, #c84c0e))";
+
 // Consistent checkbox styling: fixed-size box with a theme-accent (centered native
 // tick), nudged to align with the first line of the label text.
 const CHECKBOX_STYLE: React.CSSProperties = {
@@ -231,26 +233,14 @@ const CHECKBOX_STYLE: React.CSSProperties = {
   height: "1rem",
   marginTop: "0.15rem",
   flexShrink: 0,
-  accentColor: "var(--color-primary-1, var(--color-primary-main, #c84c0e))",
+  accentColor: PRIMARY,
   cursor: "pointer",
 };
 
-interface StepShellProps {
-  title: string;
-  description?: string;
-  collapsible?: boolean;
-  children: React.ReactNode;
-}
-
-// Consolidated 3-step wizard (was 6 screens). Each step groups what used to be
-// separate screens so the citizen reaches Submit in far fewer taps:
-//   complaint — "what is it about?" (related-to dispatcher) + the complaint type
-//   where     — map pin + ward (auto-cascaded from the pin) + landmark
-//   details   — description + dynamic category fields + photos + consents → submit
 const STEPS = [
-  { id: "complaint", title: "Complaint", sub: "Tell us about the issue" },
-  { id: "where", title: "Location", sub: "Where did it happen?" },
-  { id: "details", title: "Details", sub: "Additional information" },
+  { id: "details", key: "CS_FILE_STEP_DETAILS", fallback: "Complaint Details" },
+  { id: "location", key: "CS_FILE_STEP_LOCATION", fallback: "Location" },
+  { id: "review", key: "CS_FILE_STEP_REVIEW", fallback: "Review" },
 ] as const;
 
 // URL segment per step — every tab is a real, unique, deep-linkable route:
@@ -258,15 +248,18 @@ const STEPS = [
 // The URL is the single source of truth for the current step: browser
 // back/forward move between steps, a mid-flow F5 reopens the same step, and
 // analytics sees ordinary route pageviews (no virtual-pageview special case).
+// The segments are kept from before the #2038 step regrouping so the step
+// pageviews (and the sidebar's complaint-type entry link) keep their URLs.
 const STEP_SLUGS = ["complaint-type", "location", "details"] as const;
 
 // Session-draft key for the whole wizard. All 3 steps live on ONE route with
 // plain component state, so a refresh (or leaving and re-entering the route)
 // used to wipe every answer. {formData, stepIndex} is mirrored into
 // Digit.SessionStorage under this key (same-tab, 24h TTL, quota-guarded) and
-// deleted after a successful create. Photos are already fileStoreIds (strings)
-// so the draft stays tiny. Distinct from the legacy PGR_CITIZEN_CREATE_COMPLAINT
-// key, which Module.js clears on every citizen-home mount.
+// deleted after a successful create. Attachments are already fileStoreIds
+// (strings) so the draft stays tiny. Distinct from the legacy
+// PGR_CITIZEN_CREATE_COMPLAINT key, which Module.js clears on every
+// citizen-home mount.
 const CREATE_DRAFT_KEY = "PGR_CREATE_CITIZEN_DRAFT";
 
 // The saved draft (answers AND step position) may only be restored when the
@@ -285,6 +278,11 @@ let RESTORE_STEP_ARMED = (() => {
     return false;
   }
 })();
+
+// CCSD-1956: the description is 20–1000 characters and must contain real
+// words. 1000 is also the employee form's cap.
+const DESCRIPTION_MAX = 1000;
+const DESCRIPTION_MIN = 20;
 
 // ---------------------------------------------------------------------------
 // Helpers (kept identical to the legacy FormExplorer so the API payload
@@ -305,27 +303,14 @@ function isEmailAcceptable(v: unknown): boolean {
   return s.length === 0 || EMAIL_RE.test(s);
 }
 
-// Description must be a real description, not padding. 20-1000 chars AND at
-// least 3 letters — so "00000000000000000000" (20 digits) is rejected.
-// \p{L} counts any-language letters (Portuguese accents included).
-const DESC_MIN = 20;
+// A real description, not padding: at least 3 letters, so "000000…" is
+// rejected. \p{L} counts any-language letters (Portuguese accents included).
 function descriptionLetters(v: unknown): number {
   return (String(v ?? "").match(/\p{L}/gu) || []).length;
 }
 function isDescriptionValid(v: unknown): boolean {
   const s = String(v ?? "").trim();
-  return s.length >= DESC_MIN && descriptionLetters(s) >= 3;
-}
-
-function validateGeoLocation(v: { latitude?: number | null; longitude?: number | null }) {
-  if (
-    v &&
-    typeof v.latitude === "number" &&
-    typeof v.longitude === "number"
-  ) {
-    return { latitude: v.latitude, longitude: v.longitude };
-  }
-  return {};
+  return s.length >= DESCRIPTION_MIN && descriptionLetters(s) >= 3;
 }
 
 function getEffectiveServiceCode(
@@ -395,21 +380,18 @@ function mapFormDataToRequest(formData: FormData, tenantId: string, user: any, d
         landmark: validateString(formData?.landmark),
         buildingName: "",
         street: "",
+        // The ward the citizen confirmed in the cascade, which Review shows.
+        // It is the map's ward whenever the map's ward is in the boundary
+        // tree (the cascade fills from it); when the tree has no such ward,
+        // or the citizen changed the cascade, the map's code was filed while
+        // Review showed another ward.
         locality: {
-          // SelectedBoundary FIRST: it is the confirmed cascade value (a real
-          // boundary-tree code, and the user's manual correction when they
-          // overrode the pin's auto-fill). The raw ward hint is only a
-          // fallback — it comes from the GeoJSON resolver and may not even be
-          // a valid tree code (e.g. KILIMANI vs NAIROBI_CITY_KILIMANI).
           code:
             formData?.SelectedBoundary?.code ||
             formData?.GeoLocationsPoint?.ward?.code ||
             "",
         },
-        geoLocation: validateGeoLocation({
-          latitude: geoLocation.lat ?? null,
-          longitude: geoLocation.lng ?? null,
-        }),
+        geoLocation: serializeGeoLocation(geoLocation),
       },
       // Top-level service.extendedAttributes (doc jsonPath $.service.extendedAttributes).
       // Attached only when a category resolved; legacy/no-category flow is unchanged.
@@ -455,8 +437,9 @@ function isFieldValid(data: FormData, fieldKey: keyof FormData | string): boolea
       return false;
     }
     case "description":
-      // CCSD-1956: 20–1000 characters, and must contain real words (not only
-      // digits — QA: "000000..." was accepted). maxLength enforced by textarea.
+      // CCSD-1956 / CCSD-1980: 20–1000 characters, and real words — a
+      // numbers-only or whitespace-only description (e.g. "000000…") is
+      // rejected. The employee form applies the same rule.
       return isDescriptionValid(data.description);
     case "SelectComplaintType":
       return data.SelectComplaintType != null;
@@ -467,44 +450,17 @@ function isFieldValid(data: FormData, fieldKey: keyof FormData | string): boolea
   }
 }
 
-// (Per-step mandatory map removed — step validation is keyed by step id in
-// stepIsValid now that steps are consolidated.)
-
 // ---------------------------------------------------------------------------
 // Sub-step bodies
 // ---------------------------------------------------------------------------
 
-function StepShell({ title, description, collapsible, children }: StepShellProps) {
-  const [open, setOpen] = React.useState(true);
-  const showBody = !collapsible || open;
+/** One of the step's grouped panels: a small heading over its fields. */
+function Section({ title, className, children }: { title?: React.ReactNode; className?: string; children: React.ReactNode }) {
   return (
-    <Card className="p-6">
-      <div className="flex items-start" style={{ justifyContent: "space-between", gap: "1rem", marginBottom: showBody ? "1.25rem" : 0 }}>
-        <div style={{ minWidth: 0 }}>
-          {/* Theme-driven heading color (PRIMARY var) — same chain the legacy headings use. */}
-          <h2 className="text-lg font-semibold" style={{ margin: 0, color: PRIMARY }}>
-            {title}
-          </h2>
-          {description ? (
-            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-          ) : null}
-        </div>
-        {collapsible ? (
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            className="text-sm"
-            style={{
-              color: PRIMARY, background: "none", border: "none", cursor: "pointer",
-              whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: "0.25rem", flexShrink: 0,
-            }}
-          >
-            {open ? "Collapse" : "Expand"}<span aria-hidden>{open ? "▲" : "▼"}</span>
-          </button>
-        ) : null}
-      </div>
-      {showBody ? children : null}
-    </Card>
+    <section className={`cms-section${className ? ` ${className}` : ""}`}>
+      {title ? <h2 className="cms-section-head">{title}</h2> : null}
+      {children}
+    </section>
   );
 }
 
@@ -515,17 +471,39 @@ interface StepBodyProps {
   hierarchyDef?: ComplaintHierarchyDef | null;
   nodes?: ClassificationNode[];
   t: (key: string) => string;
+  /** Tenant the complaint will be created under — the authority-resolved
+   *  sub-tenant once one is picked. Steps that read tenant-scoped masters
+   *  (catalogue, map, boundary tree, filestore) must use THIS, not a tenant
+   *  re-derived from the session. */
+  tenantId?: string;
   // Authority dispatcher + dynamic-detail props (present only in the
   // ComplaintRelatedToMap-seeded flow).
   relatedToOptions?: RelatedToOption[];
   templateFields?: TemplateField[];
-  // The authority-resolved tenant — scopes the boundary cascade (and anything
-  // else tenant-specific) to the picked institution, not the login tenant.
-  resolvedTenant?: string;
-  // Inline loading flags for the consolidated "complaint" step (so we render a
-  // small spinner in-place instead of blanking the whole screen).
+  // Inline loading flags, so a spinner shows in place instead of blanking the
+  // whole screen when the authority (and with it the catalogue) changes.
   catalogueLoading?: boolean;
   dispatcherLoading?: boolean;
+}
+
+function InlineSpinner() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem 0" }}>
+      <span
+        aria-label="Loading"
+        style={{
+          display: "inline-block",
+          height: "1.75rem",
+          width: "1.75rem",
+          border: "3px solid currentColor",
+          borderTopColor: "transparent",
+          borderRadius: "9999px",
+          color: PRIMARY,
+          animation: "spin 0.8s linear infinite",
+        }}
+      />
+    </div>
+  );
 }
 
 /**
@@ -668,7 +646,9 @@ function ComplaintHierarchyPicker({
       : -1;
 
   return (
-    <div className="space-y-5">
+    // Its levels sit in the step's field grid: side by side on desktop,
+    // stacked on a phone.
+    <div className="cms-hierarchy">
       {levels.map((lvl, i) => {
         // Once the chosen branch terminates early, drop the deeper levels that
         // have nothing to offer (e.g. SUB_TYPE under a SECTOR that has none).
@@ -687,6 +667,10 @@ function ComplaintHierarchyPicker({
               value={sel[i] ?? undefined}
               disabled={disabled}
               onValueChange={(value: string) => handleChange(i, value)}
+              // Every filing list searches, whatever its length, as the
+              // employee form's do (CCRS#941).
+              searchable
+              searchPlaceholder={tr(t, "CS_COMMON_SEARCH", "Search")}
               placeholder={
                 disabled
                   ? tr(t, "CS_COMPLAINT_PICK_PARENT_FIRST", "Select the level above first")
@@ -701,62 +685,59 @@ function ComplaintHierarchyPicker({
   );
 }
 
-// ── Authority / "Complaint related to" — dispatcher step ──────────────────
-// Renders only when RAINMAKER-PGR.ComplaintRelatedToMap is seeded. The pick
+// ── Authority / "Complaint related to" ────────────────────────────────────
+// Renders only when RAINMAKER-PGR.ComplaintRelatedToMap is seeded with more
+// than one authority (a single one is auto-selected upstream). The pick
 // resolves a templateType + the sub-tenant the complaint is filed under (the
 // catalogue is then fetched at that tenant; tenant code is never shown).
-function RelatedToStepBody({ data, patch, relatedToOptions, t }: StepBodyProps) {
+function AuthorityField({ data, patch, relatedToOptions, t }: StepBodyProps) {
   const options = relatedToOptions || [];
   return (
-    <StepShell title={tr(t, "CS_COMPLAINT_RELATED_TO", "What is your complaint about?")}>
-      <Field
-        label={tr(t, "CS_COMPLAINT_RELATED_TO_FIELD", "Complaint related to")}
-        required
-        htmlFor="related-to"
-      >
-        <Select
-          id="related-to"
-          value={data.caseRelatedTo}
-          onValueChange={(value: string) => {
-            const o = options.find((x) => x.code === value);
-            if (!o) return;
-            patch({
-              caseRelatedTo: o.code,
-              caseRelatedToName: o.name,
-              resolvedTenantId: o.tenantCode,
-              // Category drives the catalogue + fields — reset downstream.
-              SelectComplaintType: null,
-              SelectSubComplaintType: null,
-              dynamicFields: {},
-              // The boundary tree is fetched at the resolved tenant, so a
-              // previously picked node belongs to the OLD tenant's tree.
-              // The map pin (geographic) is kept — its ward hint re-cascades
-              // against the new tree automatically.
-              SelectedBoundary: null,
-              // Filestore ids are tenant-scoped: photos uploaded under the old
-              // resolved tenant are unreadable under the new one. Drop them so
-              // the citizen re-uploads (previews would break anyway).
-              ComplaintImagesPoint: undefined,
-            });
-          }}
-          placeholder={tr(t, "CS_COMPLAINT_PICK_ONE", "Select…")}
-          // MDMS `name` carries a localization KEY on newer data
-          // (PGR_RELATEDTO_NAME_<CODE>, prod convention) — t() resolves it per
-          // locale. Older data ships display TEXT in `name`; t() passes any
-          // non-key string through unchanged, so both conventions render.
-          options={options.map((o) => ({ value: o.code, label: t(o.name) }))}
-        />
-        {data.caseRelatedToName ? (
-          <FieldHelp ok>{t(data.caseRelatedToName)}</FieldHelp>
-        ) : (
-          <FieldHelp>{tr(t, "CS_RELATED_TO_HELP", "Choose the organization or entity responsible for the issue.")}</FieldHelp>
-        )}
-      </Field>
-    </StepShell>
+    <Field
+      label={tr(t, "CS_COMPLAINT_RELATED_TO_FIELD", "Complaint related to")}
+      required
+      htmlFor="related-to"
+      hint={tr(t, "CS_RELATED_TO_HELP", "Choose the organization or entity responsible for the issue.")}
+    >
+      <Select
+        id="related-to"
+        value={data.caseRelatedTo}
+        searchable
+        searchPlaceholder={tr(t, "CS_COMMON_SEARCH", "Search")}
+        onValueChange={(value: string) => {
+          const o = options.find((x) => x.code === value);
+          if (!o) return;
+          patch({
+            caseRelatedTo: o.code,
+            caseRelatedToName: o.name,
+            resolvedTenantId: o.tenantCode,
+            // Category drives the catalogue + fields — reset downstream.
+            SelectComplaintType: null,
+            SelectSubComplaintType: null,
+            dynamicFields: {},
+            // The boundary tree is fetched at the resolved tenant, so a
+            // previously picked node belongs to the OLD tenant's tree.
+            // The map pin (geographic) is kept — its ward hint re-cascades
+            // against the new tree automatically.
+            SelectedBoundary: null,
+            // Filestore ids are tenant-scoped: files uploaded under the old
+            // resolved tenant are unreadable under the new one. Drop them so
+            // the citizen re-uploads (previews would break anyway).
+            ComplaintImagesPoint: undefined,
+          });
+        }}
+        placeholder={tr(t, "CS_COMPLAINT_PICK_ONE", "Select…")}
+        // MDMS `name` carries a localization KEY on newer data
+        // (PGR_RELATEDTO_NAME_<CODE>, prod convention) — t() resolves it per
+        // locale. Older data ships display TEXT in `name`; t() passes any
+        // non-key string through unchanged, so both conventions render.
+        options={options.map((o) => ({ value: o.code, label: t(o.name) }))}
+      />
+    </Field>
   );
 }
 
-function Step0Type({ data, patch, serviceDefs, hierarchyDef, nodes, t }: StepBodyProps) {
+function CategoryFields({ data, patch, serviceDefs, hierarchyDef, nodes, t, catalogueLoading }: StepBodyProps) {
   const hierarchyActive = !!(
     hierarchyDef &&
     Array.isArray(hierarchyDef.levels) &&
@@ -788,161 +769,285 @@ function Step0Type({ data, patch, serviceDefs, hierarchyDef, nodes, t }: StepBod
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [data.SelectComplaintType?.menuPath, serviceDefs]);
 
+  // The authority's catalogue is still arriving: never show the previous
+  // tenant's options meanwhile.
+  if (catalogueLoading) return <InlineSpinner />;
+
   return (
-    // QA #11: collapsible removed — the section is always expanded.
-    <StepShell title={tr(t, "CS_COMPLAINT_CATEGORY", "Complaint Category")}>
-      <div className="space-y-5">
-        {hierarchyActive ? (
-          <ComplaintHierarchyPicker
-            def={hierarchyDef as ComplaintHierarchyDef}
-            nodes={nodes || []}
-            serviceDefs={serviceDefs}
-            t={t}
-            restoreCode={data.SelectComplaintType?.serviceCode}
-            onLeafChange={(leaf) =>
-              patch({ SelectComplaintType: leaf, SelectSubComplaintType: leaf })
-            }
-          />
-        ) : (
-          <>
-        <Field
-          label={t("CS_COMPLAINT_DETAILS_COMPLAINT_TYPE")}
-          required
-          htmlFor="complaint-type"
-        >
-          <Select
-            id="complaint-type"
-            value={data.SelectComplaintType?.menuPath}
-            onValueChange={(value: string) => {
-              const picked = types.find((tp) => tp.menuPath === value);
-              patch({ SelectComplaintType: picked, SelectSubComplaintType: null });
-            }}
-            placeholder={tr(t, "CS_COMPLAINT_PICK_TYPE", "Select a complaint type")}
-            options={types.map((tp) => ({
-              value: tp.menuPath,
-              label: tp.menuPathName ?? tp.menuPath,
-            }))}
-          />
-        </Field>
-        {subTypes.length > 1 ? (
+    <div className="cms-field-grid">
+      {hierarchyActive ? (
+        <ComplaintHierarchyPicker
+          def={hierarchyDef as ComplaintHierarchyDef}
+          nodes={nodes || []}
+          serviceDefs={serviceDefs}
+          t={t}
+          restoreCode={data.SelectComplaintType?.serviceCode}
+          onLeafChange={(leaf) =>
+            patch({ SelectComplaintType: leaf, SelectSubComplaintType: leaf })
+          }
+        />
+      ) : (
+        <>
           <Field
-            label={t("CS_COMPLAINT_DETAILS_COMPLAINT_SUBTYPE")}
+            label={tr(t, "CS_COMPLAINT_DETAILS_COMPLAINT_TYPE", "Complaint Category")}
             required
-            htmlFor="complaint-subtype"
+            htmlFor="complaint-type"
           >
             <Select
-              id="complaint-subtype"
-              value={data.SelectSubComplaintType?.serviceCode}
+              id="complaint-type"
+              value={data.SelectComplaintType?.menuPath}
+              searchable
+              searchPlaceholder={tr(t, "CS_COMMON_SEARCH", "Search")}
               onValueChange={(value: string) => {
-                const picked = subTypes.find((s) => s.serviceCode === value);
-                patch({ SelectSubComplaintType: picked });
+                const picked = types.find((tp) => tp.menuPath === value);
+                patch({ SelectComplaintType: picked, SelectSubComplaintType: null });
               }}
-              placeholder={tr(t, "CS_COMPLAINT_PICK_SUBTYPE", "Select a subtype")}
-              options={subTypes.map((s) => ({
-                value: s.serviceCode,
-                label: complaintLabel(t, s.serviceCode, s.name),
+              placeholder={tr(t, "CS_COMPLAINT_PICK_TYPE", "Select a complaint category")}
+              options={types.map((tp) => ({
+                value: tp.menuPath,
+                label: tp.menuPathName ?? tp.menuPath,
               }))}
             />
           </Field>
-        ) : null}
-          </>
-        )}
-        <TipBox body={tr(t, "CS_COMPLAINT_TYPE_TIP", "Choose the most relevant option that best describes your issue.")} />
-      </div>
-    </StepShell>
-  );
-}
-
-// ── Section header (title + subtitle) for the unified "Where" card ──
-// Footer nav arrows as SVGs: the ←/→ TEXT glyphs sit off the optical center of
-// the label no matter how they are flexed (font draws them low in the em-box).
-const ArrowLeftIcon = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ display: "block" }}>
-    <line x1="19" y1="12" x2="5" y2="12" />
-    <polyline points="12 19 5 12 12 5" />
-  </svg>
-);
-const ArrowRightIcon = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ display: "block" }}>
-    <line x1="5" y1="12" x2="19" y2="12" />
-    <polyline points="12 5 19 12 12 19" />
-  </svg>
-);
-
-const TipBulbIcon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 18h6" />
-    <path d="M10 22h4" />
-    <path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z" />
-  </svg>
-);
-function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div className="mb-4">
-      <h3 style={{ fontSize: "1.05rem", fontWeight: 600, margin: 0, color: PRIMARY }}>{title}</h3>
-      {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
-    </div>
-  );
-}
-
-function Step1Map({ data, patch, t }: StepBodyProps) {
-  // Reuse the existing GeoLocations component (leaflet + Nominatim). Rendered
-  // BARE (no card) — it sits in the left pane of the unified "Where" card.
-  const GeoLocations = Digit?.ComponentRegistryService?.getComponent("GeoLocations");
-  return (
-    <div>
-      <SectionHeader
-        title={tr(t, "CS_PIN_LOCATION_TITLE", "Pin the complaint location")}
-        subtitle={tr(t, "CS_PIN_LOCATION_HINT", "Click and hold on the map to drop the pin on the exact spot.")}
-      />
-      {GeoLocations ? (
-        <GeoLocations
-          t={t}
-          // The map's MapConfig + ward-boundary tree resolve at the tenant the
-          // FIRST dropdown picked (ComplaintRelatedToMap tenantCode), not the
-          // citizen's login tenant (state root) whose tree is empty.
-          tenantId={(data as any)?.resolvedTenantId}
-          config={{
-            key: "GeoLocationsPoint",
-            populators: { name: "GeoLocationsPoint" },
-            withoutLabel: true,
-            // Map height tuned to balance the Location-details pane once the mz
-            // boundary cascade is expanded (Província → Distrito → Município +
-            // landmark + tip ≈ this tall). Citizen flow only; the shared
-            // component otherwise fills calc(100vh-400px).
-            mapHeight: "520px",
-          }}
-          formData={data}
-          onSelect={(_key: string, value: GeoPoint) => {
-            patch({ GeoLocationsPoint: value });
-          }}
-        />
-      ) : (
-        <p className="text-sm text-destructive">Map component not registered.</p>
+          {subTypes.length > 1 ? (
+            <Field
+              label={tr(t, "CS_COMPLAINT_DETAILS_COMPLAINT_SUBTYPE", "Complaint Subcategory")}
+              required
+              htmlFor="complaint-subtype"
+            >
+              <Select
+                id="complaint-subtype"
+                value={data.SelectSubComplaintType?.serviceCode}
+                searchable
+                searchPlaceholder={tr(t, "CS_COMMON_SEARCH", "Search")}
+                onValueChange={(value: string) => {
+                  const picked = subTypes.find((s) => s.serviceCode === value);
+                  patch({ SelectSubComplaintType: picked });
+                }}
+                placeholder={tr(t, "CS_COMPLAINT_PICK_SUBTYPE", "Select a subcategory")}
+                options={subTypes.map((s) => ({
+                  value: s.serviceCode,
+                  label: complaintLabel(t, s.serviceCode, s.name),
+                }))}
+              />
+            </Field>
+          ) : null}
+        </>
       )}
     </div>
   );
 }
 
+/** The selected category's additional fields (RAINMAKER-PGR.ComplaintTemplateType → its JSON Schema). */
+function AdditionalFields({ data, patch, templateFields, t }: StepBodyProps) {
+  const fields = templateFields || [];
+  const dyn = data.dynamicFields || {};
+  const setDyn = (key: string, value: unknown) => patch({ dynamicFields: { ...dyn, [key]: value } });
+  return (
+    <div className="cms-field-grid">
+      {fields.map((f) => {
+        const val = (dyn[f.fieldKey] as string) ?? "";
+        return (
+          <Field
+            key={f.fieldKey}
+            // CCSD-1955: optional fields are explicitly labeled "(Optional)".
+            label={
+              (f.labelKey ? tr(t, f.labelKey, f.label) : f.label) +
+              (f.mandatory ? "" : " " + tr(t, "CS_OPTIONAL_SUFFIX", "(Optional)"))
+            }
+            required={!!f.mandatory}
+            htmlFor={`xf-${f.fieldKey}`}
+          >
+            {f.dataType === "textarea" ? (
+              <Textarea
+                id={`xf-${f.fieldKey}`}
+                data-matomo-mask
+                maxLength={f.maxLength}
+                value={val}
+                onChange={(e) => setDyn(f.fieldKey, e.target.value)}
+              />
+            ) : f.dataType === "date" ? (
+              // CCSD-1952: SAME calendar as the employee form (PGRDatePicker,
+              // maxDate today) — future dates render greyed-out and unclickable
+              // on both surfaces. The native <input type="date"> was dropped
+              // here: its max attr enforcement varies by browser, and silently
+              // ignoring a future pick reads as broken.
+              <PGRDatePicker
+                onSelect={(name: string, v: string) => setDyn(f.fieldKey, v)}
+                config={{ key: f.fieldKey, populators: { name: f.fieldKey, maxDate: "today" } }}
+                formData={dyn}
+                // Match the v2 wizard's field metrics (full width, h-11,
+                // rounded-md) — the picker's default caps at the employee
+                // form's 37.5rem, which rendered narrower than every other
+                // field on this step.
+                style={{ maxWidth: "100%" }}
+                fieldStyle={{ height: "2.75rem", borderRadius: "0.375rem" }}
+              />
+            ) : (
+              <Input
+                id={`xf-${f.fieldKey}`}
+                data-matomo-mask
+                type={f.dataType === "number" ? "number" : "text"}
+                maxLength={f.dataType === "number" ? undefined : f.maxLength}
+                value={val}
+                onChange={(e) => setDyn(f.fieldKey, e.target.value)}
+              />
+            )}
+          </Field>
+        );
+      })}
+    </div>
+  );
+}
+
+// Optional reporter identity, prefilled from the logged-in citizen's profile
+// (name + address editable per complaint). The values travel in
+// extendedAttributes (complainantName/complainantAddress), so editing them
+// never round-trips through the user service.
+function ReporterFields({ data, patch, t }: StepBodyProps) {
+  React.useEffect(() => {
+    const info = Digit.UserService.getUser()?.info;
+    const prefill: Partial<FormData> = {};
+    if (data.complainantName === undefined && info?.name) prefill.complainantName = info.name;
+    if (data.complainantAddress === undefined && (info?.permanentAddress || info?.correspondenceAddress)) {
+      prefill.complainantAddress = info.permanentAddress || info.correspondenceAddress;
+    }
+    if (data.email === undefined && info?.emailId) prefill.email = info.emailId;
+    if (Object.keys(prefill).length) patch(prefill);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const optional = tr(t, "CS_COMMON_OPTIONAL", "Optional");
+  return (
+    <div className="cms-field-grid">
+      <Field label={tr(t, "CS_REPORTER_FULL_NAME_LABEL", "Full Name")} htmlFor="reporter-name" hint={optional}>
+        <Input
+          id="reporter-name"
+          data-matomo-mask
+          maxLength={128}
+          value={data.complainantName ?? ""}
+          onChange={(e) => patch({ complainantName: e.target.value })}
+        />
+      </Field>
+      <Field label={tr(t, "CS_REPORTER_ADDRESS_LABEL", "Address")} htmlFor="reporter-address" hint={optional}>
+        <Input
+          id="reporter-address"
+          data-matomo-mask
+          maxLength={300}
+          value={data.complainantAddress ?? ""}
+          onChange={(e) => patch({ complainantAddress: e.target.value })}
+        />
+      </Field>
+      <Field
+        label={tr(t, "PGR_EXT_EMAIL_LABEL", "Email Address")}
+        htmlFor="reporter-email"
+        hint={optional}
+        error={isEmailAcceptable(data.email) ? undefined : tr(t, "CS_EMAIL_INVALID", "Please enter a valid email address")}
+      >
+        <Input
+          id="reporter-email"
+          data-matomo-mask
+          type="email"
+          value={data.email ?? ""}
+          onChange={(e) => patch({ email: e.target.value })}
+        />
+      </Field>
+    </div>
+  );
+}
+
 /**
- * Combined location-confirmation step.
- *
- * Replaces the separate address (landmark + postal code) and ward
- * (County / Sub-County / Ward cascade) steps. The previous flow asked
- * the user to re-pick all three boundary levels and re-type the
- * pincode even though the prior map step had already captured them
- * via `GeoLocations.resolveWard()` (point-in-polygon on the bundled
- * Nairobi-wards GeoJSON, plus Nominatim for pincode).
- *
- * Now: the boundary cascade auto-fills from the map pin and renders
- * each level as DISABLED Selects (read-only with the value visible),
- * pincode is the same kind of disabled input, and the user only
- * types an optional landmark before continuing. If the auto-fill
- * misses a particular level (GeoJSON / boundary-tree drift, or
- * pincode missing from Nominatim) the affected control becomes
- * interactive so the user can fill the gap manually.
+ * The declarations confirmed before submit, on the authority flow: the
+ * mandatory consents under one header and the confidentiality opt-in under
+ * another (CCSD-2072).
  */
-function Step2Location({ data, patch, resolvedTenant, t }: StepBodyProps) {
+function Declarations({ data, patch, t }: StepBodyProps) {
+  const consents = data.consents || [];
+  const toggleConsent = (code: string, on: boolean) =>
+    patch({ consents: on ? [...consents, code] : consents.filter((c) => c !== code) });
+  return (
+    <div className="space-y-2">
+      {/* Consents are EXPLICIT at create (CCSD-1979 revisited: show at
+          create; hidden only on the details/view screens — CCSD-1988). */}
+      <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: PRIMARY }}>
+        {tr(t, "PGR_CONSENT_SECTION_MANDATORY", "Mandatory")}
+        <span className="ml-0.5" style={{ color: "var(--color-error, #d4351c)" }} aria-hidden>
+          *
+        </span>
+      </div>
+      {REQUIRED_CONSENTS.map((c) => (
+        <label key={c.code} className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            style={CHECKBOX_STYLE}
+            checked={consents.includes(c.code)}
+            onChange={(e) => toggleConsent(c.code, e.target.checked)}
+          />
+          <span>
+            {tr(t, c.labelKey, c.label)}
+            {/* Same required marker the design-system Label renders. */}
+            <span className="ml-0.5 text-destructive" style={{ color: "var(--color-error, #d4351c)" }} aria-hidden>
+              *
+            </span>
+          </span>
+        </label>
+      ))}
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-3 mt-1 border-t border-border">
+        {tr(t, "PGR_CONSENT_SECTION_OPTIONAL", "Optional")}
+      </div>
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          style={CHECKBOX_STYLE}
+          checked={!!data.isConfidential}
+          onChange={(e) => patch({ isConfidential: e.target.checked })}
+        />
+        <span>
+          {tr(t, "PGR_EXT_IS_CONFIDENTIAL_LABEL", "Keep details confidential.")}{" "}
+          <span className="text-muted-foreground">
+            {tr(t, "PGR_EXT_IS_CONFIDENTIAL_HINT", "Visibility is enforced once secure handling is enabled; for now this flags the complaint for staff awareness.")}
+          </span>
+        </span>
+      </label>
+    </div>
+  );
+}
+
+function MapPanel({ data, patch, t, tenantId }: StepBodyProps) {
+  // Reuse the existing GeoLocations component — it owns the leaflet map +
+  // Nominatim integration. We just pass through formData and a setter.
+  const GeoLocations = Digit?.ComponentRegistryService?.getComponent("GeoLocations");
+  if (!GeoLocations) {
+    return <p className="cms-field-error">Map component not registered.</p>;
+  }
+  return (
+    <GeoLocations
+      t={t}
+      // The map's MapConfig + ward-boundary tree resolve at the tenant the
+      // complaint files under (the authority's tenantCode), not the citizen's
+      // login tenant (state root) whose tree is empty.
+      tenantId={tenantId}
+      config={{
+        key: "GeoLocationsPoint",
+        populators: { name: "GeoLocationsPoint" },
+        withoutLabel: true,
+      }}
+      formData={data}
+      onSelect={(_key: string, value: GeoPoint) => {
+        patch({ GeoLocationsPoint: value });
+      }}
+    />
+  );
+}
+
+/**
+ * The boundary cascade and landmark under the map.
+ *
+ * The cascade auto-fills from the map pin (GeoLocations.resolveWard writes
+ * the ward, BoundaryComponent rebuilds the path) and renders the filled
+ * levels read-only; a level the auto-fill missed stays interactive so the
+ * citizen can fill the gap.
+ */
+function LocationFields({ data, patch, t, tenantId }: StepBodyProps) {
   const PGRBoundaryComponent = Digit?.ComponentRegistryService?.getComponent("PGRBoundaryComponent");
 
   // The map's resolveWard writes ward.{code, name} into
@@ -954,601 +1059,385 @@ function Step2Location({ data, patch, resolvedTenant, t }: StepBodyProps) {
   const wardFromMap = !!(wardHint?.code || wardHint?.name);
 
   return (
-    <div>
-      <SectionHeader
-        title={tr(t, "CS_LOCATION_DETAILS_TITLE", "Location details")}
-        subtitle={tr(t, "CS_LOCATION_CONFIRM_HINT", "Add details so our team can quickly find the exact spot.")}
-      />
-      <div className="space-y-5">
-        {PGRBoundaryComponent ? (
-          <PGRBoundaryComponent
-            t={t}
-            userType="citizen"
-            config={{ key: "SelectedBoundary", populators: { name: "SelectedBoundary" }, label: "", tenantId: resolvedTenant }}
-            formData={data}
-            // Disable cascade levels that auto-filled; empty (auto-fill miss)
-            // levels stay interactive so the user can pick manually.
-            readOnly={wardFromMap}
-            onSelect={(_key: string, value: BoundaryNode) => {
-              patch({ SelectedBoundary: value });
-            }}
-          />
-        ) : (
-          <p className="text-sm text-destructive">Boundary component not registered.</p>
-        )}
-
-        <Field
-          label={tr(t, "CS_COMPLAINT_LANDMARK__DETAILS", "Landmark") + " " + tr(t, "CS_OPTIONAL_SUFFIX", "(Optional)")}
-          htmlFor="landmark"
-        >
-          <Input
-            id="landmark"
-            data-matomo-mask
-            placeholder={tr(t, "CS_LANDMARK_PLACEHOLDER", "e.g. Near Jamia Mosque, Next to Central Market")}
-            maxLength={64}
-            value={data.landmark ?? ""}
-            onChange={(e) => patch({ landmark: e.target.value })}
-          />
-        </Field>
-
-        {/* Tip callout — encourages a landmark for faster routing. */}
-        <div
-          style={{
-            display: "flex",
-            gap: "0.5rem",
-            alignItems: "flex-start",
-            background: "#edf6ef",
-            border: "1px solid #cfe6d6",
-            borderRadius: "0.5rem",
-            padding: "0.75rem 1rem",
+    <div className="cms-field-grid">
+      {PGRBoundaryComponent ? (
+        <PGRBoundaryComponent
+          t={t}
+          userType="citizen"
+          // Scope the cascade to the tenant the complaint FILES under, which is
+          // the same tenant the map resolves against. Without it the cascade
+          // falls back to ULBService.getCurrentTenantId(), which returns
+          // STATE_LEVEL_TENANT_ID for every citizen — so a citizen whose home
+          // city is set would pick boundaries out of the state root's tree and
+          // attach them to a complaint filed in their city.
+          config={{ key: "SelectedBoundary", populators: { name: "SelectedBoundary" }, label: "", tenantId }}
+          formData={data}
+          // Ask the cascade to render its dropdowns as disabled
+          // wherever it has an auto-filled value. Levels left empty
+          // (auto-fill miss) stay interactive so the user can pick.
+          readOnly={wardFromMap}
+          onSelect={(_key: string, value: BoundaryNode) => {
+            patch({ SelectedBoundary: value });
           }}
-        >
-          <span style={{ color: PRIMARY, flexShrink: 0, marginTop: "1px", display: "inline-flex" }}>{TipBulbIcon}</span>
-          <div className="text-sm">
-            <div className="font-medium" style={{ color: PRIMARY }}>{tr(t, "CS_LOCATION_TIP_TITLE", "Tip")}</div>
-            <div className="text-muted-foreground">
-              {tr(t, "CS_LOCATION_TIP_BODY", "A landmark helps our team find the exact spot faster.")}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Step3Description({ data, patch, templateFields, t }: StepBodyProps) {
-  const fields = templateFields || [];
-  const dyn = data.dynamicFields || {};
-  const extended = !!data.caseRelatedTo; // dispatcher flow active
-  const setDyn = (key: string, value: unknown) => patch({ dynamicFields: { ...dyn, [key]: value } });
-  const consents = data.consents || [];
-  const toggleConsent = (code: string, on: boolean) =>
-    patch({ consents: on ? [...consents, code] : consents.filter((c) => c !== code) });
-
-  return (
-    <StepShell
-      title={t("CS_COMPLAINT_DETAILS_ADDITIONAL_DETAILS")}
-      description={tr(
-        t,
-        "CS_DESCRIPTION_HINT",
-        "What happened? When did it start? Add as much detail as helps."
+        />
+      ) : (
+        <p className="text-sm text-destructive">Boundary component not registered.</p>
       )}
-    >
-      <div className="space-y-5">
-        <Field
-          label={t("CS_COMPLAINT_DETAILS_ADDITIONAL_DETAILS_DESCRIPTION")}
-          required
-          htmlFor="complaint-description"
-        >
-          <Textarea
-            id="complaint-description"
-            data-matomo-mask
-            placeholder={tr(t, "CS_DESCRIBE_THE_ISSUE_PLACEHOLDER", "Describe the issue in your own words…")}
-            maxLength={1000}
-            value={data.description ?? ""}
-            onChange={(e) => patch({ description: e.target.value })}
-          />
-          {/* CCSD-1956: 20–1000 chars + must be real words (not digits-only).
-              Counter turns into the relevant hint until valid. */}
-          <div className="mt-1 text-xs text-muted-foreground text-right">
-            {(() => {
-              const raw = data.description ?? "";
-              const trimmed = raw.trim();
-              if (trimmed.length > 0 && trimmed.length < DESC_MIN) {
-                return (
-                  <span style={{ color: "#b3261e" }}>
-                    {tr(t, "CS_DESC_MIN_CHARS", "Minimum 20 characters")} · {raw.length} / 1000
-                  </span>
-                );
-              }
-              if (trimmed.length >= DESC_MIN && descriptionLetters(trimmed) < 3) {
-                return (
-                  <span style={{ color: "#b3261e" }}>
-                    {tr(t, "CS_DESC_NEEDS_WORDS", "Please describe the issue in words, not only numbers")} · {raw.length} / 1000
-                  </span>
-                );
-              }
-              return <>{raw.length} / 1000</>;
-            })()}
-          </div>
-        </Field>
 
-        {/* Dynamic fields from RAINMAKER-PGR.ComplaintTemplateType[templateType]. */}
-        {fields.map((f) => {
-          const val = (dyn[f.fieldKey] as string) ?? "";
-          return (
-            <Field
-              key={f.fieldKey}
-              // CCSD-1955: optional fields are explicitly labeled "(Optional)".
-              label={
-                (f.labelKey ? tr(t, f.labelKey, f.label) : f.label) +
-                (f.mandatory ? "" : " " + tr(t, "CS_OPTIONAL_SUFFIX", "(Optional)"))
-              }
-              required={!!f.mandatory}
-              htmlFor={`xf-${f.fieldKey}`}
-            >
-              {f.dataType === "textarea" ? (
-                <Textarea
-                  id={`xf-${f.fieldKey}`}
-                  data-matomo-mask
-                  maxLength={f.maxLength}
-                  value={val}
-                  onChange={(e) => setDyn(f.fieldKey, e.target.value)}
-                />
-              ) : f.dataType === "date" ? (
-                // CCSD-1952: SAME calendar as the employee form (PGRDatePicker,
-                // maxDate today) — future dates render greyed-out and unclickable
-                // on both surfaces. The native <input type="date"> was dropped
-                // here: its max attr enforcement varies by browser, and silently
-                // ignoring a future pick reads as broken.
-                <PGRDatePicker
-                  onSelect={(name: string, v: string) => setDyn(f.fieldKey, v)}
-                  config={{ key: f.fieldKey, populators: { name: f.fieldKey, maxDate: "today" } }}
-                  formData={dyn}
-                  // Match the v2 wizard's field metrics (full width, h-11,
-                  // rounded-md) — the picker's default caps at the employee
-                  // form's 37.5rem, which rendered narrower than every other
-                  // field on this step.
-                  style={{ maxWidth: "100%" }}
-                  fieldStyle={{ height: "2.75rem", borderRadius: "0.375rem" }}
-                />
-              ) : (
-                <Input
-                  id={`xf-${f.fieldKey}`}
-                  data-matomo-mask
-                  type={f.dataType === "number" ? "number" : "text"}
-                  maxLength={f.dataType === "number" ? undefined : f.maxLength}
-                  value={val}
-                  onChange={(e) => setDyn(f.fieldKey, e.target.value)}
-                />
-              )}
-            </Field>
-          );
-        })}
-
-        {/* Complainant name + address + email moved to step 1 (ReporterDetailsCard, prefilled). */}
-
-        {extended ? (
-          <div className="space-y-2">
-            {/* Consents are EXPLICIT at create (CCSD-1979 revisited: show at
-                create; hidden only on the details/view screens — CCSD-1988).
-                CCSD-2072: group the mandatory consents under an OBRIGATÓRIO
-                header and the confidential opt-in under OPCIONAL. */}
-            <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: PRIMARY }}>
-              {tr(t, "PGR_CONSENT_SECTION_MANDATORY", "Mandatory")}
-              <span className="ml-0.5" style={{ color: "var(--color-error, #d4351c)" }} aria-hidden>
-                *
-              </span>
-            </div>
-            {REQUIRED_CONSENTS.map((c) => (
-              <label key={c.code} className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  style={CHECKBOX_STYLE}
-                  checked={consents.includes(c.code)}
-                  onChange={(e) => toggleConsent(c.code, e.target.checked)}
-                />
-                <span>
-                  {tr(t, c.labelKey, c.label)}
-                  {/* Same required marker the design-system Label renders. */}
-                  <span className="ml-0.5 text-destructive" style={{ color: "var(--color-error, #d4351c)" }} aria-hidden>
-                    *
-                  </span>
-                </span>
-              </label>
-            ))}
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-3 mt-1 border-t border-border">
-              {tr(t, "PGR_CONSENT_SECTION_OPTIONAL", "Optional")}
-            </div>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                style={CHECKBOX_STYLE}
-                checked={!!data.isConfidential}
-                onChange={(e) => patch({ isConfidential: e.target.checked })}
-              />
-              <span>
-                {tr(t, "PGR_EXT_IS_CONFIDENTIAL_LABEL", "Keep details confidential.")}{" "}
-                <span className="text-muted-foreground">
-                  {tr(t, "PGR_EXT_IS_CONFIDENTIAL_HINT", "Visibility is enforced once secure handling is enabled; for now this flags the complaint for staff awareness.")}
-                </span>
-              </span>
-            </label>
-          </div>
-        ) : null}
-      </div>
-    </StepShell>
-  );
-}
-
-// ── Step-4 uploader (build-v2). Self-contained: replaces the legacy
-// SelectImages → FormStep → ImageUploadHandler chain that couldn't render the
-// mockup's filled state. Reuses the SAME upload service the legacy handler used
-//   Digit.UploadServices.Filestorage("property-upload", file, tenantId)
-// and emits the SAME output the submit contract expects — a string[] of
-// fileStoreIds via onSelect → patch({ComplaintImagesPoint}) — which
-// mapFormDataToRequest turns into workflow.verificationDocuments. No new deps.
-function Step4Images({ data, patch, t }: StepBodyProps) {
-  // Same tenant the complaint submits under (resolved from the authority pick),
-  // falling back to the citizen's home city / current ULB — so uploads land on
-  // the tenant whose filestore the submit will reference.
-  const tenantId =
-    (data as any)?.resolvedTenantId ||
-    Digit.SessionStorage.get("CITIZEN.COMMON.HOME.CITY")?.code ||
-    Digit.ULBService.getCurrentTenantId();
-  return (
-    <StepShell title={tr(t, "CS_ADDCOMPLAINT_UPLOAD_PHOTO", "Upload photos / attachments") + " " + tr(t, "CS_OPTIONAL_SUFFIX", "(Optional)")}>
-      <PgrFileUpload
-        t={t}
-        tenantId={tenantId}
-        fieldKey="ComplaintImagesPoint"
-        value={Array.isArray(data.ComplaintImagesPoint) ? data.ComplaintImagesPoint : []}
-        onSelect={(_key: string, value: string[]) => {
-          patch({ ComplaintImagesPoint: value });
-        }}
-      />
-    </StepShell>
+      <Field
+        label={tr(t, "CS_COMPLAINT_LANDMARK__DETAILS", "Landmark") + " " + tr(t, "CS_OPTIONAL_SUFFIX", "(Optional)")}
+        htmlFor="landmark"
+      >
+        <Input
+          id="landmark"
+          data-matomo-mask
+          placeholder={tr(t, "CS_LANDMARK_PLACEHOLDER", "e.g. Near Jamia Mosque")}
+          maxLength={64}
+          value={data.landmark ?? ""}
+          onChange={(e) => patch({ landmark: e.target.value })}
+        />
+      </Field>
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Composite steps (3-step wizard) — each groups the sub-bodies above so the
-// citizen completes the flow in 3 screens instead of 6. The sub-bodies keep
-// their own logic untouched; we just render them together.
+// Steps
 // ---------------------------------------------------------------------------
 
-const PRIMARY = "var(--color-primary-1, var(--color-primary-main, #c84c0e))";
-
-// Subtle theme-tinted surfaces for banners/tips (the accent itself stays PRIMARY).
-const HINT_BG = "var(--color-primary-1-bg, #edf6ef)";
-const HINT_BORDER = "var(--color-primary-2-bg, #cfe6d6)";
-
-// Responsive tweaks that DON'T rely on Tailwind md: utilities (the vendored CSS may
-// lack them). Injected once by the orchestrator — keeps the stepper mobile-safe.
-const WIZARD_CSS = `
-.pgr-step-sub { display:block; }
-@media (max-width: 640px) {
-  .pgr-step-sub { display:none; }
-  .pgr-step-title { font-size:0.8rem; }
-}
-/* Date input: a global (health-css) rule makes the calendar indicator
-   position:absolute, so without position:relative on the input it escapes to
-   the nearest positioned ancestor (it was showing up near the stepper). Anchor
-   it back inside its own field and centre it vertically. */
-.pgr-date-input { position: relative; }
-.pgr-date-input::-webkit-calendar-picker-indicator { right: 10px !important; top: 50% !important; transform: translateY(-50%) !important; }
-`;
-
-// Contextual hint banner shown at the top of each step (themed, green-tinted).
-function HintBanner({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", background: HINT_BG, border: "1px solid " + HINT_BORDER, borderRadius: "0.5rem", padding: "0.85rem 1rem" }}>
-      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "1.75rem", height: "1.75rem", borderRadius: "9999px", background: "var(--color-primary-2-bg, #dcecdf)", color: PRIMARY, flexShrink: 0 }}>{TipBulbIcon}</span>
-      <div style={{ minWidth: 0 }}>
-        <div className="text-sm font-semibold" style={{ color: PRIMARY }}>{title}</div>
-        {subtitle ? <div className="text-sm text-muted-foreground" style={{ marginTop: "0.1rem" }}>{subtitle}</div> : null}
-      </div>
-    </div>
-  );
-}
-
-// Reusable green tip callout.
-function TipBox({ title, body }: { title?: string; body: string }) {
-  return (
-    <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", background: HINT_BG, border: "1px solid " + HINT_BORDER, borderRadius: "0.5rem", padding: "0.75rem 1rem" }}>
-      <span style={{ color: PRIMARY, flexShrink: 0, marginTop: "1px", display: "inline-flex" }}>{TipBulbIcon}</span>
-      <div className="text-sm">
-        {title ? <div className="font-medium" style={{ color: PRIMARY }}>{title}</div> : null}
-        <div className="text-muted-foreground">{body}</div>
-      </div>
-    </div>
-  );
-}
-
-// Small helper / confirmation line under a field (ⓘ hint, or ✓ when satisfied).
-function FieldHelp({ children, ok, error }: { children: React.ReactNode; ok?: boolean; error?: boolean }) {
-  const color = error ? "#dc2626" : ok ? PRIMARY : "var(--color-text-secondary, #64748b)";
-  return (
-    <div className="mt-1 text-xs" style={{ display: "flex", gap: "0.35rem", alignItems: "flex-start", color }}>
-      <span aria-hidden style={{ flexShrink: 0 }}>{error ? "⚠" : ok ? "✓" : "ⓘ"}</span>
-      <span style={{ minWidth: 0 }}>{children}</span>
-    </div>
-  );
-}
-
-// Muted dashed placeholder shown before a category is chosen.
-const HowToTagIcon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-    <line x1="7" y1="7" x2="7.01" y2="7" />
+const ChevronLeft = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    <path d="m15 18-6-6 6-6" />
   </svg>
 );
-const HowToPinIcon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+const ArrowRight = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    <path d="M5 12h14" />
+    <path d="m12 5 7 7-7 7" />
+  </svg>
+);
+const CheckMark = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    <path d="M20 6 9 17l-5-5" />
+  </svg>
+);
+const PinGlyph = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
     <circle cx="12" cy="10" r="3" />
   </svg>
 );
-const HowToDocIcon = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-    <line x1="16" y1="13" x2="8" y2="13" />
-    <line x1="16" y1="17" x2="8" y2="17" />
-  </svg>
-);
 
-// Shown before a category is picked: a short, friendly "how it works" guide
-// (mirrors the 3 wizard steps) — more useful than an empty placeholder.
-function EmptyStateCard({ t }: { t: (k: string) => string }) {
-  const circle: React.CSSProperties = {
-    display: "inline-flex", alignItems: "center", justifyContent: "center",
-    width: "1.75rem", height: "1.75rem", borderRadius: "9999px",
-    background: "var(--color-primary-2-bg, #dcecdf)", color: PRIMARY, flexShrink: 0,
-  };
-  const steps = [
-    { icon: HowToTagIcon, title: tr(t, "CS_HOWTO_1_TITLE", "Choose a category"), body: tr(t, "CS_HOWTO_1_BODY", "Tell us what your complaint is about — it's routed to the right office automatically.") },
-    { icon: HowToPinIcon, title: tr(t, "CS_HOWTO_2_TITLE", "Mark the location"), body: tr(t, "CS_HOWTO_2_BODY", "Drop a pin on the map where the issue happened.") },
-    { icon: HowToDocIcon, title: tr(t, "CS_HOWTO_3_TITLE", "Add details & submit"), body: tr(t, "CS_HOWTO_3_BODY", "Describe the issue and attach any photos as evidence.") },
-  ];
-  // Compact single strip: the three steps inline (titles only, bodies dropped)
-  // — the walkthrough was eating ~half the first screen (CCRS feedback).
-  return (
-    <div style={{ border: "1px dashed var(--color-border, #cbd5e1)", borderRadius: "0.75rem", padding: "0.65rem 1rem", background: "var(--color-surface-secondary, #f8fafc)", display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.5rem 1.25rem" }}>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>
-        <span style={circle}>{TipBulbIcon}</span>
-        <span className="text-xs font-semibold" style={{ color: PRIMARY }}>{tr(t, "CS_HOWTO_SUB", "Three quick steps — pick a category above to begin.")}</span>
-      </span>
-      {steps.map((s, i) => (
-        <span key={i} className="text-xs text-muted-foreground" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", whiteSpace: "nowrap" }}>
-          <span style={{ ...circle, width: "1.15rem", height: "1.15rem", fontSize: "0.65rem", fontWeight: 600 }}>{i + 1}</span>
-          {s.title}
-        </span>
-      ))}
-    </div>
-  );
+interface DetailsStepProps extends StepBodyProps {
+  canSpeak: boolean;
+  onVoice: () => void;
 }
 
-function InlineSpinner() {
+function DetailsStep(props: DetailsStepProps) {
+  const { data, patch, t, tenantId, canSpeak, onVoice, relatedToOptions, dispatcherLoading, templateFields } = props;
+  const say = (key: string, fallback: string) => tr(t, key, fallback);
+  const hasDispatcher = (relatedToOptions?.length ?? 0) > 0;
+  // With an authority dispatcher, the category waits for the authority: its
+  // catalogue lives at the authority's tenant.
+  const showCategory = !hasDispatcher || !!data.caseRelatedTo;
   return (
-    <Card className="p-6">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem 0" }}>
-        <span
-          aria-label="Loading"
-          style={{
-            display: "inline-block",
-            height: "1.75rem",
-            width: "1.75rem",
-            border: "3px solid currentColor",
-            borderTopColor: "transparent",
-            borderRadius: "9999px",
-            color: PRIMARY,
-            animation: "spin 0.8s linear infinite",
+    <div className="cms-step-body">
+      {dispatcherLoading ? (
+        <InlineSpinner />
+      ) : hasDispatcher && (relatedToOptions?.length ?? 0) > 1 ? (
+        // Single-authority: the one option is auto-selected upstream — no picker.
+        <Section title={say("CS_COMPLAINT_RELATED_TO", "What is your complaint about?")} className="cms-section-authority">
+          <AuthorityField {...props} />
+        </Section>
+      ) : null}
+      <Section className="cms-section-describe">
+        <label className="cms-label" htmlFor="complaint-description">
+          {say("CS_FILE_DESCRIBE_TITLE", "Tell us how we can help")} <span className="cms-required">*</span>
+        </label>
+        <div className={`cms-textarea-wrap${canSpeak ? " with-mic" : ""}`}>
+          <Textarea
+            id="complaint-description"
+            className="cms-textarea"
+            data-matomo-mask
+            rows={6}
+            maxLength={DESCRIPTION_MAX}
+            placeholder={say(
+              "CS_FILE_DESCRIBE_PLACEHOLDER",
+              "Please share as much as you can about the issue. The more you can tell us, the sooner we can help.",
+            )}
+            value={data.description ?? ""}
+            onChange={(e) => patch({ description: e.target.value })}
+          />
+          {canSpeak ? <MicButton label={say("CS_VOICE_RECORD", "Record your complaint")} onClick={onVoice} /> : null}
+        </div>
+        <div className="cms-counter">
+          {(data.description ?? "").length} / {DESCRIPTION_MAX}
+        </div>
+      </Section>
+      <Section
+        // CCSD-2071: photos OR documents (PDF, DOC/DOCX, XLS/XLSX, video).
+        title={say("CS_ADDCOMPLAINT_UPLOAD_PHOTO", "Upload photos / attachments") + " " + say("CS_OPTIONAL_SUFFIX", "(Optional)")}
+        className="cms-section-photos"
+      >
+        <PgrFileUpload
+          t={t}
+          // Filestore ids are tenant-scoped: upload under the tenant the
+          // complaint submits under.
+          tenantId={tenantId}
+          fieldKey="ComplaintImagesPoint"
+          value={Array.isArray(data.ComplaintImagesPoint) ? data.ComplaintImagesPoint : []}
+          onSelect={(_key: string, value: string[]) => {
+            patch({ ComplaintImagesPoint: value });
           }}
         />
-      </div>
-    </Card>
-  );
-}
-
-// Step 1 — "Your complaint": the related-to dispatcher (when seeded) followed,
-// progressively, by the complaint-type picker for the resolved sub-tenant. The
-// type section appears only once an authority is chosen, and shows an inline
-// spinner while that tenant's catalogue loads (no full-page blank).
-// Step 1 — "Who is reporting": optional reporter identity card, prefilled from
-// the logged-in citizen's profile (name + address editable per complaint). The
-// values travel in extendedAttributes (complainantName/complainantAddress), so
-// editing them never round-trips through the user service.
-function ReporterDetailsCard({ data, patch, t }: StepBodyProps) {
-  React.useEffect(() => {
-    const info = Digit.UserService.getUser()?.info;
-    const prefill: Partial<FormData> = {};
-    if (data.complainantName === undefined && info?.name) prefill.complainantName = info.name;
-    if (data.complainantAddress === undefined && (info?.permanentAddress || info?.correspondenceAddress)) {
-      prefill.complainantAddress = info.permanentAddress || info.correspondenceAddress;
-    }
-    if (data.email === undefined && info?.emailId) prefill.email = info.emailId;
-    if (Object.keys(prefill).length) patch(prefill);
-  }, []);
-  return (
-    <Card className="p-6 space-y-4">
-      <div>
-        <h3 className="text-base font-semibold">{tr(t, "CS_REPORTER_DETAILS_TITLE", "Your details")}</h3>
-        <p className="text-sm text-muted-foreground">
-          {tr(t, "CS_REPORTER_DETAILS_SUB", "Shown to the handling officers. You can edit them for this complaint.")}
-        </p>
-      </div>
-      <Field label={tr(t, "CS_REPORTER_FULL_NAME_LABEL", "Full Name")} htmlFor="reporter-name">
-        <Input
-          id="reporter-name"
-          data-matomo-mask
-          maxLength={128}
-          value={data.complainantName ?? ""}
-          onChange={(e) => patch({ complainantName: e.target.value })}
-        />
-        <FieldHelp>{tr(t, "CS_COMMON_OPTIONAL", "Optional")}</FieldHelp>
-      </Field>
-      <Field label={tr(t, "CS_REPORTER_ADDRESS_LABEL", "Address")} htmlFor="reporter-address">
-        <Input
-          id="reporter-address"
-          data-matomo-mask
-          maxLength={300}
-          value={data.complainantAddress ?? ""}
-          onChange={(e) => patch({ complainantAddress: e.target.value })}
-        />
-        <FieldHelp>{tr(t, "CS_COMMON_OPTIONAL", "Optional")}</FieldHelp>
-      </Field>
-      <Field label={tr(t, "PGR_EXT_EMAIL_LABEL", "Email Address")} htmlFor="reporter-email">
-        <Input
-          id="reporter-email"
-            data-matomo-mask
-          type="email"
-          value={data.email ?? ""}
-          onChange={(e) => patch({ email: e.target.value })}
-        />
-        {isEmailAcceptable(data.email) ? (
-          <FieldHelp>{tr(t, "CS_COMMON_OPTIONAL", "Optional")}</FieldHelp>
+      </Section>
+      <Section title={say("CS_FILE_CATEGORY", "Nature of your issue")} className="cms-section-category">
+        {showCategory ? (
+          <CategoryFields {...props} />
         ) : (
-          <FieldHelp error>{tr(t, "CS_EMAIL_INVALID", "Please enter a valid email address")}</FieldHelp>
+          <p className="cms-section-hint">
+            {say("CS_HINT_RELATED_TITLE", "Start by selecting what your complaint is about.")}
+          </p>
         )}
-      </Field>
-    </Card>
-  );
-}
-
-function StepComplaint(props: StepBodyProps) {
-  const { data, relatedToOptions, catalogueLoading, dispatcherLoading, t } = props;
-  const hasDispatcher = (relatedToOptions?.length ?? 0) > 0;
-  if (dispatcherLoading) return <InlineSpinner />;
-  const showType = !hasDispatcher || !!data.caseRelatedTo;
-  return (
-    <div className="space-y-5">
-      <HintBanner
-        title={showType
-          ? tr(t, "CS_HINT_TYPE_TITLE", "Great! Now select the type of complaint.")
-          : tr(t, "CS_HINT_RELATED_TITLE", "Start by selecting what your complaint is about.")}
-        subtitle={showType
-          ? tr(t, "CS_HINT_TYPE_SUB", "This helps us route your complaint to the right team.")
-          : tr(t, "CS_HINT_RELATED_SUB", "Based on your selection, relevant options will appear automatically.")}
-      />
-      {/* Single-authority: the one option is auto-selected upstream — no picker. */}
-      {hasDispatcher && (relatedToOptions?.length ?? 0) > 1 ? <RelatedToStepBody {...props} /> : null}
-      <ReporterDetailsCard {...props} />
-      {showType ? (
-        catalogueLoading ? <InlineSpinner /> : <Step0Type {...props} />
-      ) : (
-        <EmptyStateCard t={t} />
-      )}
+      </Section>
+      {showCategory && (templateFields?.length ?? 0) > 0 ? (
+        <Section title={say("CS_COMPLAINT_DETAILS_ADDITIONAL_DETAILS", "Additional Details")} className="cms-section-additional">
+          <AdditionalFields {...props} />
+        </Section>
+      ) : null}
+      <Section title={say("CS_REPORTER_DETAILS_TITLE", "Your details")} className="cms-section-reporter">
+        <p className="cms-section-hint">
+          {say("CS_REPORTER_DETAILS_SUB", "Shown to the handling officers. You can edit them for this complaint.")}
+        </p>
+        <ReporterFields {...props} />
+      </Section>
     </div>
   );
 }
 
-// Step 2 — "Where": ONE unified card with the map (left, larger) and Location
-// details (right). flex-wrap stacks them on mobile (no Tailwind md: needed).
-// align-items:flex-start keeps the form pinned top-right beside the capped map.
-function StepWhere(props: StepBodyProps) {
+function LocationStep(props: StepBodyProps) {
+  const { data, t } = props;
+  const point = data.GeoLocationsPoint;
+  const pinned = point?.lat != null && point?.lng != null;
+  const coords = pinned ? `${Number(point?.lat).toFixed(5)}, ${Number(point?.lng).toFixed(5)}` : "";
   return (
-    <div className="space-y-5">
-      <HintBanner
-        title={tr(props.t, "CS_HINT_LOC_TITLE", "Pin the exact location")}
-        subtitle={tr(props.t, "CS_HINT_LOC_SUB", "Drop a pin on the map or search for the location where the issue occurred.")}
-      />
-      <Card className="p-6">
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem", alignItems: "flex-start" }}>
-          <div style={{ flex: "3 1 420px", minWidth: 0 }}>
-            <Step1Map {...props} />
-          </div>
-          <div style={{ flex: "2 1 300px", minWidth: 0 }}>
-            <Step2Location {...props} />
-          </div>
+    <div className="cms-step-body cms-location-body">
+      <Section title={tr(t, "CS_FILE_LOCATION_TITLE", "Tell us where this happened")} className="cms-section-map">
+        <p className="cms-section-hint">
+          {tr(t, "CS_PIN_LOCATION_HINT", "Drop a pin on the exact spot — we'll use it to route your complaint to the right ward.")}
+        </p>
+        <div className="cms-map">
+          <MapPanel {...props} />
         </div>
-      </Card>
+        <div className="cms-pin-summary">
+          <span className={`cms-pin-icon${pinned ? " pinned" : ""}`}>
+            <PinGlyph />
+          </span>
+          <span className="cms-pin-text">
+            <span className="cms-pin-title">
+              {pinned
+                ? tr(t, "CS_FILE_PINNED", "Pinned location")
+                : tr(t, "CS_FILE_NOT_PINNED", "No location pinned yet (Optional)")}
+            </span>
+            <span className="cms-pin-meta">
+              {pinned ? point?.address || coords : tr(t, "CS_FILE_PIN_HINT", "Search, drag the map, or use current location")}
+            </span>
+          </span>
+        </div>
+      </Section>
+      <Section className="cms-section-address">
+        <LocationFields {...props} />
+      </Section>
     </div>
   );
 }
 
-// Step 3 — "Details": description + dynamic category fields + consents + photos.
-function StepDetails(props: StepBodyProps) {
+const truncate = (text: string, max: number) => {
+  const flat = text.trim().replace(/\s+/g, " ");
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max);
+  const space = cut.lastIndexOf(" ");
+  return `${space > max * 0.6 ? cut.slice(0, space) : cut}…`;
+};
+
+/** Category and sub-category names for the chosen type, as the pickers show them. */
+function categoryNames(data: FormData, t: (k: string) => string): { category: string; subCategory: string } {
+  const main = data.SelectComplaintType;
+  const sub = data.SelectSubComplaintType || main;
+  if (!main) return { category: "", subCategory: "" };
+  // A leaf with a parent reads "parent · leaf"; a type picked at its own
+  // (terminal) level has no sub-category.
+  const hasParent = !!main.menuPath && main.menuPath !== sub?.serviceCode;
+  return {
+    category: hasParent ? complaintLabel(t, main.menuPath, main.menuPathName) : complaintLabel(t, sub?.serviceCode, sub?.name),
+    subCategory: hasParent && sub ? complaintLabel(t, sub.serviceCode, sub.name) : "",
+  };
+}
+
+/** "Ward, Sub County, County": the boundary levels, leaf first. */
+function addressLine(data: FormData, t: (k: string) => string): string {
+  const levels: BoundaryLevel[] = (data.SelectedBoundary?.levels as BoundaryLevel[]) || [];
+  // Named as the cascade's dropdowns name them: the code's translation, else
+  // the node's own name, so an unlocalised tenant does not read raw codes.
+  return levels
+    .slice()
+    .reverse()
+    .map((level) => {
+      if (!level.code) return "";
+      const translated = t(level.code);
+      return translated && translated !== level.code ? translated : level.name || level.code;
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
+function ReviewCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-5">
-      <HintBanner
-        title={tr(props.t, "CS_HINT_DETAILS_TITLE", "Tell us more about the issue")}
-        subtitle={tr(props.t, "CS_HINT_DETAILS_SUB", "Add as much detail as possible to help us take the right action.")}
-      />
-      <Step3Description {...props} />
-      <Step4Images {...props} />
+    <section className="cms-review-card">
+      <h3 className="cms-review-head">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function ReviewRows({ rows }: { rows: Array<[string, string]> }) {
+  return (
+    <dl className="cms-review-rows">
+      {rows.map(([label, value]) => (
+        <div key={label} className="cms-review-row">
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function ReviewStep(props: StepBodyProps) {
+  const { data, t, templateFields } = props;
+  const say = (key: string, fallback: string) => tr(t, key, fallback);
+  const notProvided = say("CS_FILE_NOT_PROVIDED", "Not provided");
+  const notSelected = say("CS_FILE_NOT_SELECTED", "Not selected");
+  const { category, subCategory } = categoryNames(data, t);
+  const attachedCount = Array.isArray(data.ComplaintImagesPoint) ? data.ComplaintImagesPoint.length : 0;
+  const point = data.GeoLocationsPoint;
+  const pinned = point?.lat != null && point?.lng != null;
+  const user = Digit.UserService.getUser()?.info;
+  const dyn = data.dynamicFields || {};
+
+  const detailRows: Array<[string, string]> = [];
+  if (data.caseRelatedTo) {
+    detailRows.push([say("CS_COMPLAINT_RELATED_TO_FIELD", "Complaint related to"), data.caseRelatedToName ? t(data.caseRelatedToName) : data.caseRelatedTo]);
+  }
+  detailRows.push(
+    [say("CS_COMPLAINT_DETAILS_ADDITIONAL_DETAILS_DESCRIPTION", "Description"), data.description?.trim() ? truncate(data.description, 180) : notProvided],
+    [say("CS_FILE_CATEGORY_LABEL", "Complaint Category"), category || notSelected],
+    // A type with no sub-types has nothing to select here.
+    [say("CS_FILE_SUBCATEGORY_LABEL", "Complaint Subcategory"), subCategory || (category ? "—" : notSelected)],
+  );
+  (templateFields || []).forEach((f) => {
+    const value = String(dyn[f.fieldKey] ?? "").trim();
+    detailRows.push([f.labelKey ? tr(t, f.labelKey, f.label) : f.label, value ? truncate(value, 120) : notProvided]);
+  });
+  detailRows.push([
+    say("CS_FILE_PHOTOS", "Photos"),
+    attachedCount
+      ? say("CS_FILE_PHOTOS_ATTACHED", "{count} attached").replace("{count}", String(attachedCount))
+      : say("CS_FILE_NO_PHOTOS", "None attached"),
+  ]);
+
+  const complainantRows: Array<[string, string]> = [
+    [say("CORE_COMMON_NAME", "Name"), data.complainantName?.trim() || user?.name || notProvided],
+    [say("CORE_COMMON_MOBILE_NUMBER", "Phone number"), user?.mobileNumber || notProvided],
+  ];
+  if (data.complainantAddress?.trim()) complainantRows.push([say("CS_REPORTER_ADDRESS_LABEL", "Address"), truncate(data.complainantAddress, 120)]);
+  if (data.email?.trim()) complainantRows.push([say("PGR_EXT_EMAIL_LABEL", "Email Address"), data.email.trim()]);
+
+  return (
+    <div className="cms-step-body cms-review-body">
+      <h2 className="cms-review-heading">{say("CS_FILE_REVIEW_HEADING", "Review before you submit")}</h2>
+      <ReviewCard title={say("CS_COMPLAINT_DETAILS_COMPLAINT_DETAILS", "Complaint details")}>
+        <ReviewRows rows={detailRows} />
+      </ReviewCard>
+      <ReviewCard title={say("CS_FILE_STEP_LOCATION", "Location")}>
+        <ReviewRows
+          rows={[
+            [say("CS_FILE_ADDRESS", "Address"), addressLine(data, t) || notProvided],
+            [say("CS_COMPLAINT_LANDMARK__DETAILS", "Landmark"), data.landmark?.trim() ? truncate(data.landmark, 60) : notProvided],
+            [
+              say("CS_FILE_PIN_DROP", "Location"),
+              pinned
+                ? point?.address || `${Number(point?.lat).toFixed(5)}, ${Number(point?.lng).toFixed(5)}`
+                : say("CS_FILE_NOT_CAPTURED", "Not captured"),
+            ],
+          ]}
+        />
+      </ReviewCard>
+      <ReviewCard title={say("CS_FILE_COMPLAINANT", "Complainant details")}>
+        <ReviewRows rows={complainantRows} />
+      </ReviewCard>
+      {data.caseRelatedTo ? (
+        <section className="cms-review-card">
+          <Declarations {...props} />
+        </section>
+      ) : null}
     </div>
   );
 }
 
-// Lightweight 3-segment progress indicator (numbered, current highlighted).
-function WizardProgress({
-  steps,
-  current,
-  t,
-}: {
-  steps: ReadonlyArray<{ id: string; title: string; sub?: string }>;
-  current: number;
-  t: (k: string) => string;
-}) {
+/** Desktop: the numbered stepper at the top of the card. Done steps go back. */
+function FlowStepper({ index, t, onGo }: { index: number; t: (k: string) => string; onGo: (i: number) => void }) {
   return (
-    <div className="flex items-center" style={{ justifyContent: "space-between", gap: "0.5rem", marginTop: "0.85rem" }}>
-      {steps.map((s, i) => {
-        const done = i < current;
-        const active = i === current;
-        const filled = done || active;
-        return (
-          <React.Fragment key={s.id}>
-            <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
-              <span
-                aria-current={active ? "step" : undefined}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  height: "1.5rem",
-                  width: "1.5rem",
-                  borderRadius: "9999px",
-                  fontSize: "0.8rem",
-                  fontWeight: 700,
-                  flexShrink: 0,
-                  color: filled ? "#fff" : "var(--color-text-secondary, #64748b)",
-                  background: filled ? PRIMARY : "transparent",
-                  border: filled
-                    ? "1px solid " + PRIMARY
-                    : "1px solid var(--color-border, #cbd5e1)",
-                  // Active-step indicator: a secondary-colour ring around the circle.
-                  boxShadow: active ? "0 0 0 2px var(--color-secondary, rgba(16,124,16,0.30))" : "none",
-                }}
+    <nav className="cms-stepper" aria-label={tr(t, "CS_FILE_PROGRESS", "Progress")}>
+      <ol>
+        {STEPS.map((step, i) => {
+          const state = i < index ? "done" : i === index ? "current" : "todo";
+          return (
+            <li key={step.id} className={`cms-step ${state}`}>
+              <button
+                type="button"
+                className="cms-step-mark"
+                disabled={i >= index}
+                aria-current={i === index ? "step" : undefined}
+                onClick={() => onGo(i)}
+                data-analytics-event={`pgr.file-complaint.stepper.${step.id}`}
               >
-                {done ? "✓" : i + 1}
-              </span>
-              <div style={{ minWidth: 0 }}>
-                <div
-                  className="pgr-step-title text-sm"
-                  style={{
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    fontWeight: active ? 600 : 500,
-                    color: active ? PRIMARY : "var(--color-text-secondary, #64748b)",
-                  }}
-                >
-                  {tr(t, "CS_CREATE_STEP_" + s.id.toUpperCase(), s.title)}
-                </div>
-                {s.sub ? (
-                  <div
-                    className="pgr-step-sub text-xs text-muted-foreground"
-                    style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  >
-                    {tr(t, "CS_CREATE_STEP_" + s.id.toUpperCase() + "_SUB", s.sub)}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </React.Fragment>
-        );
-      })}
+                <span className="cms-step-dot">{i < index ? <CheckMark /> : i + 1}</span>
+                <span className="cms-step-label">{tr(t, step.key, step.fallback)}</span>
+              </button>
+              {i < STEPS.length - 1 ? <span className={`cms-step-line${i < index ? " done" : ""}`} aria-hidden="true" /> : null}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+/** Phone: "Step 1 of 3 · Complaint Details", what comes next, and a bar per step. */
+function FlowStrip({ index, t }: { index: number; t: (k: string) => string }) {
+  const current = STEPS[index];
+  const next = STEPS[index + 1];
+  const stepOf = tr(t, "CS_FILE_STEP_OF", "Step {current} of {total}")
+    .replace("{current}", String(index + 1))
+    .replace("{total}", String(STEPS.length));
+  return (
+    <div className="cms-strip">
+      <div className="cms-strip-row">
+        <span className="cms-strip-heading">
+          {stepOf} · {tr(t, current.key, current.fallback)}
+        </span>
+        <span className="cms-strip-next">
+          {next
+            ? tr(t, "CS_FILE_NEXT_STEP", "Next: {step}").replace("{step}", tr(t, next.key, next.fallback))
+            : tr(t, "CS_FILE_CHECK_SUBMIT", "Check and submit")}
+        </span>
+      </div>
+      <div className="cms-strip-bars" aria-hidden="true">
+        {STEPS.map((step, i) => (
+          <span key={step.id} className={i <= index ? "on" : ""} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -1558,7 +1447,7 @@ function WizardProgress({
 // ---------------------------------------------------------------------------
 
 const CreatePGRFlowV2: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const history = useHistory();
   const dispatch = useDispatch();
   const client = useQueryClient();
@@ -1592,10 +1481,9 @@ const CreatePGRFlowV2: React.FC = () => {
     }
   }
   // The step is DERIVED FROM THE URL — each tab is its own route (STEP_SLUGS).
-  // On a document reload the URL itself preserves the position (this
-  // supersedes the old draft.stepIndex restore); a fresh (non-reload) entry
-  // whose URL points past step 1 is normalised back to step 1, because its
-  // answers were just discarded by the draft block above.
+  // On a document reload the URL itself preserves the position; a fresh
+  // (non-reload) entry whose URL points past step 1 is normalised back to
+  // step 1, because its answers were just discarded by the draft block above.
   const location = useLocation();
   const basePath = `/${window?.contextPath || "digit-ui"}/citizen/pgr/create-complaint`;
   const urlSlug = location.pathname.startsWith(basePath)
@@ -1607,6 +1495,13 @@ const CreatePGRFlowV2: React.FC = () => {
   // SPA re-entries within this document must start clean.
   const freshEntryRef = React.useRef(!RESTORE_STEP_ARMED);
   RESTORE_STEP_ARMED = false;
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0 });
+    // The app scrolls inside .body-container rather than the window.
+    document.querySelector(".body-container")?.scrollTo({ top: 0 });
+  };
+
   const goToStep = React.useCallback(
     (i: number, replace?: boolean) => {
       const bounded = Math.min(Math.max(i, 0), STEPS.length - 1);
@@ -1630,9 +1525,21 @@ const CreatePGRFlowV2: React.FC = () => {
     }
     freshEntryRef.current = false;
   }, [urlIndex, goToStep]);
+
   const [formData, setFormData] = React.useState<FormData>(() => savedDraftRef.current.formData || {});
   const [submitting, setSubmitting] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [voiceOpen, setVoiceOpen] = React.useState(false);
+  // The location step mounts on its first visit and then stays, so the map
+  // and the boundary cascade keep what the citizen picked when they go Back.
+  const [locationVisited, setLocationVisited] = React.useState(stepIndex >= 1);
+  React.useEffect(() => {
+    if (stepIndex >= 1) setLocationVisited(true);
+  }, [stepIndex]);
+  // The browser has to support speech, and the tenant mustn't have turned
+  // voice off (RAINMAKER-PGR.UIConstants.VOICE_INPUT: false).
+  const browserCanSpeak = React.useMemo(() => speechToTextSupported(), []);
+  const voiceEnabled = useVoiceInputEnabled(baseTenant);
+  const canSpeak = browserCanSpeak && voiceEnabled;
 
   // Mirror every change into the session draft. Deleted on successful create;
   // kept on failure so "Try Again" restores the answers.
@@ -1640,12 +1547,13 @@ const CreatePGRFlowV2: React.FC = () => {
     Digit.SessionStorage.set(CREATE_DRAFT_KEY, { formData, stepIndex, tenant: baseTenant, user: draftUserUuid });
   }, [formData, stepIndex, baseTenant, draftUserUuid]);
 
-  // (No unmount cleanup needed: any non-reload mount deletes the draft up
-  // front, so in-app re-entry can never see stale answers or position.)
+  const patch = React.useCallback((partial: Partial<FormData>) => {
+    setFormData((prev) => ({ ...prev, ...partial }));
+  }, []);
 
   // Authority dispatcher (RAINMAKER-PGR.ComplaintRelatedToMap @ state tenant).
   // Empty (the default for any tenant that hasn't seeded it) => the legacy flow:
-  // no authority step, catalogue fetched at the base tenant, no extendedAttributes.
+  // no authority picker, catalogue fetched at the base tenant, no extendedAttributes.
   const { data: relatedToOptions, isLoading: isDispatcherLoading } = Digit.Hooks.useCustomMDMS(
     stateTenant,
     "RAINMAKER-PGR",
@@ -1684,8 +1592,9 @@ const CreatePGRFlowV2: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relatedToOptions, formData.caseRelatedTo, formData.resolvedTenantId]);
 
-  // Catalogue tenant: the authority-resolved sub-tenant once picked, else the
-  // base tenant (legacy). Changing it re-fetches the hierarchy at that tenant.
+  // The tenant the complaint files under: the authority-resolved sub-tenant
+  // once picked, else the base tenant (legacy). Changing it re-fetches the
+  // catalogue, map and boundary tree at that tenant.
   const resolvedTenant = formData.resolvedTenantId || baseTenant;
   const caseRelatedTo = formData.caseRelatedTo;
 
@@ -1731,6 +1640,8 @@ const CreatePGRFlowV2: React.FC = () => {
         return { def, nodes, serviceDefs };
       },
     },
+    // The 5th (mdmsv2) arg makes useCustomMDMS ignore the positional tenant —
+    // the tenant must ride inside it.
     { schemaCode: "PGR_COMPLAINT_HIERARCHY", tenantId: resolvedTenant }
   );
 
@@ -1741,15 +1652,10 @@ const CreatePGRFlowV2: React.FC = () => {
   // hook forces keepPreviousData, so on an authority switch isLoading stays
   // false and `serviceDefs` briefly holds the PREVIOUS tenant's rows. Comparing
   // the resolved tenant to the last-settled one (updated only when a fetch
-  // completes) is frame-accurate — the "complaint" step shows the inline
-  // spinner the instant the tenant changes, never the stale options — and does
-  // NOT trigger on same-tenant background refetches (which would reset the picker).
-  // Track (in STATE, not a ref) the tenant the catalogue last SETTLED for. State
-  // is required so that when the new tenant's fetch completes the component
-  // re-renders and the spinner gives way to the picker — a ref update wouldn't
-  // trigger a render, so the spinner would stick (and now that staleTime is a
-  // day for caching, there's no background refetch to mask it). setState to the
-  // same value is a no-op render, so no loop / no flicker on background refetch.
+  // completes) is frame-accurate — the category shows the inline spinner the
+  // instant the tenant changes, never the stale options — and does NOT trigger
+  // on same-tenant background refetches (which would reset the picker). Kept
+  // in STATE so the settle re-renders and the spinner gives way to the picker.
   const [catalogueLoadedFor, setCatalogueLoadedFor] = React.useState<string | undefined>(undefined);
   React.useEffect(() => {
     if (!isMDMSFetching) setCatalogueLoadedFor(resolvedTenant);
@@ -1814,31 +1720,19 @@ const CreatePGRFlowV2: React.FC = () => {
 
   const { mutate: createMutation } = Digit.Hooks.pgr.useCreateComplaint(resolvedTenant);
 
-  const patch = React.useCallback((partial: Partial<FormData>) => {
-    setFormData((prev) => ({ ...prev, ...partial }));
-    if (error) setError(null);
-  }, [error]);
-
-  // Consolidated 3-step wizard. The related-to dispatcher is no longer its own
-  // step — it folds into step "complaint" (rendered above the type picker), so
-  // the step list is constant regardless of whether the dispatcher is seeded.
-  const steps = STEPS;
-  const curId = steps[stepIndex]?.id;
-  const isLast = stepIndex === steps.length - 1;
-  // (No virtual pageview here: every step has its own real route now, so the
-  // analytics shim's ordinary route hook reports each tab by itself.)
-
-  // Postal code was removed from the citizen flow (CCRS feedback): geocoder
-  // pincodes are unreliable and the value is optional server-side.
+  const curId = STEPS[stepIndex]?.id;
+  const isLast = stepIndex === STEPS.length - 1;
 
   // The step's FIRST blocking requirement, or null when the step is valid.
-  // One source of truth: NEXT's disabled state and the Error/ValidationError
-  // analytics reason both derive from it, so they can never disagree.
+  // One source of truth: Next's disabled state, the hint under it, and the
+  // Error/ValidationError analytics reason all derive from it, so they can
+  // never disagree.
   const stepBlocker = React.useMemo<string | null>(() => {
     switch (curId) {
-      case "complaint": {
+      case "details": {
         // Dispatcher (if seeded) must be answered, then a leaf complaint type.
         if (hasDispatcher && !formData.caseRelatedTo) return "AuthorityRequired";
+        if (!isFieldValid(formData, "description")) return "DescriptionRequired";
         if (!isFieldValid(formData, "SelectComplaintType")) return "ComplaintTypeRequired";
         // Sub-type is conditionally mandatory: if the chosen type has sub-services
         // in the same menuPath, one must be picked (mirrors legacy FormExplorer).
@@ -1847,39 +1741,61 @@ const CreatePGRFlowV2: React.FC = () => {
           (s: ServiceDef) => s.menuPath === mainPath
         );
         if (subTypeOptions.length > 1 && !formData.SelectSubComplaintType) return "SubTypeRequired";
-        // Optional email, but if typed it must be well-formed (reporter card is
-        // on this step). Blank passes.
-        if (!isEmailAcceptable(formData.email)) return "EmailInvalid";
-        return null;
-      }
-      case "where":
-        // A leaf ward is what routing needs; the map pin is the fast path to
-        // it (auto-cascade) but NOT mandatory — clearing the pin (the map's ✕)
-        // and picking the cascade manually is a supported flow, and requiring
-        // the pin left NEXT disabled with every dropdown filled. Payload-safe:
-        // validateGeoLocation falls back to {} exactly like the employee flow.
-        return isFieldValid(formData, "SelectedBoundary") ? null : "LocationRequired";
-      case "details": {
-        if (!isFieldValid(formData, "description")) return "DescriptionRequired";
         // Mandatory dynamic fields (dispatcher flow).
         for (const f of templateFields) {
           if (f.mandatory && !String((formData.dynamicFields || {})[f.fieldKey] ?? "").trim()) return "DynamicFieldRequired";
         }
+        // Optional email, but if typed it must be well-formed. Blank passes.
+        if (!isEmailAcceptable(formData.email)) return "EmailInvalid";
+        return null;
+      }
+      case "location":
+        // A leaf ward is what routing needs; the map pin is the fast path to
+        // it (auto-cascade) but NOT mandatory — clearing the pin (the map's ✕)
+        // and picking the cascade manually is a supported flow.
+        return isFieldValid(formData, "SelectedBoundary") ? null : "LocationRequired";
+      case "review":
         // Both consents are required once an authority/template is in play
         // (checkboxes restored at create — CCSD-1979 revisited).
         if (formData.caseRelatedTo && REQUIRED_CONSENTS.some((c) => !(formData.consents || []).includes(c.code))) {
           return "ConsentRequired";
         }
         return null;
-      }
       default:
         return null;
     }
     // templateFields/hasDispatcher must be deps: with a restored draft the memo
     // otherwise never recomputes when the catalogue/templates settle AFTER
     // mount, letting a last-step draft submit with empty mandatory dynamic fields.
-  }, [stepIndex, formData, serviceDefs, templateFields, hasDispatcher]);
+  }, [curId, formData, serviceDefs, templateFields, hasDispatcher]);
   const stepIsValid = !stepBlocker;
+
+  /** Why Next is held, in the words the design uses. */
+  const hint = (() => {
+    switch (stepBlocker) {
+      case "AuthorityRequired":
+        return tr(t, "CS_HINT_RELATED_TITLE", "Start by selecting what your complaint is about.");
+      case "DescriptionRequired": {
+        const described = (formData.description ?? "").trim();
+        if (!described) return tr(t, "CS_FILE_HINT_DESCRIBE", "Tell us about the issue to continue.");
+        if (described.length < DESCRIPTION_MIN) return tr(t, "CS_DESC_MIN_CHARS", "Minimum 20 characters");
+        return tr(t, "CS_DESC_NEEDS_WORDS", "Please describe the issue in words, not only numbers");
+      }
+      case "ComplaintTypeRequired":
+      case "SubTypeRequired":
+        return tr(t, "CS_FILE_HINT_CATEGORY", "Select a complaint category and subcategory to continue.");
+      case "DynamicFieldRequired":
+        return tr(t, "CORE_COMMON_REQUIRED_ERRMSG", "Fill in the required fields to continue.");
+      case "EmailInvalid":
+        return tr(t, "CS_EMAIL_INVALID", "Please enter a valid email address");
+      case "LocationRequired":
+        return tr(t, "CS_FILE_HINT_LOCATION", "Select every level of the location to continue.");
+      case "ConsentRequired":
+        return tr(t, "CORE_COMMON_REQUIRED_ERRMSG", "Confirm the mandatory declarations to submit.");
+      default:
+        return "";
+    }
+  })();
 
   // ── Behaviour analytics (catalogue events; the steps themselves are real
   //    pageviews, so no per-step "reached" events — see utils/analytics.js) ──
@@ -1898,9 +1814,7 @@ const CreatePGRFlowV2: React.FC = () => {
   // The reported label is the MDMS master NAME ("Rude behavior"), not the
   // UI-localised t() string: the master name is readable AND identical for
   // every user of the tenant regardless of language, so one type stays ONE
-  // row in reports. A t() label would split each type per locale and break
-  // totals/trends (same principle as the shim's non-localised page titles;
-  // language is already its own dimension). Master data, never PII.
+  // row in reports. Master data, never PII.
   const selectedTypeCode = formData.SelectComplaintType?.serviceCode;
   const selectedTypeName = formData.SelectComplaintType?.name || selectedTypeCode;
   const prevTypeRef = React.useRef(selectedTypeCode);
@@ -1916,17 +1830,23 @@ const CreatePGRFlowV2: React.FC = () => {
   const prevBoundaryRef = React.useRef(selectedBoundaryCode);
   React.useEffect(() => {
     // Only the none→selected transition: every cascade level updates the
-    // boundary, so change-based tracking fired once PER LEVEL (seen as double
-    // events in the visits log). "Citizen picked a location" is one action;
-    // refinements are not. Clearing and re-picking counts again.
+    // boundary, so change-based tracking fired once PER LEVEL. "Citizen picked
+    // a location" is one action; refinements are not. Clearing and re-picking
+    // counts again. Name stays "Location" — never the ward/boundary code,
+    // which combined with a timestamp could narrow down to a person.
     if (selectedBoundaryCode && !prevBoundaryRef.current) {
-      // Name stays "Location" — never the ward/boundary code, which combined
-      // with a timestamp could narrow down to a person in a small ward.
       trackE(EV.COMPLAINT_LOCATION_SELECTED, "Location");
     }
     prevBoundaryRef.current = selectedBoundaryCode;
   }, [selectedBoundaryCode]);
 
+  // Coming back to the map: Leaflet sized itself while hidden, and redraws on
+  // a window resize.
+  React.useEffect(() => {
+    if (stepIndex !== 1) return undefined;
+    const id = window.requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+    return () => window.cancelAnimationFrame(id);
+  }, [stepIndex]);
 
   function handleContinue() {
     // Guard the handler as well as the button: a fast double-tap can fire
@@ -1934,7 +1854,6 @@ const CreatePGRFlowV2: React.FC = () => {
     // form would bypass the button entirely.
     if (submitting) return;
     if (!stepIsValid) {
-      setError(t("CORE_COMMON_REQUIRED_ERRMSG"));
       trackE(EV.VALIDATION_ERROR, stepBlocker || curId || "");
       return;
     }
@@ -1954,16 +1873,32 @@ const CreatePGRFlowV2: React.FC = () => {
       trackE(EV.COMPLAINT_SUBMITTED);
       const user = Digit.UserService.getUser();
       const payload = mapFormDataToRequest(formData, resolvedTenant, user?.info ?? user, evidenceDocType);
+      // What the confirmation screen summarises, handed over in the route's
+      // state: the create response carries only codes, and the names are known
+      // here. Route state survives the response page remounting.
+      const names = categoryNames(formData, t);
+      const filedSummary = {
+        category: [names.category, names.subCategory].filter(Boolean).join(" · "),
+        location: addressLine(formData, t),
+        photos: Array.isArray(formData.ComplaintImagesPoint) ? formData.ComplaintImagesPoint.length : 0,
+        filedAt: Date.now(),
+      };
+      const responsePath = `/${window?.contextPath || "digit-ui"}/citizen/pgr/response`;
       createMutation(payload, {
         onError: (err: any) => {
-          dispatch({ type: "CREATE_COMPLAINT", payload: { responseInfo: { status: "failed" } } });
+          // Outcome, not intent. The submit click is already tagged; whether the
+          // complaint was actually created happens later and a click listener
+          // cannot see it. Without this pair the funnel ends at "pressed submit".
+          trackEvent("pgr.file-complaint.submit-failed", { category: "pgr" });
           trackE(EV.COMPLAINT_FAILED, failureName(err));
+          dispatch({ type: "CREATE_COMPLAINT", payload: { responseInfo: { status: "failed" } } });
           setSubmitting(false);
-          history.push(`/${window?.contextPath || "digit-ui"}/citizen/pgr/response`);
+          history.push(responsePath);
         },
         onSuccess: async (responseData: any) => {
           // Create is done — drop the session draft so the next visit starts fresh.
           Digit.SessionStorage.del(CREATE_DRAFT_KEY);
+          trackEvent("pgr.file-complaint.submitted", { category: "pgr" });
           dispatch({ type: "CREATE_COMPLAINT", payload: responseData });
           // Name carries the complaint TYPE (master name, same rationale as
           // the Selected event — never the complaint id): conversions become
@@ -1971,28 +1906,28 @@ const CreatePGRFlowV2: React.FC = () => {
           trackE(EV.COMPLAINT_CREATED, formData.SelectComplaintType?.name || formData.SelectComplaintType?.serviceCode || "");
           await client.refetchQueries(["complaintsList"]);
           setSubmitting(false);
-          history.push(`/${window?.contextPath || "digit-ui"}/citizen/pgr/response`);
+          history.push(responsePath, { filedSummary });
         },
       });
       return;
     }
     goToStep(stepIndex + 1);
+    scrollToTop();
   }
 
   function handleBack() {
+    if (submitting) return;
+    // On the first step Back leaves the flow, as Cancel did — the one
+    // EXPLICIT abandon signal (later-step abandonment shows up as pageview
+    // drop-off between the step routes).
     if (stepIndex === 0) {
-      // Backing out of step 1 is the one EXPLICIT abandon signal (later-step
-      // abandonment shows up as pageview drop-off between the step routes).
       trackE(EV.COMPLAINT_CANCELLED);
       history.goBack();
       return;
     }
     goToStep(stepIndex - 1);
+    scrollToTop();
   }
-
-  // NOTE: catalogue/dispatcher loading is handled INLINE inside the "complaint"
-  // step (StepComplaint) now — we no longer blank the whole screen, so picking
-  // an authority doesn't flash a full-page spinner mid-step.
 
   const stepProps: StepBodyProps = {
     data: formData,
@@ -2001,102 +1936,109 @@ const CreatePGRFlowV2: React.FC = () => {
     hierarchyDef: hierData?.def ?? null,
     nodes: hierData?.nodes ?? [],
     t,
+    tenantId: resolvedTenant,
     relatedToOptions: Array.isArray(relatedToOptions) ? relatedToOptions : [],
     templateFields,
-    resolvedTenant,
     catalogueLoading: isMDMSLoading || catalogueStale,
     dispatcherLoading: isDispatcherLoading,
   };
+  const say = (key: string, fallback: string) => tr(t, key, fallback);
+  const appendSpoken = (text: string) => {
+    const prev = (formData.description ?? "").trim();
+    patch({ description: (prev ? `${prev} ${text}` : text).slice(0, DESCRIPTION_MAX) });
+  };
 
   return (
-    <ScreenContainer>
-      <div style={{ padding: "0.75rem 1.25rem 0 1.25rem", flexShrink: 0 }}>
-        <ScreenHeader
-          title={tr(t, "CS_COMMON_FILE_A_COMPLAINT", "File a Complaint")}
-        />
-        <p className="text-sm text-muted-foreground">
-          {tr(t, "CS_FILE_COMPLAINT_SUBTITLE", "Provide details about your complaint")}
-        </p>
-        <style>{WIZARD_CSS}</style>
-        <WizardProgress steps={steps} current={stepIndex} t={t} />
+    <ScreenContainer className="cms-file">
+      <div className="cms-file-title">
+        <ScreenHeader title={say("CS_COMMON_FILE_A_COMPLAINT", "File a Complaint")} />
       </div>
-      {/* Step body — sits between the header and the FormFooter and
-          flows at content height. The earlier body-only-scroll
-          variant (`overflow-y: auto` here) clipped dropdown listboxes
-          when a Type/Subtype/Boundary popover wanted to extend past
-          the form bottom on a short form, forcing an internal scroll
-          inside the body instead of letting the popover float over
-          adjacent surface. With overflow visible the popover spills
-          out cleanly; the wrapper still has min-width:0 + flex 1
-          for citizen layout reasons. */}
-      <div
-        style={{
-          flex: "1 1 auto",
-          // Same horizontal rhythm as the other v2 surfaces (My
-          // Complaints, Edit Profile, etc.) — without it, on mobile
-          // the Card kissed the viewport edges left/right with zero
-          // breathing room, since the parent .pgr-citizen-wrapper
-          // sets no inline padding either.
-          padding: "1rem 1.25rem",
-        }}
-      >
-        {curId === "complaint" && <StepComplaint {...stepProps} />}
-        {curId === "where" && <StepWhere {...stepProps} />}
-        {curId === "details" && <StepDetails {...stepProps} />}
-        {error ? (
-          <div
-            role="alert"
-            className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive"
-          >
-            {error}
-          </div>
-        ) : null}
-      </div>
-      <FormFooter>
-        <Button variant="outline" onClick={handleBack} type="button">
-          {stepIndex === 0 ? (
-            tr(t, "CS_COMMON_CANCEL", "Cancel")
-          ) : (
-            // Arrow glyphs sit above the text baseline when concatenated into the
-            // label string — flex-center them against the text instead.
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>
-              {ArrowLeftIcon}
-              <span>{t("BACK")}</span>
-            </span>
-          )}
-        </Button>
-        {/* The button is DISABLED while the step is invalid, so a click never
-            reaches handleContinue — but the click ATTEMPT is exactly the
-            "citizen is stuck: on what?" signal behaviour analytics needs. The
-            v2 Button sets disabled:pointer-events-none, so hit-testing falls
-            through the button to this wrapper (which must render a real box —
-            inline-flex — for that; display:contents would generate none). */}
-        <span
-          style={{ display: "inline-flex" }}
-          onClick={() => {
-            if (!stepIsValid) trackE(EV.VALIDATION_ERROR, stepBlocker || curId || "");
+      <div className="cms-file-card">
+        <FlowStepper
+          index={stepIndex}
+          t={t}
+          onGo={(i) => {
+            if (i < stepIndex && !submitting) {
+              goToStep(i);
+              scrollToTop();
+            }
           }}
-        >
-          <Button
-            variant="primary"
-            onClick={handleContinue}
-            loading={submitting}
-            // Also disabled while the create is in flight: a second tap on a
-            // slow connection would file a duplicate complaint.
-            disabled={!stepIsValid || submitting}
-            type="button"
-          >
-            {isLast ? (
-              tr(t, "CS_SUBMIT_COMPLAINT", "Submit Complaint")
-            ) : (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>
-                <span>{t("NEXT")}</span>
-                {ArrowRightIcon}
-              </span>
-            )}
-          </Button>
-        </span>
-      </FormFooter>
+        />
+        <FlowStrip index={stepIndex} t={t} />
+        <div className={`cms-file-body is-${STEPS[stepIndex]?.id}`}>
+          <div className={`cms-step-pane${stepIndex === 0 ? "" : " is-hidden"}`}>
+            <DetailsStep
+              {...stepProps}
+              canSpeak={canSpeak}
+              onVoice={() => setVoiceOpen(true)}
+            />
+          </div>
+          {locationVisited ? (
+            <div className={`cms-step-pane${stepIndex === 1 ? "" : " is-hidden"}`}>
+              <LocationStep {...stepProps} />
+            </div>
+          ) : null}
+          {stepIndex === 2 ? <ReviewStep {...stepProps} /> : null}
+        </div>
+        <div className="cms-footer">
+          {hint ? (
+            <p className="cms-hint" aria-live="polite">
+              {hint}
+            </p>
+          ) : null}
+          <div className="cms-footer-actions">
+            {/* Analytics (CCRS#2007). Named from the step's stable STEPS id rather
+                than stepIndex, so inserting or reordering a step cannot silently
+                re-point an existing funnel step in the reports. */}
+            <Button
+              variant="outline"
+              className="cms-back"
+              onClick={handleBack}
+              disabled={submitting}
+              aria-label={say("CS_COMMON_BACK", "Back")}
+              leading={<ChevronLeft />}
+              data-analytics-event={
+                stepIndex === 0 ? "pgr.file-complaint.cancel" : `pgr.file-complaint.back.${STEPS[stepIndex]?.id ?? "unknown"}`
+              }
+            >
+              <span className="cms-back-label">{say("CS_COMMON_BACK", "Back")}</span>
+            </Button>
+            {/* The button is DISABLED while the step is invalid, so a click never
+                reaches handleContinue — but the click ATTEMPT is exactly the
+                "citizen is stuck: on what?" signal behaviour analytics needs. The
+                v2 Button sets disabled:pointer-events-none, so hit-testing falls
+                through the button to this wrapper (which must render a real box —
+                inline-flex — for that; display:contents would generate none). */}
+            <span
+              style={{ display: "inline-flex" }}
+              onClick={() => {
+                if (!stepIsValid) trackE(EV.VALIDATION_ERROR, stepBlocker || curId || "");
+              }}
+            >
+              <Button
+                variant="primary"
+                className="cms-next"
+                onClick={handleContinue}
+                // Also disabled while the create is in flight: a second tap on a
+                // slow connection would file a duplicate complaint.
+                disabled={!stepIsValid || submitting}
+                loading={submitting}
+                trailing={<ArrowRight />}
+                data-analytics-event={isLast ? "pgr.file-complaint.submit" : `pgr.file-complaint.${STEPS[stepIndex]?.id ?? "unknown"}`}
+              >
+                {isLast ? say("CS_ADDCOMPLAINT_ADDITIONAL_DETAILS_SUBMIT_COMPLAINT", "Submit complaint") : say("CS_COMMON_NEXT", "Next")}
+              </Button>
+            </span>
+          </div>
+        </div>
+      </div>
+      <VoiceSheet
+        open={voiceOpen}
+        onClose={() => setVoiceOpen(false)}
+        onUse={appendSpoken}
+        tr={say}
+        locale={i18n?.language}
+      />
     </ScreenContainer>
   );
 };
