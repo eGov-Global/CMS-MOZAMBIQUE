@@ -4,10 +4,12 @@ import { useRouteMatch } from "react-router-dom";
 import { default as EmployeeApp } from "./pages/employee";
 import PGRCard from "./components/PGRCard";
 import PGRAdminSearch from "./pages/employee/AdminSearch";
+import { getPGRSidebarSection, getPGRCitizenSidebarSection } from "./utils/employeeLinks";
 import { overrideHooks, updateCustomConfigs } from "./utils";
 import { ProviderContext } from "./utils/context";
 import BoundaryComponent from "./components/BoundaryComponent";
 import OnlyMyComplaintsFilter from "./components/OnlyMyComplaintsFilter";
+import ComplaintCategoryFilter from "./components/ComplaintCategoryFilter";
 import ComplaintHierarchyComponent from "./components/ComplaintHierarchyComponent";
 import PGRDatePicker from "./components/PGRDatePicker";
 import PGRDetails from "./pages/employee/PGRDetails";
@@ -110,8 +112,13 @@ const componentsToRegister = {
   PGRModule,
   PGRLinks,
   PGRCard,
+  // Not a component: the core sidebar looks up `${code}SidebarSection` the way
+  // the home page looks up `${code}Card`, and calls it for its rows.
+  PGRSidebarSection: getPGRSidebarSection,
+  PGRCitizenSidebarSection: getPGRCitizenSidebarSection,
   PGRBoundaryComponent: BoundaryComponent,
   PGROnlyMyComplaintsFilter: OnlyMyComplaintsFilter,
+  PGRComplaintCategoryFilter: ComplaintCategoryFilter,
   PGRComplaintHierarchyComponent: ComplaintHierarchyComponent,
   PGRDatePicker,
   PGRComplaintDetails: PGRDetails,

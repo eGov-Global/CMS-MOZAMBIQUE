@@ -81,20 +81,24 @@ export const UserService = {
       return adapter.logout();
     }
 
-    // The destination must come from the app the user is actually in — the
-    // URL — never from the stored "userType". That key is one shared
-    // localStorage entry for both apps on the origin, only some employee
-    // flows ever write it, the citizen app never does, and every logout
-    // wipes it; in practice it routinely holds the OTHER app's value or
-    // nothing at all, which sent employees to the citizen login and
-    // citizens to the employee language-selection screen (reproduced on
-    // UAT: a clean EMP001 session had no userType key, so getType()
-    // defaulted to "citizen" and logout landed on /citizen/login).
+    // The session's own user decides where logout lands. Never the stored
+    // "userType": that key is one shared localStorage entry for both apps on
+    // the origin, only some employee flows ever write it, the citizen app
+    // never does, and every logout wipes it; in practice it routinely holds
+    // the OTHER app's value or nothing at all, which sent employees to the
+    // citizen login and citizens to the employee language-selection screen
+    // (reproduced on UAT: a clean EMP001 session had no userType key, so
+    // getType() defaulted to "citizen" and logout landed on /citizen/login).
+    // A session that carries no user falls back to the app the user is
+    // actually in — the URL.
     //
     // The paths stay explicit (`/citizen/login`, not bare `/citizen`):
     // after localStorage.clear the App router has no userType to resolve
     // from and falls back to the employee language-selection screen.
-    const isEmployee = window?.location?.pathname?.split("/").includes("employee");
+    const sessionUserType = UserService.getUser()?.info?.type;
+    const isEmployee = sessionUserType
+      ? sessionUserType.toLowerCase() === "employee"
+      : Boolean(window?.location?.pathname?.split("/").includes("employee"));
     const logoutRedirectURL =
       window?.globalConfigs?.getConfig("LOGOUT_REDIRECT_URL") ||
       `/${window?.contextPath}/${isEmployee ? "employee/user/language-selection" : "citizen/login"}`;
