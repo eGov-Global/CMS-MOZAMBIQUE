@@ -2229,11 +2229,36 @@
         port: 18200
         timeout: 120
 
+    # docker-proxy binds 18200 as soon as the container starts, before bao
+    # itself listens; a recreated container answers the first probe with
+    # "connection reset" (mz UAT, 2026-10-19). Retry until bao really answers.
     - name: "OpenBao — check init status"
       ansible.builtin.uri:
         url: http://127.0.0.1:18200/v1/sys/init
         status_code: [200]
       register: bao_init_status
+      retries: 12
+      delay: 5
+      until: bao_init_status.status == 200
+
+    # An uninitialised bao next to an existing init.json means bao is looking at
+    # the wrong (empty) storage — e.g. Docker moved by docker_data_root. Re-init
+    # would overwrite the only unseal key for the real data. Stop instead.
+    - name: "OpenBao — existing init.json?"
+      ansible.builtin.stat:
+        path: "{{ digit_dir }}/.openbao/init.json"
+      register: bao_init_json
+
+    - name: "OpenBao — refuse to re-initialise over an existing init.json"
+      ansible.builtin.fail:
+        msg: >-
+          OpenBao reports NOT initialised but {{ digit_dir }}/.openbao/init.json exists.
+          Its storage is probably empty or not the volume it used before. Not
+          re-initialising (that would overwrite the unseal key). Check the openbao
+          volume / docker root; to really start fresh, move init.json away first.
+      when:
+        - not bao_init_status.json.initialized
+        - bao_init_json.stat.exists
 
     - name: "OpenBao — initialize if first deploy (writes init.json with 0600)"
       when: not bao_init_status.json.initialized
