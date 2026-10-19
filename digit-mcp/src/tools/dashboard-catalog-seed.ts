@@ -2938,6 +2938,29 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
         {
           "agg": "count",
           "name": "created"
+        },
+        {
+          "agg": "count",
+          "name": "resolved",
+          "filter": {
+            "is_open": false,
+            "is_resolved": true
+          }
+        },
+        {
+          "agg": "count",
+          "name": "open",
+          "filter": {
+            "is_open": true
+          }
+        },
+        {
+          "agg": "count",
+          "name": "on_time",
+          "filter": {
+            "is_resolved": true,
+            "sla_breached": false
+          }
         }
       ],
       "dimensions": [
@@ -2958,7 +2981,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
       }
     ],
     "status": "published",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "supportsSeries": false
   },
   {
@@ -3067,7 +3090,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
           "labelKey": "DASHBOARD_SLA_BREACHED"
         }
       ],
-      "dimensionKey": "ward_code",
+      "dimensionKey": "zone_code",
       "sortBySegment": "breached"
     },
     "rbac": {
@@ -3086,7 +3109,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
         }
       ],
       "dimensions": [
-        "ward_code",
+        "zone_code",
         "sla_status_bucket"
       ]
     },
@@ -3265,7 +3288,8 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
         "ontime_rate",
         "avg_csat"
       ],
-      "dimensionKey": "ward_code",
+      "dimensionKey": "zone_code",
+      "labelFormat": "dimension",
       "tableProfile": "wardPerformance"
     },
     "rbac": {
@@ -3348,7 +3372,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
         }
       ],
       "dimensions": [
-        "ward_code"
+        "zone_code"
       ]
     },
     "params": [
@@ -3372,7 +3396,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
     "id": "cl_table_ward_open_daily",
     "viz": {
       "pii": false,
-      "kind": "line",
+      "kind": "bar",
       "group": "complaint-landscape",
       "title": "Open complaints by ward (daily)",
       "accent": "teal",
@@ -3380,7 +3404,8 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
       "compose": null,
       "titleKey": "CMS-DASHBOARD.DASHBOARD_KPI_CL_TABLE_WARD_OPEN_DAILY",
       "valueKey": "open",
-      "dimensionKey": "ward_code"
+      "dimensionKey": "zone_code",
+      "labelFormat": "dimension"
     },
     "rbac": {
       "visibleTo": [
@@ -3406,7 +3431,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
         }
       ],
       "dimensions": [
-        "ward_code"
+        "zone_code"
       ]
     },
     "params": [
@@ -3714,7 +3739,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
       "measureKeys": [
         "total"
       ],
-      "dimensionKey": "ward_code",
+      "dimensionKey": "zone_code",
       "tableProfile": "wardSubtypeRecurring"
     },
     "rbac": {
@@ -3739,7 +3764,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
         }
       ],
       "dimensions": [
-        "ward_code",
+        "zone_code",
         "service_code"
       ]
     },
