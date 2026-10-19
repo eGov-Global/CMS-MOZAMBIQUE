@@ -19,6 +19,7 @@ import {
   summarizeWardRows,
 } from '../utils/complaintPins';
 import { getNumberTileDeltaClass, formatOfficerLabel, dimensionKindForName } from '../config/kpiDisplay';
+import { useEmployeeNames } from '../hooks/useEmployeeNames';
 import {
   resolveSlaRiskPresentation,
   computeBreachDurationMs,
@@ -80,6 +81,19 @@ export function KpiTile({ def, result, results, error, vizOverride, loading = fa
   const viz = def?.viz || {};
   const title = resolveTitle(def);
 
+    // Officer tiles project a uuid dimension; HRMS supplies the display name.
+  // Sits above the early returns (hook order), and no-ops for every tile that
+  // isn't officer-labelled.
+  const officerDim = viz.pii?.dimension
+    || (viz.labelFormat === 'officer' ? viz.dimensionKey : null)
+    || (result?.rows?.[0] && 'current_assignee_uuid' in result.rows[0] ? 'current_assignee_uuid' : null);
+  const officerUuids = React.useMemo(
+    () => (officerDim ? (result?.rows || []).map((row) => row[officerDim]) : []),
+    [officerDim, result],
+  );
+  const { names: officerNames } = useEmployeeNames(officerUuids);
+
+
   // first_widget_visible (#1110): one-shot per load, fired by whichever tile
   // first renders NON-skeleton content — including the error and "No data"
   // paths (R9/F8) so failed loads still measure. The metrics module dedupes
@@ -106,7 +120,7 @@ export function KpiTile({ def, result, results, error, vizOverride, loading = fa
   }
 
   const kind = vizOverride || viz.kind || 'scalar';
-  const ctx = { def, viz, result, results, title, loading, onRemove, groupBy, locale: language?.replace('_', '-') };
+  const ctx = { def, viz, result, results, title, loading, onRemove, groupBy, officerNames, locale: language?.replace('_', '-') };
 
   const content = renderByKind(kind, ctx);
 
@@ -211,7 +225,7 @@ function dimensionColumns(result, viz) {
 function measureColumns(result, viz) {
   const cols = (result.columns || []).filter((c) => c.role === 'measure');
   if (cols.length) return cols;
-  const keys = viz.measureKeys || (viz.measureKey ? [viz.measureKey] : []);
+  const keys = viz.measureKeys || (viz.measureKey ? [viz.measureKey] : (viz.valueKey ? [viz.valueKey] : []));
   return keys.map((name) => ({ name }));
 }
 
@@ -442,13 +456,13 @@ function renderNumberTileSparkline(ctx) {
 // ---------------------------------------------------------------------------
 
 function adaptBarRows(ctx) {
-  const { viz, result, locale } = ctx;
+    const { viz, result, locale, officerNames } = ctx;
   const dimKey = primaryDimensionKey(result, viz);
   const measure = primaryMeasure(result, viz);
   const isPercent = viz.format === 'percent' || viz.format === 'percentOneDecimal';
 
   let rows = (result.rows || []).map((row) => ({
-    label: formatDimLabel(row[dimKey], viz, dimKey, locale),
+    label: formatDimLabel(row[dimKey], viz, dimKey, locale, officerNames),
     count: percentToChartScale(Number(row[measure.name]) || 0, isPercent),
   }));
 
@@ -495,7 +509,7 @@ function renderBar(ctx, { histogram }) {
 // ---------------------------------------------------------------------------
 
 function adaptHorizontalRows(ctx) {
-  const { viz, result, locale } = ctx;
+    const { viz, result, locale, officerNames } = ctx;
   const dimKey = primaryDimensionKey(result, viz);
   const valueKey = viz.measureKey || primaryMeasure(result, viz).name;
   const numeratorKey = viz.numeratorKey;   // e.g. resolved
@@ -515,7 +529,7 @@ function adaptHorizontalRows(ctx) {
   }
   const isRatio = numeratorKey != null && denominatorKey != null;
   let rows = [...grouped.entries()].map(([key, b]) => ({
-    label: formatDimLabel(key, viz, dimKey, locale),
+    label: formatDimLabel(key, viz, dimKey, locale, officerNames),
     value: isRatio ? (b.den > 0 ? b.num / b.den : 0) : b.val,
     resolved: numeratorKey != null ? b.num : undefined,
     created: denominatorKey != null ? b.den : undefined,
@@ -554,7 +568,7 @@ function renderHorizontalBar(ctx) {
 // ---------------------------------------------------------------------------
 
 function adaptStacked(ctx) {
-  const { viz, result, locale } = ctx;
+    const { viz, result, locale, officerNames } = ctx;
 
   // BE-shaped passthrough.
   if (result.series && Array.isArray(result.series) && result.categories) {
@@ -569,7 +583,7 @@ function adaptStacked(ctx) {
   // Single-series stacked (e.g. complaints-by-type "Filed").
   if (!stackKey || !stackSeries?.length) {
     let rows = (result.rows || []).map((row) => ({
-      label: formatDimLabel(row[dimKey], viz, dimKey, locale),
+      label: formatDimLabel(row[dimKey], viz, dimKey, locale, officerNames),
       value: Number(row[measureKey]) || 0,
     }));
     if (viz.sort !== 'none') rows = rows.sort((a, b) => b.value - a.value);
@@ -611,7 +625,7 @@ function adaptStacked(ctx) {
   if (viz.limit) entries = entries.slice(0, viz.limit);
 
   return {
-    categories: entries.map((e) => formatDimLabel(e.key, viz, dimKey, locale)),
+    categories: entries.map((e) => formatDimLabel(e.key, viz, dimKey, locale, officerNames)),
     series: stackSeries.map((def) => ({
       name: seriesEntryLabel(def, def.label),
       data: entries.map((e) => e.segments[normalizeSeg(def.key)] ?? 0),
@@ -644,7 +658,7 @@ function renderStackedBar(ctx) {
 // ---------------------------------------------------------------------------
 
 function adaptPie(ctx) {
-  const { viz, result, locale } = ctx;
+    const { viz, result, locale, officerNames } = ctx;
   const dimKey = primaryDimensionKey(result, viz);
   const measure = primaryMeasure(result, viz);
   const colors = viz.colors || [];
@@ -656,7 +670,7 @@ function adaptPie(ctx) {
   }
   let rows = (result.rows || [])
     .map((row, i) => ({
-      label: formatDimLabel(row[dimKey], viz, dimKey, locale),
+      label: formatDimLabel(row[dimKey], viz, dimKey, locale, officerNames),
       count: Number(row[measure.name]) || 0,
       color: colors[i],
     }))
@@ -712,7 +726,7 @@ function renderPie(ctx) {
 // ---------------------------------------------------------------------------
 
 function adaptLine(ctx) {
-  const { viz, result, title, locale } = ctx;
+  const { viz, result, title, locale, officerNames } = ctx;
   if (result.periods) {
     return { periods: result.periods, defaultPeriod: result.defaultPeriod || viz.defaultPeriod || 'daily', headerTitle: result.title || title };
   }
@@ -723,7 +737,7 @@ function adaptLine(ctx) {
   const rows = [...(result.rows || [])].sort((a, b) =>
     String(a[dimKey] ?? '').localeCompare(String(b[dimKey] ?? ''))
   );
-  const categories = rows.map((r) => formatDimLabel(r[dimKey], viz, dimKey, locale));
+  const categories = rows.map((r) => formatDimLabel(r[dimKey], viz, dimKey, locale, officerNames));
 
   // Descriptor-driven multi-series with per-series colour / dual y-axis grouping.
   // Each seriesDef is either a direct measure ({ measureKey }) or a computed
@@ -779,7 +793,7 @@ function renderLine(ctx) {
 // ---------------------------------------------------------------------------
 
 function renderTable(ctx) {
-  const { viz, result, loading, groupBy } = ctx;
+  const { viz, result, loading, groupBy, officerNames } = ctx;
   // #1111 PR2 (R4): at a non-leaf "Group by" level, drop the redundant
   // service_group ("Type") column and relabel service_code to the level's
   // name — see applyGroupByToColumns. The ideal_sla_ms avg-of-heterogeneous-
@@ -788,7 +802,7 @@ function renderTable(ctx) {
   const columns = applyGroupByToColumns(viz.columns || deriveColumnsFromResult(result), groupBy);
   const rows = transformTableRows(result, viz);
   if (loading && !rows.length) return <Placeholder message={t("DASHBOARD_COMMON_LOADING", "Loading…")} />;
-  return <DashboardTable columns={columns} rows={rows} emptyMessage={viz.emptyMessage || t("DASHBOARD_COMMON_NO_DATA", "No data")} />;
+  return <DashboardTable columns={columns} rows={rows} officerNames={officerNames} emptyMessage={viz.emptyMessage || t("DASHBOARD_COMMON_NO_DATA", "No data")} />;
 }
 
 function deriveColumnsFromResult(result) {
@@ -829,7 +843,7 @@ function mapFormatToCellType(format) {
  * reference instead of a degraded ranked list.
  */
 function adaptSlaRiskRows(ctx) {
-  const { viz, result } = ctx;
+  const { viz, result, officerNames } = ctx;
   const limit = viz.limit || 50;
   return (result.rows || [])
     .map((row, index) => {
@@ -852,7 +866,7 @@ function adaptSlaRiskRows(ctx) {
         typeLabel: typeKey ? dimensionLabel(typeKey, 'complaintType') : '—',
         subtypeLabel: subtypeKey ? dimensionLabel(subtypeKey, 'complaintType') : '—',
         locality: row.ward_code ? dimensionLabel(String(row.ward_code), 'boundary') : '—',
-        ownerName: formatOfficerLabel(row.current_assignee_uuid),
+        ownerName: formatOfficerLabel(row.current_assignee_uuid, officerNames),
         ownerRole: '—',
         status: normalizeWorkflowStatusKey(applicationStatus),
         statusLabel: formatWorkflowStatusLabel(applicationStatus),
@@ -959,11 +973,11 @@ function renderChoroplethMap(ctx) {
 // ---------------------------------------------------------------------------
 
 function adaptRanked(ctx) {
-  const { viz, result, locale } = ctx;
+    const { viz, result, locale, officerNames } = ctx;
   const dimKey = primaryDimensionKey(result, viz);
   const measure = primaryMeasure(result, viz);
   let rows = (result.rows || []).map((row) => ({
-    label: formatDimLabel(row[dimKey], viz, dimKey, locale),
+    label: formatDimLabel(row[dimKey], viz, dimKey, locale, officerNames),
     value: Number(row[measure.name]) || 0,
   }));
   if (viz.sort !== 'none') rows = rows.sort((a, b) => b.value - a.value);
@@ -1116,14 +1130,14 @@ function formatLabel(value) {
  *   - "officer":   mask an assignee UUID -> "Officer …<last6>" / "Unassigned"
  * No labelFormat => identity (formatLabel).
  */
-function formatDimLabel(value, viz, dim, locale) {
+function formatDimLabel(value, viz, dim, locale, officerNames) {
   switch (viz?.labelFormat) {
     case 'dimension': {
       const kind = dimensionKindForName(dim);
       return kind ? dimensionLabel(value, kind) : String(value);
     }
     case 'department': return dimensionLabel(value, 'department');
-    case 'officer':    return formatOfficerLabel(value);
+    case 'officer':    return formatOfficerLabel(value, officerNames);
     case 'date-dow':   return formatDateDow(value, locale);
     default:           return formatLabel(value);
   }

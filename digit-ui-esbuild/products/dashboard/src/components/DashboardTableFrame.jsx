@@ -1,6 +1,7 @@
 import React, { useCallback, useRef } from "react";
 import { DATA_TABLE_STYLES } from "../config/visualizationStyles";
 import { seriesEntryLabel } from "../i18n/textResolver";
+import { columnLabelKey } from "../config/kpiDisplay";
 import SubtleScroll from "./SubtleScroll";
 
 /**
@@ -22,7 +23,7 @@ export const SrOnlyTableHead = ({ columns }) => (
     <tr>
       {columns.map((col) => (
         <th key={col.id} scope="col">
-          {seriesEntryLabel(col, col.label)}
+          {seriesEntryLabel({ labelKey: columnLabelKey(col) }, col.label)}
         </th>
       ))}
     </tr>

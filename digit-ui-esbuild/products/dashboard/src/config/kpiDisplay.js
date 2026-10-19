@@ -108,11 +108,51 @@ export function getKpiDisplayTitle(metric) {
  * return null and callers fall back to the legacy humanisers. Order matters:
  * sla_status_bucket must resolve to slaState before the "status" check.
  */
+/**
+ * Column id -> localisation code, for catalog columns that carry a literal
+ * `label` and no `labelKey`. Those headers rendered English on every locale:
+ * the catalog is data, so nobody could translate them without editing MDMS.
+ *
+ * Resolved only as a FALLBACK — an explicit labelKey on the column still wins,
+ * so a tenant can override any of these without touching code.
+ */
+export const COLUMN_LABEL_KEYS = {
+  zone_code: "DASHBOARD_COL_DISTRICT",
+  ward_code: "DASHBOARD_COL_LOCALITY",
+  service_code: "DASHBOARD_COL_SUBTYPE",
+  service_group: "DASHBOARD_COL_TYPE",
+  source: "DASHBOARD_COL_CHANNEL",
+  created: "DASHBOARD_COL_CREATED",
+  open: "DASHBOARD_COL_OPEN",
+  resolved: "DASHBOARD_COL_RESOLVED",
+  assigned: "DASHBOARD_COL_ASSIGNED",
+  total: "DASHBOARD_COL_TOTAL",
+  volume: "DASHBOARD_COL_VOLUME",
+  trendPct: "DASHBOARD_COL_TREND",
+  share_pct: "DASHBOARD_COL_SHARE_PCT",
+  reopen_rate: "DASHBOARD_COL_REOPEN_RATE",
+  ontime_rate: "DASHBOARD_COL_RESOLVED_ON_TIME_RATE",
+  resolutionRate: "DASHBOARD_COL_RESOLUTION_RATE",
+  avg_csat: "DASHBOARD_COL_CSAT",
+  avg_resolution_ms: "DASHBOARD_COL_AVG_RESOLUTION_TIME",
+  ideal_sla_ms: "DASHBOARD_COL_SLA",
+  department_code: "DASHBOARD_COL_DEPT",
+  current_assignee_uuid: "DASHBOARD_COL_OWNER",
+  officerName: "DASHBOARD_COMMON_OFFICER",
+  status: "DASHBOARD_COL_STATUS",
+  sla_status_bucket: "DASHBOARD_COL_SLA_STATUS",
+};
+
+/** The code a column header should try, explicit labelKey first. */
+export function columnLabelKey(column) {
+  return column?.labelKey || COLUMN_LABEL_KEYS[column?.id] || null;
+}
+
 export function dimensionKindForName(name) {
   const n = String(name ?? "").toLowerCase();
   if (!n) return null;
   if (n.includes("service") || n.includes("subtype") || n.includes("complaint_type")) return "complaintType";
-  if (n.includes("ward") || n.includes("boundary") || n.includes("locality")) return "boundary";
+    if (n.includes("ward") || n.includes("zone") || n.includes("boundary") || n.includes("locality")) return "boundary";
   if (n.includes("department") || n === "dept") return "department";
   if (n.includes("sla")) return "slaState";
   if (n.includes("status") || n.includes("stage")) return "workflowStatus";
@@ -213,32 +253,21 @@ export function statusValueToCssColor(statusClass) {
   }
 }
 
-// The analytics grain carries assignee UUIDs, not names (and many don't resolve to a
-// live user record). For a human-readable dashboard we derive a STABLE display name
-// from the UUID: a deterministic hash picks a first + last name, so the same officer
-// always shows the same name across every widget. ~400 combinations keeps collisions rare.
-const OFFICER_FIRST_NAMES = [
-  "Aisha", "John", "Grace", "David", "Mary", "Samuel", "Faith", "Peter", "Esther",
-  "Brian", "Joyce", "Kevin", "Lucy", "Daniel", "Naomi", "Eric", "Sarah", "James",
-  "Caroline", "Dennis",
-];
-const OFFICER_LAST_NAMES = [
-  "Mwangi", "Kamau", "Otieno", "Kiprono", "Wanjiru", "Chebet", "Njoroge", "Korir",
-  "Achieng", "Mutua", "Kibet", "Wafula", "Cheruiyot", "Onyango", "Maina", "Rotich",
-  "Wekesa", "Langat", "Mwende", "Barasa",
-];
 
-export function formatOfficerLabel(uuid) {
+/**
+ * Label an officer UUID. `names` is the resolved uuid -> employee name map
+ * from useEmployeeNames; a uuid HRMS could not resolve gets a short opaque id
+ * (never a fabricated name — a plausible-looking wrong name is worse than no
+ * name on a per-officer SLA chart).
+ */
+export function formatOfficerLabel(uuid, names) {
   const id = String(uuid ?? "");
   if (!id || id === "Unknown" || id === "null" || id === "undefined") {
     return t("DASHBOARD_COMMON_UNASSIGNED", "Unassigned");
   }
-  let h = 0;
-  for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  const first = OFFICER_FIRST_NAMES[h % OFFICER_FIRST_NAMES.length];
-  const last = OFFICER_LAST_NAMES[Math.floor(h / OFFICER_FIRST_NAMES.length) % OFFICER_LAST_NAMES.length];
-  return `${first} ${last}`;
+  return names?.[id] || `${t("DASHBOARD_COMMON_OFFICER", "Officer")} ${id.slice(-4)}`;
 }
+
 
 function formatListLabel(labelKey, raw) {
   if (labelKey === "service_code") return dimensionLabel(raw, "complaintType");

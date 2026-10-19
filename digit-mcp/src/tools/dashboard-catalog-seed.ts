@@ -3063,7 +3063,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
           "labelKey": "DASHBOARD_SLA_BREACHED"
         }
       ],
-      "dimensionKey": "ward_code",
+      "dimensionKey": "zone_code",
       "sortBySegment": "breached"
     },
     "query": {
@@ -3076,7 +3076,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
         }
       ],
       "dimensions": [
-        "ward_code",
+        "zone_code",
         "sla_status_bucket"
       ]
     },
@@ -3197,10 +3197,10 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
       "format": "integer",
       "columns": [
         {
-          "id": "ward_code",
+          "id": "zone_code",
           "type": "dimension",
           "align": "left",
-          "label": "Ward",
+          "label": "District",
           "width": "24%"
         },
         {
@@ -3251,7 +3251,8 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
         "ontime_rate",
         "avg_csat"
       ],
-      "dimensionKey": "ward_code"
+      "dimensionKey": "zone_code",
+      "labelFormat": "dimension"
     },
     "query": {
       "sort": [
@@ -3319,7 +3320,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
         }
       ],
       "dimensions": [
-        "ward_code"
+        "zone_code"
       ]
     },
     "params": [
@@ -3344,7 +3345,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
     "id": "cl_table_ward_open_daily",
     "viz": {
       "pii": false,
-      "kind": "line",
+      "kind": "bar",
       "group": "complaint-landscape",
       "title": "Open complaints by ward (daily)",
       "accent": "teal",
@@ -3352,7 +3353,8 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
       "compose": null,
       "titleKey": "CMS-DASHBOARD.DASHBOARD_KPI_CL_TABLE_WARD_OPEN_DAILY",
       "valueKey": "open",
-      "dimensionKey": "ward_code"
+      "dimensionKey": "zone_code",
+      "labelFormat": "dimension"
     },
     "query": {
       "sort": [
@@ -3373,7 +3375,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
         }
       ],
       "dimensions": [
-        "ward_code"
+        "zone_code"
       ]
     },
     "params": [
@@ -3633,10 +3635,10 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
       "format": "integer",
       "columns": [
         {
-          "id": "ward_code",
+          "id": "zone_code",
           "type": "dimension",
           "align": "left",
-          "label": "Ward",
+          "label": "District",
           "width": "28%"
         },
         {
@@ -3666,7 +3668,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
         "period": "prior",
         "mode": "percentChange",
         "joinBy": [
-          "ward_code",
+          "zone_code",
           "service_code"
         ],
         "valueKey": "total",
@@ -3683,7 +3685,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
       "measureKeys": [
         "total"
       ],
-      "dimensionKey": "ward_code"
+      "dimensionKey": "zone_code"
     },
     "query": {
       "sort": [
@@ -3701,7 +3703,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
         }
       ],
       "dimensions": [
-        "ward_code",
+        "zone_code",
         "service_code"
       ]
     },
