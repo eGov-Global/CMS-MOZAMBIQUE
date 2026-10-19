@@ -64,8 +64,14 @@ def create(mdms, tok, ui, tenant, schema, data):
     req = urllib.request.Request(f"{mdms}/mdms-v2/v2/_create/{schema}", data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
     try:
-        urllib.request.urlopen(req, timeout=30)
+        urllib.request.urlopen(req, timeout=90)
         return "created"
+    except (TimeoutError, urllib.error.URLError) as e:
+        if not isinstance(e, urllib.error.HTTPError):
+            # May still be stored (writes persist async); the verify pass re-checks.
+            return f"error timeout: {e}"
+        msg = e.read().decode(errors="replace")
+        return "duplicate" if "uplicate" in msg or "DUPLICATE" in msg else f"error {e.code}: {msg[:160]}"
     except urllib.error.HTTPError as e:
         msg = e.read().decode(errors="replace")
         return "duplicate" if "uplicate" in msg or "DUPLICATE" in msg else f"error {e.code}: {msg[:160]}"

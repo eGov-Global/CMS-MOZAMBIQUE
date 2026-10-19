@@ -64,10 +64,12 @@ class Ctx:
         req = urllib.request.Request(self.a.mdms + path, data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"})
         try:
-            with urllib.request.urlopen(req, timeout=30) as r:
+            with urllib.request.urlopen(req, timeout=90) as r:
                 return r.status, json.loads(r.read() or b"{}")
         except urllib.error.HTTPError as e:
             return e.code, e.read().decode(errors="replace")[:300]
+        except (TimeoutError, urllib.error.URLError) as e:
+            return 0, f"no answer from mdms-v2: {e}"
 
     def create(self, schema, data):
         if not self.a.apply:
