@@ -234,11 +234,13 @@ const GeoLocations = ({ t, config, onSelect, formData, tenantId }) => {
     // flows). Wizard-local formData is the sole restoration source now.
     Digit.SessionStorage.del("PGR_MAP_LOCATION");
     if (!hasUsableGeoLocation(formData?.[config.key])) {
-      setCoords(DEFAULT_CENTER);
-      setMarkerPos(null);
-      setCameraTarget({ lat: DEFAULT_CENTER.lat, lng: DEFAULT_CENTER.lng, zoom: OVERVIEW_ZOOM });
+      // Start with the pin already on the tenant's default centre, framed at
+      // the working zoom, and seed it into the form so a quick Next still
+      // captures a location — the citizen moves the pin from there.
+      setCameraTarget({ lat: DEFAULT_CENTER.lat, lng: DEFAULT_CENTER.lng, zoom: DEFAULT_ZOOM });
+      updateLocation(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
     }
-  }, [isReady, DEFAULT_CENTER.lat, DEFAULT_CENTER.lng, OVERVIEW_ZOOM]);
+  }, [isReady, DEFAULT_CENTER.lat, DEFAULT_CENTER.lng, DEFAULT_ZOOM]);
 
   useEffect(() => () => reverseGeocodeController.current?.abort(), []);
 
