@@ -223,6 +223,7 @@ class UserService {
         body: JSON.stringify({
           // egov-user's create DTO is @JsonProperty("requestInfo"), lowercase — unlike _search.
           requestInfo: this.serviceRequestInfo(authToken, userInfo),
+          RequestInfo: this.serviceRequestInfo(authToken, userInfo),
           user: {
             userName: cleanMobileNumber,
             mobileNumber: cleanMobileNumber,
