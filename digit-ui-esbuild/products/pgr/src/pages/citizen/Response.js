@@ -117,10 +117,16 @@ const Response = () => {
     return v === key ? fallback : v;
   };
 
-  const success = hasUpdatePayload(complaints);
-  const wrapper = success ? complaints.response.ServiceWrappers[0] : null;
-  const action = wrapper?.workflow?.action;
-  const complaintId = wrapper?.service?.serviceRequestId;
+  const live = hasUpdatePayload(complaints) ? complaints.response.ServiceWrappers[0] : null;
+  // A reload empties the redux slice, which used to render "Complaint couldn't
+  // be submitted" for a complaint that WAS saved — and the citizen filed it
+  // again. The history entry keeps the snapshot written below across reloads,
+  // so the outcome is rebuilt from it instead.
+  const snapshot = live ? null : location.state?.responseSnapshot;
+  const success = !!live || !!snapshot;
+  const action = live ? live.workflow?.action : snapshot?.action;
+  const complaintId = live ? live.service?.serviceRequestId : snapshot?.complaintId;
+  const complaintTenantId = live ? live.service?.tenantId : snapshot?.tenantId;
   const filed = success && action !== "REOPEN" && action !== "RATE";
 
   // /response is ONE route serving four different outcomes — canonicalise the
@@ -130,15 +136,27 @@ const Response = () => {
   // in the visits log); the replace coalesces to one. The flows await the
   // update before navigating here, so the first render's redux slice is
   // already the settled outcome. No id, no complaint data in the URL. The
-  // route state (filedSummary) is carried over so the summary rows survive.
+  // route state (filedSummary) is carried over so the summary rows survive,
+  // plus the reload snapshot above.
   const outcome = !success ? "failed" : action === "REOPEN" ? "reopened" : action === "RATE" ? "rated" : "created";
   React.useEffect(() => {
     const base = `/${window?.contextPath}/citizen/pgr/response`;
     if (history.location?.pathname === base || history.location?.pathname === `${base}/`) {
-      history.replace(`${base}/${outcome}`, history.location?.state);
+      const responseSnapshot = live ? { action, complaintId, tenantId: complaintTenantId } : undefined;
+      history.replace(`${base}/${outcome}`, { ...(history.location?.state || {}), responseSnapshot });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A success URL with nothing to show (opened from a bookmark, or the history
+  // entry lost its state): we cannot say which complaint it was, and must not
+  // say it failed — send the citizen to their complaints list instead.
+  const pathOutcome = location.pathname.replace(/\/$/, "").split("/").pop();
+  const orphaned = !success && ["created", "reopened", "rated"].includes(pathOutcome);
+  React.useEffect(() => {
+    if (orphaned) history.replace(`/${window?.contextPath}/citizen/pgr/complaints`);
+  }, [orphaned, history]);
+  if (orphaned) return null;
 
   const headlineKey = success ? getActionMessageKey(action) : "CS_COMMON_COMPLAINT_NOT_SUBMITTED";
   const headline = tr(
@@ -225,7 +243,7 @@ const Response = () => {
             // that alone yields a receipt with nothing but the ID — so hand
             // over the id and let the button load the same full record the
             // detail page shows.
-            <DownloadReceiptButton complaintId={complaintId} tenantId={wrapper?.service?.tenantId} />
+            <DownloadReceiptButton complaintId={complaintId} tenantId={complaintTenantId} />
           ) : null}
           {/* Same name the employee response page gives its home button. */}
           <Button onClick={() => history.push(goHome)} data-analytics-event="pgr.complaint.response-go-home">
