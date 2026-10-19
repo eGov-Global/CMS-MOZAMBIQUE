@@ -249,6 +249,10 @@ plugins:
               -- /kc/healthz is a plain liveness probe that ends in "z" (so the
               -- /health$ match below does not catch it). Same bucket as /auth.
               or p == "/kc" or p:find("/kc/", 1, true) == 1
+              -- /xstate-chatbot (MOZ WhatsApp chatbot): its webhook is called by the
+              -- messaging provider, which carries no DIGIT token; the chatbot calls
+              -- DIGIT APIs with its own user. Same bucket as /auth.
+              or p == "/xstate-chatbot" or p:find("/xstate-chatbot/", 1, true) == 1
               -- `/health$` (suffix) not `== "/health"`: the per-service liveness
               -- endpoints are `/mdms-v2/health`, `/user/health`, `/access/health`,
               -- `/egov-idgen/health`, `/egov-workflow-v2/health`, `/pgr-services/health`
@@ -545,8 +549,13 @@ services:
     strip_path: false
     methods:
     - POST
-- name: user-otp-mock
-  url: http://user-otp:8090
+# /user-otp/v1/_send — routed to otp-publisher (mints OTP, caches in Redis,
+# publishes OTP.SEND to Kafka for novu-bridge delivery). See
+# utilities/otp-publisher/README.md. otp-publisher only runs under the
+# `notifications` compose profile (enable_novu: true in host_vars) — with
+# enable_novu: false this route 502s, since nothing listens on otp-publisher:3030.
+- name: user-otp
+  url: http://otp-publisher:3030
   tags:
   - core
   - auth
@@ -555,30 +564,6 @@ services:
     paths:
     - /user-otp
     strip_path: false
-    # MOCK (default): request-termination short-circuits every /user-otp/*
-    # call with a canned success response, so login/register work using the
-    # fixed OTP (123456, see CITIZEN_LOGIN_PASSWORD_OTP_FIXED_VALUE in
-    # docker-compose.egov-digit.yaml) without the real egov-otp/user-otp/
-    # egov-notification-sms stack running or any SMS gateway integrated.
-    #
-    # TO ENABLE REAL OTP FOR PRODUCTION, before deploying:
-    #   1. Delete the `plugins:` block below (the request-termination mock).
-    #   2. Set enable_otp_services: true in the tenant's Ansible host_vars
-    #      (local-setup/ansible/inventory/host_vars/<tenant>.yml) so compose
-    #      starts the `otp` profile (egov-otp, user-otp, egov-notification-sms).
-    #   3. Configure a real SMS gateway: egov-notification-sms defaults to
-    #      SMS_PROVIDER_CLASS: Console (logs OTP SMS to container stdout only)
-    #      in docker-compose.egov-digit.yaml — point it at a real provider
-    #      class + credentials before relying on SMS delivery.
-    # Without all three, the first OTP request has nothing to answer it
-    # (real stack down or SMS not actually sent), and only the fixed
-    # 123456 fallback keeps working.
-    plugins:
-    - name: request-termination
-      config:
-        status_code: 200
-        content_type: application/json
-        body: '{"ResponseInfo":{"apiId":"Rainmaker","ver":null,"ts":null,"resMsgId":"uief87324","msgId":null,"status":"successful"},"otp":{"identity":"","tenantId":"","type":"","otp":"","expiryTime":0}}'
 - name: enc-service
   url: http://egov-enc-service:1234
   tags:
@@ -1074,35 +1059,19 @@ services:
     paths:
     - /kc
     strip_path: true
-# OTP validate — real upstream (egov-otp:8089) fronted by a default request-termination MOCK.
-# Mirrors /user-otp: the mock rubber-stamps every OTP validation as successful, so citizen
-# login works with the fixed OTP (123456) without the `otp` profile running.
-#
-# TO ENABLE REAL OTP VALIDATION FOR PRODUCTION, before deploying:
-#   1. Delete the `plugins:` block below (the request-termination mock).
-#   2. Set enable_otp_services: true in the tenant's Ansible host_vars so compose
-#      starts the `otp` profile (egov-otp, user-otp, egov-notification-sms).
-#   3. Configure a real SMS gateway (see egov-notification-sms SMS_PROVIDER_CLASS).
-# With the mock removed and the otp profile running, /otp reaches egov-otp for real
-# validation (an incorrect OTP is rejected instead of rubber-stamped). The upstream was
-# previously a dead localhost:9999, so de-mocking alone returned HTTP 502 — now fixed.
-- name: otp-validate-mock
-  url: http://egov-otp:8089
+# /otp/v1/_validate — routed to otp-publisher (Redis lookup against the code
+# cached by /user-otp/v1/_send above; single-use, deletes on success). Same
+# enable_novu: true dependency as user-otp above.
+- name: otp-validate
+  url: http://otp-publisher:3030
   tags:
   - core
   - auth
-  - mock
   routes:
   - name: otp-validate-route
     paths:
     - /otp
     strip_path: false
-  plugins:
-  - name: request-termination
-    config:
-      status_code: 200
-      content_type: application/json
-      body: '{"ResponseInfo":{"apiId":"Rainmaker","ver":".01","ts":"","resMsgId":"uief87324","msgId":"","status":"successful"},"otp":{"otp":"","UUID":"","isValidationSuccessful":true}}'
 # User event mock — returns empty events (service not deployed)
 - name: user-event-mock
   url: http://localhost:9999
@@ -1120,3 +1089,15 @@ services:
       status_code: 200
       content_type: application/json
       body: '{"ResponseInfo":{"apiId":"Rainmaker","ver":".01","ts":"","resMsgId":"uief87324","msgId":"","status":"successful"},"totalCount":0,"unreadCount":0,"events":[]}'
+# xstate-chatbot — MOZ WhatsApp chatbot (from the mz UAT kong.yml, 2026-10-19).
+# Exempt from the DIGIT token check in the pre-function's is_public_infra():
+# the messaging provider calls its webhook without a DIGIT token.
+- name: xstate-chatbot
+  url: http://xstate-chatbot:8082
+  tags:
+  - chatbot
+  routes:
+  - name: xstate-chatbot-route
+    paths:
+    - /xstate-chatbot
+    strip_path: false

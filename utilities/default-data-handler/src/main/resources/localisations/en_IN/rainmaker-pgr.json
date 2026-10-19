@@ -6960,6 +6960,24 @@
         "locale": "en_IN"
     },
     {
+        "code": "CS_FILE_VIRUS_DETECTED",
+        "message": "This file failed a security scan. Please upload a different file.",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "CS_FILE_NOT_SCANNABLE",
+        "message": "This file could not be checked. Remove any password protection and try again.",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "CS_FILE_SCAN_UNAVAILABLE",
+        "message": "File upload is temporarily unavailable. Please try again later.",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
         "code": "CS_FILE_UPLOAD_FAILED",
         "message": "File upload failed.",
         "module": "rainmaker-pgr",

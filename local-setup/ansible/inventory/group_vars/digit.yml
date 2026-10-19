@@ -266,6 +266,7 @@ upstream_mcp_port: 13101
 upstream_mcp_readonly_port: 13102   # digit-mcp-readonly container (profile mcp-readonly)
 upstream_esbuild_port: 18080
 upstream_minio_port: 19000
+upstream_scan_proxy_port: 18183   # filestore-scan-proxy (enable_file_scan)
 # Matomo's admin UI. Bound to 127.0.0.1 by the overlay, so this is the
 # tunnel target, not a public port. It is also the Host header the nginx
 # tracking blocks send, and the origin Matomo's installer records in

@@ -90,6 +90,11 @@ config:
       - work-dir: "utilities/otp-publisher"
         dockerfile: "utilities/otp-publisher/Dockerfile"
         image-name: "otp-publisher"
+  - name: "builds/Citizen-Complaint-Resolution-System/backend/filestore-scan-proxy"
+    build:
+      - work-dir: "backend/filestore-scan-proxy"
+        dockerfile: "backend/filestore-scan-proxy/Dockerfile"
+        image-name: "filestore-scan-proxy"
   - name: "builds/Citizen-Complaint-Resolution-System/digit-ui-esbuild"
     build:
       - work-dir: "digit-ui-esbuild"

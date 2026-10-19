@@ -1427,6 +1427,7 @@
           dataloader: ../dataloader
           scripts:  ../scripts
           keycloak: ../keycloak
+          clamav:   ../clamav
 
     # ==================== Kong CORS origins (pin BEFORE up -d) ====================
     # The config sync above rsynced the repo's kong.yml, which ships
@@ -1538,6 +1539,14 @@
           {{ otp_publisher_image
              | default('otp-publisher:local' if (build_otp_publisher | default(false))
                        else 'egovio/otp-publisher:2.12-81fc6be') }}
+
+    # filestore-scan-proxy (enable_file_scan): built on the box from
+    # backend/filestore-scan-proxy unless `filestore_scan_proxy_image:` names a
+    # published image (e.g. egovio/filestore-scan-proxy:<tag> from spa-build).
+    - name: "Resolve filestore-scan-proxy image tag"
+      ansible.builtin.set_fact:
+        filestore_scan_proxy_image: >-
+          {{ filestore_scan_proxy_image | default('filestore-scan-proxy:local') }}
 
     # ==================== Compose .env (per-tenant overrides) ====================
     # Templates Grafana's public root URL (so the JVM dashboard / observability
@@ -1940,9 +1949,11 @@
               + (['mcp']           if enable_mcp           | default(false) else [])
               + (['mcp-readonly']  if enable_mcp_readonly  | default(false) else [])
               + (['notifications'] if enable_novu          | default(false) else [])
-              + (['keycloak']      if enable_keycloak      | default(false) else [])
+              + (['chatbot']       if enable_chatbot       | default(false) else [])
+              + (['keycloak']     if enable_keycloak      | default(false) else [])
               + (['otp']           if enable_otp_services  | default(false) else [])
               + (['matomo']        if enable_matomo        | default(false) else [])
+              + (['file-scan']     if enable_file_scan     | default(false) else [])
               + _obs_profiles
             ) | join(',')
           }}
@@ -2062,6 +2073,22 @@
       changed_when: true
       when:
         - build_otp_publisher | default(false)
+
+    # ==================== Build filestore-scan-proxy image locally ========
+    # Only when no published image was named (see "Resolve filestore-scan-proxy
+    # image tag"). Small Node image; builds in well under a minute.
+    - name: "Build filestore-scan-proxy image locally (when enable_file_scan)"
+      ansible.builtin.command: >-
+        docker build
+        -t filestore-scan-proxy:local
+        backend/filestore-scan-proxy
+      args:
+        chdir: "{{ playbook_dir }}/../.."
+      register: filestore_scan_proxy_build_run
+      changed_when: true
+      when:
+        - enable_file_scan | default(false)
+        - filestore_scan_proxy_image == 'filestore-scan-proxy:local'
 
     # ==================== Build digit-ui from source ====================
     # Mirrors the configurator + mcp fold-ins: when `build_digit_ui: true`,
@@ -2747,6 +2774,69 @@
       when: enable_matomo | default(false)
       no_log: true
 
+    # ── Upload virus scanning: quarantine-bucket MinIO users ─────────────
+    #
+    # Same generate-if-absent-then-persist shape as Matomo, for the same
+    # reasons (bootstrap seed is cas:0; re-read because an earlier persist may
+    # have bumped the version). quarantine-init creates the two MinIO users
+    # from these on every deploy, so the values must be stable across deploys:
+    #   minio_scanproxy_password          scanproxy — PutObject on egov-quarantine only
+    #   minio_quarantine_reader_password  quarantine-reader — read/list, for investigators
+    # Recover the reader password with:
+    #   bao kv get -field=minio_quarantine_reader_password {{ secrets_path }}
+    - name: "OpenBao — re-read tenant secrets (file-scan)"
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:18200/v1/{{ secrets_path | regex_replace('^kv/', 'kv/data/') }}"
+        headers:
+          X-Vault-Token: "{{ bao_root_token }}"
+        status_code: [200]
+      register: bao_secrets_file_scan
+      when: enable_file_scan | default(false)
+      no_log: true
+
+    - name: "File scan — resolve quarantine MinIO passwords (generate if absent)"
+      ansible.builtin.set_fact:
+        minio_scanproxy_pw: >-
+          {{ bao_secrets_file_scan.json.data.data.minio_scanproxy_password | default('', true)
+             or lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}
+        minio_quarantine_reader_pw: >-
+          {{ bao_secrets_file_scan.json.data.data.minio_quarantine_reader_password | default('', true)
+             or lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}
+      when: enable_file_scan | default(false)
+      no_log: true
+
+    - name: "OpenBao — persist generated quarantine MinIO passwords"
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:18200/v1/{{ secrets_path | regex_replace('^kv/', 'kv/data/') }}"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ bao_root_token }}"
+        body_format: json
+        body: >-
+          {{ {'options': {'cas': bao_secrets_file_scan.json.data.metadata.version | int},
+              'data': bao_secrets_file_scan.json.data.data
+                      | combine({'minio_scanproxy_password': minio_scanproxy_pw,
+                                 'minio_quarantine_reader_password': minio_quarantine_reader_pw})} }}
+        status_code: [200]
+      when:
+        - enable_file_scan | default(false)
+        - (bao_secrets_file_scan.json.data.data.minio_scanproxy_password | default('', true)) | length == 0
+          or (bao_secrets_file_scan.json.data.data.minio_quarantine_reader_password | default('', true)) | length == 0
+      no_log: true
+
+    - name: "OpenBao — put the quarantine MinIO passwords into .env"
+      ansible.builtin.lineinfile:
+        path: "{{ digit_dir }}/.env"
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+        create: true
+        mode: '0600'
+      loop:
+        - { key: 'MINIO_SCANPROXY_PASSWORD', value: "{{ minio_scanproxy_pw | default('') }}" }
+        - { key: 'MINIO_QUARANTINE_READER_PASSWORD', value: "{{ minio_quarantine_reader_pw | default('') }}" }
+      when: enable_file_scan | default(false)
+      no_log: true
+
     # Keycloak-tier secrets — appended as a separate marked block so the
     # main TENANT SECRETS block stays untouched on Keycloak-free tenants.
     # Default-empty strings so a missing key in OpenBao (e.g. first deploy
@@ -3049,6 +3139,27 @@
         | selectattr('item.key', 'equalto', 'otel')
         | map(attribute='stdout_lines') | flatten
         | select('search', 'otel-collector-config')
+        | list | length > 0
+
+    # clamd reads clamd.conf only at start, and the bind mount alone does not
+    # recreate the container. Same shape as the OTEL restart above.
+    - name: "ClamAV — restart when clamd.conf changed"
+      ansible.builtin.shell: |
+        set -e
+        if [ -z "$(docker ps -q -f name='^digit-clamav$')" ]; then
+          echo "NOCHANGE clamav not running"
+          exit 0
+        fi
+        docker restart digit-clamav
+      args:
+        executable: /bin/bash
+      register: clamav_restart
+      changed_when: "'NOCHANGE' not in clamav_restart.stdout"
+      when: >-
+        config_sync.results | default([])
+        | selectattr('item.key', 'equalto', 'clamav')
+        | map(attribute='stdout_lines') | flatten
+        | select('search', 'clamd.conf')
         | list | length > 0
 
     # ==================== Wait for Persister (Kafka consumer) ====================
@@ -5554,6 +5665,7 @@
       until: cfg_i18n_auth.status == 200
       no_log: true
       when: state_root != 'pg'
+      tags: ['configurator-i18n', 'chatbot', 'chatbot-i18n']
 
     - name: "configurator-i18n — upsert configurator-ui bundle (per locale)"
       ansible.builtin.uri:
@@ -5578,6 +5690,41 @@
         configurator_i18n_bundle: "{{ lookup('file', playbook_dir ~ '/files/configurator-localization/configurator-ui.json') | from_json }}"
       loop: "{{ configurator_i18n_bundle | map(attribute='locale') | unique | list }}"
       when: state_root != 'pg'
+
+    # ────────────────────────────────────────────────────────────────
+    # chatbot-i18n (from feat/whatsapp-inbound-mz). The WhatsApp chatbot resolves
+    # prompts by code against the localisation service, falling back to in-code
+    # text. Its packs live with the other seeds in default-data-handler, which is
+    # not deployed here, so upsert them directly. Seed the STATE ROOT: localisation
+    # returns rows from the first tenant in the chain that matches and never
+    # merges, so keys held at the root reach the city tenant only while the city
+    # has none of its own. One locale per call — mixed-locale batches are dropped
+    # silently. Only when the chatbot profile is on (enable_chatbot).
+    # ────────────────────────────────────────────────────────────────
+    - name: "chatbot-i18n — upsert chatbot bundle (per locale)"
+      ansible.builtin.uri:
+        url: "{{ 'https://' + domain if (tls_enabled | default(true)) else 'http://127.0.0.1' }}/localization/messages/v1/_upsert"
+        method: POST
+        headers: "{{ {'Content-Type': 'application/json'} | combine({'Host': domain} if not (tls_enabled | default(true)) else {}) }}"
+        body_format: json
+        body:
+          RequestInfo:
+            apiId: emp
+            ver: ".01"
+            action: create
+            authToken: "{{ cfg_i18n_auth.json.access_token }}"
+            userInfo: "{{ cfg_i18n_auth.json.UserRequest }}"
+          tenantId: "{{ state_root }}"
+          locale: "{{ item }}"
+          messages: "{{ lookup('file', playbook_dir ~ '/../../utilities/default-data-handler/src/main/resources/localisations/' ~ item ~ '/rainmaker-pgr-chatbot.json') | from_json }}"
+        status_code: [200, 201]
+        timeout: 60
+        validate_certs: "{{ tls_enabled | default(true) }}"
+      loop:
+        - en_IN
+        - pt_PT
+      tags: ['chatbot', 'chatbot-i18n']
+      when: state_root != 'pg' and (enable_chatbot | default(false))
 
     # ────────────────────────────────────────────────────────────────
     # Novu Twilio bootstrap. Runs only when:

@@ -299,6 +299,31 @@ endpoints:
     alerts:
       - type: slack
 
+  # -------------------- profile: file-scan --------------------
+  # Upload virus scanning (Ansible enable_file_scan). The proxy's /health is
+  # 503 until clamd answers PING, so it also catches a clamd that is up but
+  # still loading signatures.
+  - name: Filestore Scan Proxy
+    group: File Scan
+    enabled: ${GATUS_PROFILE_FILE_SCAN}
+    url: "http://filestore-scan-proxy:8083/health"
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == ok"
+    alerts:
+      - type: slack
+
+  - name: ClamAV
+    group: File Scan
+    enabled: ${GATUS_PROFILE_FILE_SCAN}
+    url: "tcp://clamav:3310"
+    interval: 30s
+    conditions:
+      - "[CONNECTED] == true"
+    alerts:
+      - type: slack
+
   # -------------------- profile: search --------------------
   - name: Elasticsearch
     group: Search

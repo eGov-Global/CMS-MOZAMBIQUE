@@ -487,6 +487,21 @@ enable_overpass: false
 # overpass_db_dir: /opt/overpass/db                      # Overpass DB volume (mounted /db)
 # overpass_planet_file: /opt/overpass/data/boundaries.osm.bz2  # prepared extract
 
+# ────────── Upload virus scanning (ClamAV) ──────────
+# Turn on the `file-scan` compose profile — adds clamav, filestore-scan-proxy
+# and a one-shot quarantine-init. nginx then sends /filestore/ through the
+# proxy, which scans every upload with clamd before it reaches Kong:
+#   infected            → 400 VIRUS_DETECTED, copy kept in MinIO egov-quarantine (90 days)
+#   encrypted/too deep  → 400 FILE_NOT_SCANNABLE, nothing kept
+#   clamd down          → 503 SCAN_UNAVAILABLE (fails closed; downloads unaffected)
+# Roughly +1.5GB RAM (clamd holds signatures in memory). The first start
+# downloads ~300MB of signatures, so uploads return 503 for a few minutes.
+# MinIO passwords for the quarantine users are generated into OpenBao
+# (minio_scanproxy_password, minio_quarantine_reader_password).
+# See backend/filestore-scan-proxy/README.md.
+enable_file_scan: false
+# filestore_scan_proxy_image: ""    # published image; default builds filestore-scan-proxy:local on the box
+
 # ────────── Notifications (Novu + Twilio WhatsApp) ──────────
 # Turn on the `notifications` compose profile — adds 9 containers:
 #   digit-config-service, digit-user-preferences-service, novu-bridge,

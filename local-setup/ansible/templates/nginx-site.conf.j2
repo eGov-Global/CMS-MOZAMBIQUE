@@ -28,6 +28,18 @@
 {% endif %}
 {{ indent }}add_header {{ 'Content-Security-Policy' if (nginx_csp_enforce | default(false)) else 'Content-Security-Policy-Report-Only' }} "{{ nginx_csp_policy | default("default-src 'self'; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' https:; frame-ancestors 'self'; base-uri 'self'; object-src 'none'") }}" always;
 {%- endmacro %}
+{% if enable_file_scan | default(false) %}
+# enable_file_scan: only requests that can carry an upload go through
+# filestore-scan-proxy. Reads (URL lookups, metadata) go straight to Kong, so
+# a proxy outage blocks new uploads but never hides existing attachments.
+# Anything that isn't GET/HEAD is scanned — filestore only accepts uploads
+# via POST, and the proxy refuses any multipart body it can't parse.
+map $request_method $digit_filestore_upstream {
+  GET     {{ nginx_upstream_host | default('127.0.0.1') }}:{{ upstream_kong_port }};
+  HEAD    {{ nginx_upstream_host | default('127.0.0.1') }}:{{ upstream_kong_port }};
+  default {{ nginx_upstream_host | default('127.0.0.1') }}:{{ upstream_scan_proxy_port | default(18183) }};
+}
+{% endif %}
 server {
   server_name {{ domain }};
 
@@ -790,6 +802,11 @@ server {
   #     domain otherwise hands browsers unresolvable localhost URLs (CCRS#753).
   #     Safe for the AWS4 signature: /file-store/ re-sets Host to minio:9000,
   #     so the public hostname never participates in signature validation.
+  # Infected uploads (enable_file_scan). The bucket is private already; this
+  # keeps it unreachable from outside even if its policy is ever loosened.
+  location /file-store/egov-quarantine/ {
+    return 403;
+  }
   location /file-store/ {
     proxy_pass http://{{ nginx_upstream_host | default('127.0.0.1') }}:{{ upstream_minio_port | default(19000) }}/;
     proxy_set_header Host minio:9000;
@@ -801,8 +818,15 @@ server {
     proxy_buffering off;
   }
 
+  # enable_file_scan: uploads go through filestore-scan-proxy (clamd), which
+  # forwards clean requests to Kong unchanged; reads skip it (see the map at
+  # the top of this file).
   location /filestore/ {
+{% if enable_file_scan | default(false) %}
+    proxy_pass http://$digit_filestore_upstream;
+{% else %}
     proxy_pass http://{{ nginx_upstream_host | default('127.0.0.1') }}:{{ upstream_kong_port }};
+{% endif %}
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -876,6 +900,11 @@ server {
   # changes its inode (breaking a pinned mount) — the dir mount avoids both.
 
   # egov-filestore presigned-URL rewrite (same as static mode).
+  # Infected uploads (enable_file_scan). The bucket is private already; this
+  # keeps it unreachable from outside even if its policy is ever loosened.
+  location /file-store/egov-quarantine/ {
+    return 403;
+  }
   location /file-store/ {
     proxy_pass http://{{ nginx_upstream_host | default('127.0.0.1') }}:{{ upstream_minio_port | default(19000) }}/;
     proxy_set_header Host minio:9000;
@@ -886,8 +915,15 @@ server {
     client_max_body_size 25M;
     proxy_buffering off;
   }
+  # enable_file_scan: uploads go through filestore-scan-proxy (clamd), which
+  # forwards clean requests to Kong unchanged; reads skip it (see the map at
+  # the top of this file).
   location /filestore/ {
+{% if enable_file_scan | default(false) %}
+    proxy_pass http://$digit_filestore_upstream;
+{% else %}
     proxy_pass http://{{ nginx_upstream_host | default('127.0.0.1') }}:{{ upstream_kong_port }};
+{% endif %}
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

@@ -1403,6 +1403,114 @@ services:
       - egov-network
 
   # ===========================================================================
+  # Upload virus scanning (profile: file-scan, Ansible `enable_file_scan`)
+  # ===========================================================================
+  # nginx routes /filestore/ to filestore-scan-proxy instead of Kong when the
+  # profile is on; the proxy scans multipart uploads with clamd and forwards
+  # clean ones to Kong unchanged. kong.yml is NOT touched, so the local,
+  # CI and k3s tiers are unaffected. See backend/filestore-scan-proxy/README.md.
+  clamav:
+    image: clamav/clamav:1.5.4
+    profiles: [file-scan]
+    container_name: digit-clamav
+    # Same shape as postgres-db: the entrypoint starts as root, fixes ownership
+    # of the signature volume, then drops to the clamav user.
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID]
+    volumes:
+      # Signatures persist across restarts; the first start downloads ~300MB.
+      - clamav_data:/var/lib/clamav
+      - ./clamav/clamd.conf:/etc/clamav/clamd.conf:ro
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 600s
+    restart: unless-stopped
+    networks:
+      - egov-network
+
+  filestore-scan-proxy:
+    image: ${FILESTORE_SCAN_PROXY_IMAGE:-filestore-scan-proxy:local}
+    profiles: [file-scan]
+    container_name: filestore-scan-proxy
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    # Not gated on clamav health: while signatures load the proxy is up and
+    # fails uploads closed (503), but downloads and URL lookups keep working.
+    depends_on:
+      clamav:
+        condition: service_started
+      kong:
+        condition: service_started
+    environment:
+      FILESTORE_UPSTREAM: http://kong:8000
+      CLAMD_HOST: clamav
+      CLAMD_PORT: "3310"
+      QUARANTINE_BUCKET: egov-quarantine
+      QUARANTINE_MINIO_URL: http://minio:9000
+      QUARANTINE_ACCESS_KEY: scanproxy
+      QUARANTINE_SECRET_KEY: ${MINIO_SCANPROXY_PASSWORD:-}
+    ports:
+      - "${BIND_IP:-127.0.0.1}:18183:8083"
+    # 127.0.0.1, not localhost: in the alpine image localhost resolves to ::1
+    # first and the server listens on IPv4 only. Declared here (not just in the
+    # Dockerfile) so images published before that fix also report correctly.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8083/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - egov-network
+
+  # Private quarantine bucket + least-privilege users. Kept apart from
+  # minio-init so the shared egov-rainmaker setup is untouched.
+  #   scanproxy          s3:PutObject only — can store evidence, never read it
+  #   quarantine-reader  read/list only — for investigators
+  # Every step is idempotent; it reruns on each deploy.
+  quarantine-init:
+    image: egovio/mc:RELEASE.2024-01-16T16-06-34Z
+    profiles: [file-scan]
+    container_name: digit-quarantine-init
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      # Same as minio-init: cap_drop ALL leaves root unable to create /root/.mc.
+      MC_CONFIG_DIR: /tmp/.mc
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_SCANPROXY_PASSWORD: ${MINIO_SCANPROXY_PASSWORD:-}
+      MINIO_QUARANTINE_READER_PASSWORD: ${MINIO_QUARANTINE_READER_PASSWORD:-}
+    entrypoint: >
+      /bin/sh -ec "
+      : $${MINIO_SCANPROXY_PASSWORD:?missing - set minio_scanproxy_password in OpenBao};
+      : $${MINIO_QUARANTINE_READER_PASSWORD:?missing - set minio_quarantine_reader_password in OpenBao};
+      mc alias set myminio http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
+      mc mb --ignore-existing myminio/egov-quarantine;
+      mc anonymous set none myminio/egov-quarantine;
+      echo '{\"Rules\":[{\"ID\":\"expire-quarantine\",\"Status\":\"Enabled\",\"Expiration\":{\"Days\":90}}]}' > /tmp/ilm.json;
+      mc ilm import myminio/egov-quarantine < /tmp/ilm.json;
+      echo '{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:PutObject\"],\"Resource\":[\"arn:aws:s3:::egov-quarantine/*\"]}]}' > /tmp/writer.json;
+      echo '{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\",\"s3:ListBucket\",\"s3:GetBucketLocation\"],\"Resource\":[\"arn:aws:s3:::egov-quarantine\",\"arn:aws:s3:::egov-quarantine/*\"]}]}' > /tmp/reader.json;
+      mc admin policy create myminio quarantine-writer /tmp/writer.json;
+      mc admin policy create myminio quarantine-reader /tmp/reader.json;
+      mc admin user add myminio scanproxy $$MINIO_SCANPROXY_PASSWORD;
+      mc admin user add myminio quarantine-reader $$MINIO_QUARANTINE_READER_PASSWORD;
+      mc admin policy attach myminio quarantine-writer --user scanproxy || true;
+      mc admin policy attach myminio quarantine-reader --user quarantine-reader || true;
+      "
+    networks:
+      - egov-network
+
+  # ===========================================================================
   # HRMS Prerequisites Gate - Verifies system user is queryable before HRMS starts
   # ===========================================================================
   hrms-prereq-gate:
@@ -2094,6 +2202,7 @@ services:
       GATUS_PROFILE_MCP: ${GATUS_PROFILE_MCP:-false}
       GATUS_PROFILE_KEYCLOAK: ${GATUS_PROFILE_KEYCLOAK:-false}
       GATUS_PROFILE_NOTIFICATIONS: ${GATUS_PROFILE_NOTIFICATIONS:-false}
+      GATUS_PROFILE_FILE_SCAN: ${GATUS_PROFILE_FILE_SCAN:-false}
       GATUS_AUDIT: "true"
       GATUS_PROXIES: "true"
       GATUS_SMS_PORT: "8005"
@@ -3247,3 +3356,4 @@ volumes:
   openbao_data: null
   novu_mongo_data: null
   gatus_data: null
+  clamav_data: null
