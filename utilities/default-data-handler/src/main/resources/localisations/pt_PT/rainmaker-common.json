@@ -364,5 +364,101 @@
         "message": "Início",
         "module": "rainmaker-common",
         "locale": "pt_PT"
+    },
+    {
+        "code": "CORE_SIDEBAR_SECTION_COMPLAINTS",
+        "message": "Manifestações",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CORE_SIDEBAR_PUBLIC_DASHBOARD",
+        "message": "Painel público",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CORE_SIDEBAR_OPEN",
+        "message": "Abrir menu lateral",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CORE_SIDEBAR_CLOSE",
+        "message": "Fechar menu lateral",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "ULBGRADE_STATE",
+        "message": "ESTADO",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_WORKING_CONTEXT",
+        "message": "Contexto de trabalho",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_WORKING_CONTEXT_UNAVAILABLE",
+        "message": "Contexto de trabalho indisponível",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_WORKING_CONTEXT_CITY",
+        "message": "Cidade",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_WORKING_CONTEXT_SUBTITLE",
+        "message": "Estas são as suas atribuições",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_WORKING_CONTEXT_DEPARTMENT",
+        "message": "Departamento",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_WORKING_CONTEXT_ROLE",
+        "message": "Função",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_WORKING_CONTEXT_JURISDICTION",
+        "message": "Jurisdição",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_WORKING_CONTEXT_DEPARTMENT_ONE",
+        "message": "departamento",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_WORKING_CONTEXT_DEPARTMENT_MANY",
+        "message": "departamentos",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_WORKING_CONTEXT_ROLE_ONE",
+        "message": "função",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_WORKING_CONTEXT_ROLE_MANY",
+        "message": "funções",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
     }
 ]

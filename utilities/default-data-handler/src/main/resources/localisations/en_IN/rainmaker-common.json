@@ -10000,5 +10000,11 @@
         "message": "Navigation",
         "module": "rainmaker-common",
         "locale": "en_IN"
+    },
+    {
+        "code": "ULBGRADE_STATE",
+        "message": "STATE",
+        "module": "rainmaker-common",
+        "locale": "en_IN"
     }
 ]

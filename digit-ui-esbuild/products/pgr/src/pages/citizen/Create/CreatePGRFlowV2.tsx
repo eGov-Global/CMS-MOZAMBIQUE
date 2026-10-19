@@ -1959,7 +1959,11 @@ const CreatePGRFlowV2: React.FC = () => {
       const nodeLabel = (n: any) => (n?.code && t(n.code) !== n.code ? t(n.code) : n?.name || n?.code || "");
       const filedSummary = {
         category: [
-          formData.SelectComplaintType?.menuPathName || formData.SelectComplaintType?.menuPath,
+          // menuPathName is the hierarchy node CODE (e.g. Complaint_PublicIntegrity),
+          // so it goes through the same COMPLAINT_HIERARCHY.* lookup as the subtype.
+          formData.SelectComplaintType?.menuPath
+            ? complaintLabel(t, formData.SelectComplaintType.menuPath, formData.SelectComplaintType.menuPathName)
+            : "",
           formData.SelectSubComplaintType
             ? complaintLabel(t, formData.SelectSubComplaintType.serviceCode, formData.SelectSubComplaintType.name)
             : "",
