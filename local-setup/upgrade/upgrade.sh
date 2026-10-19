@@ -169,10 +169,36 @@ export_password() {
 
 compose_args() { local f; for f in $COMPOSE_FILES; do printf -- '-f\n%s\n' "$f"; done; }
 
-start_stack() {
+compose_up() {
   local args=(); mapfile -t args < <(compose_args)
   (cd "$DIGIT_DIR" && sudo COMPOSE_PROFILES="$COMPOSE_PROFILES" docker compose "${args[@]}" up -d) \
-    > "$LOG_DIR/compose-up.log" 2>&1 || { tail -20 "$LOG_DIR/compose-up.log"; die "compose up failed"; }
+    >> "$LOG_DIR/compose-up.log" 2>&1
+}
+
+start_stack() {
+  : > "$LOG_DIR/compose-up.log"
+  # With the whole stack starting at once, a slow service can outlast its
+  # healthcheck budget; compose then reports "dependency failed" and skips what
+  # depends on it (2026-10-19: novu-api took ~12 min to boot, then went healthy
+  # on its own). Docker keeps probing an unhealthy container, so WAIT for it
+  # first; restart only what is still unhealthy after READY_TIMEOUT. Then run
+  # `up -d` again so the skipped dependants start.
+  if ! compose_up; then
+    local bad still t0=$SECONDS
+    bad="$(docker ps --filter health=unhealthy --format '{{.Names}}')"
+    [ -n "$bad" ] || { tail -20 "$LOG_DIR/compose-up.log"; die "compose up failed"; }
+    warn "slow to become healthy: $(echo $bad) — waiting (up to ${READY_TIMEOUT}s)"
+    printf '  waiting'
+    while still="$(docker ps --filter health=unhealthy --format '{{.Names}}' | grep -xF "$bad")" \
+          && [ $((SECONDS - t0)) -lt "$READY_TIMEOUT" ]; do printf '.'; sleep 15; done
+    echo
+    if [ -n "$still" ]; then
+      warn "still unhealthy after ${READY_TIMEOUT}s: $(echo $still) — restarting once"
+      # shellcheck disable=SC2086
+      docker restart $still >/dev/null
+    fi
+    compose_up || { tail -20 "$LOG_DIR/compose-up.log"; die "compose up failed again (check: $(echo $bad))"; }
+  fi
   if [ -n "$START_EXTRA_FILES" ]; then
     local extra=() f
     for f in $COMPOSE_FILES $START_EXTRA_FILES; do extra+=(-f "$f"); done
