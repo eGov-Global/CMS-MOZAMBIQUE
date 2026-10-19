@@ -16,7 +16,7 @@ import {
 } from "../config/globalFilterGroups";
 
 /**
- * Fetches the global filter dropdown options (wards + complaint types) as
+ * Fetches the global filter dropdown options (zones + complaint types) as
  * server-scoped distincts: one inline batch _query on the facts grain, so the
  * backend's ABAC (PrincipalScopeResolver department/ward scoping) applies —
  * a Water-dept supervisor only ever sees water complaint types.
@@ -45,10 +45,12 @@ const OPTION_QUERIES = {
     measures: [{ name: "n", agg: "count" }],
     limit: 300,
   },
-  wards: {
+  districts: {
     grain: "facts",
     window: { name: "all" },
-    dimensions: ["ward_code"],
+    // Districts, not wards: with no sub-municipal level every ward inherits its
+    // municipality's name, so a ward list shows the same label several times.
+    dimensions: ["zone_code"],
     measures: [{ name: "n", agg: "count" }],
     limit: 300,
   },
@@ -145,12 +147,11 @@ export function useFilterOptions({ enabled = true, publicMode = false } = {}) {
       "complaintType",
       toComplaintTypeDecorator(hierarchyIndex?.size ? hierarchyIndex : null)
     );
-    const geography = toOptionList(
-      raw.results.wards?.rows,
-      "ward_code",
-      GEOGRAPHY_OPTIONS,
-      "boundary"
-    );
+    // /public/_options still serves ward codes (no zone on the public
+    // allow-list), so the public bar stays on wards.
+    const geography = publicMode
+      ? toOptionList(raw.results.wards?.rows, "ward_code", GEOGRAPHY_OPTIONS, "boundary")
+      : toOptionList(raw.results.districts?.rows, "zone_code", GEOGRAPHY_OPTIONS, "boundary");
     // Tree-traversal complaint-type filter: the MDMS tree intersected with the
     // ABAC-scoped DISTINCT service_code list above (pruneComplaintTree). Both
     // inputs must exist — no scoped distincts (query failed / zero rows) or no
@@ -174,5 +175,5 @@ export function useFilterOptions({ enabled = true, publicMode = false } = {}) {
     // `languageChanged` can fire before the new message bundle is installed.
     // i18nTick also advances on the later store `added` event, so cached rows
     // are re-labelled once the selected locale is actually available (#1108).
-  }, [raw, language, i18nTick]);
+  }, [raw, language, i18nTick, publicMode]);
 }

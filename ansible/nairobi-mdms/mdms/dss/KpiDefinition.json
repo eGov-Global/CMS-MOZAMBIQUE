@@ -2669,7 +2669,7 @@
             "labelKey": "DASHBOARD_SLA_BREACHED"
           }
         ],
-        "dimensionKey": "ward_code",
+        "dimensionKey": "zone_code",
         "sortBySegment": "breached"
       },
       "query": {
@@ -2682,7 +2682,7 @@
           }
         ],
         "dimensions": [
-          "ward_code",
+          "zone_code",
           "sla_status_bucket"
         ]
       },
@@ -2809,10 +2809,10 @@
         "format": "integer",
         "columns": [
           {
-            "id": "ward_code",
+            "id": "zone_code",
             "type": "dimension",
             "align": "left",
-            "label": "Ward",
+            "label": "District",
             "width": "24%"
           },
           {
@@ -2863,7 +2863,8 @@
           "ontime_rate",
           "avg_csat"
         ],
-        "dimensionKey": "ward_code"
+        "dimensionKey": "zone_code",
+        "labelFormat": "dimension"
       },
       "query": {
         "sort": [
@@ -2931,7 +2932,7 @@
           }
         ],
         "dimensions": [
-          "ward_code"
+          "zone_code"
         ]
       },
       "params": [
@@ -2959,7 +2960,7 @@
       "id": "cl_table_ward_open_daily",
       "viz": {
         "pii": false,
-        "kind": "line",
+        "kind": "bar",
         "group": "complaint-landscape",
         "title": "Open complaints by ward (daily)",
         "accent": "teal",
@@ -2967,7 +2968,8 @@
         "compose": null,
         "titleKey": "CMS-DASHBOARD.DASHBOARD_KPI_CL_TABLE_WARD_OPEN_DAILY",
         "valueKey": "open",
-        "dimensionKey": "ward_code"
+        "dimensionKey": "zone_code",
+        "labelFormat": "dimension"
       },
       "query": {
         "sort": [
@@ -2988,7 +2990,7 @@
           }
         ],
         "dimensions": [
-          "ward_code"
+          "zone_code"
         ]
       },
       "params": [
@@ -3257,10 +3259,10 @@
         "format": "integer",
         "columns": [
           {
-            "id": "ward_code",
+            "id": "zone_code",
             "type": "dimension",
             "align": "left",
-            "label": "Ward",
+            "label": "District",
             "width": "28%"
           },
           {
@@ -3290,7 +3292,7 @@
           "period": "prior",
           "mode": "percentChange",
           "joinBy": [
-            "ward_code",
+            "zone_code",
             "service_code"
           ],
           "valueKey": "total",
@@ -3307,7 +3309,7 @@
         "measureKeys": [
           "total"
         ],
-        "dimensionKey": "ward_code"
+        "dimensionKey": "zone_code"
       },
       "query": {
         "sort": [
@@ -3325,7 +3327,7 @@
           }
         ],
         "dimensions": [
-          "ward_code",
+          "zone_code",
           "service_code"
         ]
       },

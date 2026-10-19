@@ -75,7 +75,7 @@ export function needsPriorComparison(def) {
  * Mirrors config/kpiQueries.js buildGlobalApiFilters: an active date range maps
  * to dateFrom/dateTo (yyyy-MM-dd, which the composer turns into a gte/lt on the
  * grain's time column and which drops the def's base window); a non-"all"
- * geography narrows via ward. The complaint-type node selection narrows via
+ * geography narrows via zone. The complaint-type node selection narrows via
  * serviceCode (leaf — unchanged wire shape) or complaintPath (interior node —
  * subtree prefix on complaint_node_path, #1282; pre-#1282 backends ignore the
  * unknown param, so the dashboard degrades to leaf-only filtering, never an
@@ -85,7 +85,7 @@ export function needsPriorComparison(def) {
 export function globalParams(filters) {
   const params = {};
   if (filters?.geography && filters.geography !== "all") {
-    params.ward = filters.geography;
+    params.zone = filters.geography;
   }
   Object.assign(
     params,
@@ -162,7 +162,7 @@ export function buildRefs(tiles, kpis, filters, hierOverrides) {
  */
 export function buildPublicRefs(tiles, kpis, filters) {
   const refs = {};
-  const params = globalParams(filters);
+  const params = publicGlobalParams(filters);
   const hasParams = Object.keys(params).length > 0;
   for (const tile of tiles || []) {
     const kpiId = tile?.kpiId;
@@ -177,8 +177,16 @@ export function buildPublicRefsKey(tiles, kpis, filters) {
     public: true,
     ids: (tiles || []).map((tile) => tile?.kpiId).filter((id) => id && kpis?.[id]),
     versions: (tiles || []).map((tile) => kpis?.[tile?.kpiId]?.version ?? null),
-    gp: globalParams(filters),
+    gp: publicGlobalParams(filters),
   });
+}
+
+// The public allow-list (AnalyticsService.PUBLIC_QUERY_PARAMS) and the codes
+// /public/_options serves are ward-level; `zone` is employee-only and would be
+// rejected as invalid_param, so the public geography stays on `ward`.
+function publicGlobalParams(filters) {
+  const { zone, ...params } = globalParams(filters);
+  return zone ? { ward: zone, ...params } : params;
 }
 
 /**
