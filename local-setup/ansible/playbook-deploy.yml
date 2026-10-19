@@ -4301,14 +4301,52 @@
       ansible.builtin.dnf:
         name:
           - httpd-tools
-          - python3-passlib
-          - python3-bcrypt
           - nginx
         state: present
       when:
         - (enable_integration_tests | default(false) and integration_tests_basic_auth_password is defined)
           or (enable_mcp_readonly | default(false) and mcp_readonly_basic_auth_password is defined)
           or (nginx_features.status | default(true))
+        - ansible_facts['os_family'] == 'RedHat'
+
+    # python3-passlib/python3-bcrypt are EPEL-only on RHEL/Rocky 9 and 10, and
+    # a production box may not be allowed EPEL (mz, Rocky 10, 2026-10-19: the
+    # deploy died here). Prefer the distro packages; when the enabled repos
+    # lack them, put the pair in a private venv that ONLY the htpasswd tasks
+    # below run under (htpasswd_python). System python and repos are untouched.
+    # Pinned pair: passlib 1.7.4 misreads bcrypt >= 4.1 (see note above).
+    - name: "nginx — basic-auth python deps from the distro repos (RHEL family)"
+      ansible.builtin.dnf:
+        name:
+          - python3-passlib
+          - python3-bcrypt
+        state: present
+      register: htpasswd_rpm_deps
+      failed_when: false
+      when:
+        - (enable_integration_tests | default(false) and integration_tests_basic_auth_password is defined)
+          or (enable_mcp_readonly | default(false) and mcp_readonly_basic_auth_password is defined)
+          or (nginx_features.status | default(true))
+        - ansible_facts['os_family'] == 'RedHat'
+
+    - name: "nginx — basic-auth python deps in a private venv (repos lack them)"
+      ansible.builtin.pip:
+        name:
+          - passlib==1.7.4
+          - bcrypt==4.0.1
+        virtualenv: /opt/digit-htpasswd-venv
+        virtualenv_command: "{{ ansible_facts['python']['executable'] }} -m venv"
+      when:
+        # failed_when: false clears .failed, so test dnf's rc (1 = packages missing).
+        - (htpasswd_rpm_deps.rc | default(0)) != 0
+        - ansible_facts['os_family'] == 'RedHat'
+
+    - name: "nginx — htpasswd tasks use the private venv"
+      ansible.builtin.set_fact:
+        htpasswd_python: /opt/digit-htpasswd-venv/bin/python
+      when:
+        # failed_when: false clears .failed, so test dnf's rc (1 = packages missing).
+        - (htpasswd_rpm_deps.rc | default(0)) != 0
         - ansible_facts['os_family'] == 'RedHat'
 
     # ---- Gatus status board basic auth (nginx_features.status) ----
@@ -4363,6 +4401,8 @@
         crypt_scheme: bcrypt
         group: "{{ 'www-data' if ansible_facts['os_family'] == 'Debian' else 'nginx' }}"
         mode: '0640'
+      vars:
+        ansible_python_interpreter: "{{ htpasswd_python | default(ansible_facts['python']['executable']) }}"
       no_log: true
       when:
         - nginx_features.status | default(true)
@@ -4408,6 +4448,8 @@
         crypt_scheme: bcrypt
         group: "{{ 'www-data' if ansible_facts['os_family'] == 'Debian' else 'nginx' }}"
         mode: '0640'
+      vars:
+        ansible_python_interpreter: "{{ htpasswd_python | default(ansible_facts['python']['executable']) }}"
       no_log: true
       when:
         - enable_integration_tests | default(false)
@@ -4434,6 +4476,8 @@
         crypt_scheme: bcrypt
         group: "{{ 'www-data' if ansible_facts['os_family'] == 'Debian' else 'nginx' }}"
         mode: '0640'
+      vars:
+        ansible_python_interpreter: "{{ htpasswd_python | default(ansible_facts['python']['executable']) }}"
       no_log: true
       when:
         - enable_mcp_readonly | default(false)

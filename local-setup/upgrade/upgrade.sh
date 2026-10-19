@@ -311,6 +311,31 @@ step_preflight() {
     command -v restorecon >/dev/null 2>&1 && ok "SELinux enforcing; restorecon available for rollback relabel" \
       || { bad "SELinux enforcing but restorecon missing (sudo dnf install -y policycoreutils)"; fail=1; }
   fi
+  # The deploy dnf-installs these for the nginx basic-auth files (status board
+  # on by default). Base Rocky/RHEL 10 repos lack them; they are in EPEL (+CRB).
+  # Seen 2026-10-19 on mz UAT. The playbook now falls back to a private venv.
+  # Skipped when host_vars turns the status board off (inline or block form).
+  if [ "$OS_FAMILY" = rhel ] && ! python3 -I - "$HOST_VARS" <<'PY' 2>/dev/null
+import re, sys
+t = open(sys.argv[1]).read()
+inline = re.search(r'^nginx_features:\s*\{[^}]*\bstatus:\s*false', t, re.M | re.I)
+block = re.search(r'^nginx_features:\s*\n((?:[ \t]+.*\n?)*)', t, re.M)
+sys.exit(0 if inline or (block and re.search(r'^\s+status:\s*false', block.group(1), re.M | re.I)) else 1)
+PY
+  then
+    local p missing=""
+    for p in python3-passlib python3-bcrypt; do
+      rpm -q "$p" >/dev/null 2>&1 || dnf -q list --available "$p" >/dev/null 2>&1 || missing="$missing $p"
+    done
+    if [ -z "$missing" ]; then ok "nginx basic-auth packages installable (python3-passlib, python3-bcrypt)"
+    else
+      warn "not in the enabled repos:$missing — the deploy will pip-install passlib+bcrypt into"
+      warn "  /opt/digit-htpasswd-venv instead (needs https://pypi.org from this box)"
+      curl -sS -m 10 -o /dev/null https://pypi.org/simple/passlib/ 2>/dev/null \
+        && ok "pypi.org reachable" \
+        || { bad "pypi.org not reachable — enable EPEL or set nginx_features: { status: false } in host_vars"; fail=1; }
+    fi
+  fi
   if [ "$FIREWALL" != none ] && [ "$(hv manage_host_firewall)" != "false" ]; then
     warn "the deploy manages the $FIREWALL firewall (incoming: SSH, 80, 443 only). Current rules are saved in step 4;"
     warn "  if other machines need other ports, set manage_host_firewall: false (or allow them) in host_vars first"
