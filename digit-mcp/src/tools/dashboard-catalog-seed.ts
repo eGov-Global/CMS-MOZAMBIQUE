@@ -2937,6 +2937,29 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
         {
           "agg": "count",
           "name": "created"
+        },
+        {
+          "agg": "count",
+          "name": "resolved",
+          "filter": {
+            "is_open": false,
+            "is_resolved": true
+          }
+        },
+        {
+          "agg": "count",
+          "name": "open",
+          "filter": {
+            "is_open": true
+          }
+        },
+        {
+          "agg": "count",
+          "name": "on_time",
+          "filter": {
+            "is_resolved": true,
+            "sla_breached": false
+          }
         }
       ],
       "dimensions": [
@@ -2957,7 +2980,7 @@ export const DASHBOARD_KPI_DEFINITIONS: Record<string, unknown>[] = [
       }
     ],
     "status": "published",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "supportsSeries": false,
     "requiredActionUrl": "/pgr-services/v2/analytics/capabilities/reports"
   },
