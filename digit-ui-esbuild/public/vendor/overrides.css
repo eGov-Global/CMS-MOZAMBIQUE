@@ -10460,6 +10460,15 @@ html[data-sidebar-pinned] .citizen .main.center-container.citizen-home-container
   font-size: 16px;
   color: var(--cms-ink);
 }
+/* "Download Application" (outline) and "File another complaint" (solid) are
+   different button components; inline they sat on the text baseline with no
+   gap, so the pair looked misaligned. Same row treatment as the receipt. */
+.cms-details-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 14px;
+}
 
 
 @media (max-width: 48rem) {

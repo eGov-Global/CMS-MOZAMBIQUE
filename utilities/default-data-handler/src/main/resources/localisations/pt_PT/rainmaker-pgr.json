@@ -1793,5 +1793,239 @@
         "message": "Comentário",
         "module": "rainmaker-pgr",
         "locale": "pt_PT"
+    },
+    {
+        "code": "CS_FILE_TODAY",
+        "message": "Hoje",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_FILE_COMPLAINT_NUMBER",
+        "message": "Número da manifestação",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMMON_COPIED",
+        "message": "Copiado",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMMON_COPY",
+        "message": "Copiar",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMMON_COMPLAINT_NOT_SUBMITTED",
+        "message": "Não foi possível submeter a manifestação",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMMON_COMPLAINT_SUBMIT_RETRY",
+        "message": "Ocorreu um erro ao submeter a sua manifestação. Tente novamente.",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_FILE_CATEGORY_LABEL",
+        "message": "Categoria da manifestação",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_FILE_STEP_LOCATION",
+        "message": "Localização",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_FILE_FILED_ON",
+        "message": "Submetida em",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_FILE_ATTACHMENTS",
+        "message": "Anexos",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_FILE_ONE_PHOTO",
+        "message": "1 anexo",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_FILE_N_PHOTOS",
+        "message": "{count} anexos",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_FILE_NONE",
+        "message": "Nenhum",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMMON_TRY_AGAIN",
+        "message": "Tentar novamente",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMMON_BREADCRUMB",
+        "message": "Navegação estrutural",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMPLAINT_DETAILS_LOAD_ERROR",
+        "message": "Não foi possível carregar esta manifestação",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMPLAINT_DETAILS_LOAD_ERROR_DESC",
+        "message": "Os detalhes da manifestação não estão disponíveis neste momento. Actualize a página dentro de instantes.",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_FILE_ANOTHER",
+        "message": "Apresentar outra manifestação",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_MY_COMPLAINTS_COUNT_ONE",
+        "message": "1 manifestação",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_MY_COMPLAINTS_COUNT",
+        "message": "{count} manifestações",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_MY_COMPLAINTS_RANGE",
+        "message": "{from}–{to} de {total}",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_MY_COMPLAINTS_COL_NUMBER",
+        "message": "N.º da manifestação",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_MY_COMPLAINTS_COL_CONCERN",
+        "message": "Assunto",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_MY_COMPLAINTS_COL_STATUS",
+        "message": "Estado",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_MY_COMPLAINTS_COL_FILED_ON",
+        "message": "Submetida em",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMMON_ERROR_LOADING_TITLE",
+        "message": "Não foi possível carregar as suas manifestações",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_MY_COMPLAINTS_SEARCH",
+        "message": "Pesquisar uma manifestação",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_MY_COMPLAINTS_NO_MATCH_TITLE",
+        "message": "Nenhuma manifestação corresponde à sua pesquisa",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_MY_COMPLAINTS_NO_MATCH_BODY",
+        "message": "Experimente um número de manifestação ou uma palavra da descrição.",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_MY_COMPLAINTS_CLEAR_SEARCH",
+        "message": "Limpar pesquisa",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMMON_PREVIOUS",
+        "message": "Anterior",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMMON_CITY",
+        "message": "Município",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMMON_CLEAR",
+        "message": "Limpar",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_PGR_ASSIGNEE_REQUIRED",
+        "message": "Seleccione o funcionário a quem esta manifestação será atribuída.",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMMON_PGR_STATE_AWAITINGINFORMATION",
+        "message": "Aguarda Informação",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMMON_RATING_SUBMIT_TEXT",
+        "message": "Ao fazer-se ouvir, ajuda-nos a melhorar o Fala Cidadão.",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "CS_COMPLAINT_DETAILS_RATING_SUBMIT_TEXT",
+        "message": "Ao fazer-se ouvir, ajuda-nos a melhorar o Fala Cidadão.",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_TIMELINE_VIEW_MORE_PAST",
+        "message": "Ver passos anteriores",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
+    },
+    {
+        "code": "PGR_TIMELINE_VIEW_LESS_PAST",
+        "message": "Ocultar passos anteriores",
+        "module": "rainmaker-pgr",
+        "locale": "pt_PT"
     }
 ]

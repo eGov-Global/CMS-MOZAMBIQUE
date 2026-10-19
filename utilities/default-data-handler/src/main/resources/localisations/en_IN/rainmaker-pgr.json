@@ -1189,7 +1189,7 @@
     },
     {
         "code": "CS_COMMON_RATING_SUBMIT_TEXT",
-        "message": "By making your voice heard, you help us improve mSeva.",
+        "message": "By making your voice heard, you help us improve Fala Cidadão.",
         "module": "rainmaker-pgr",
         "locale": "en_IN"
     },
@@ -1939,7 +1939,7 @@
     },
     {
         "code": "CS_COMPLAINT_DETAILS_RATING_SUBMIT_TEXT",
-        "message": "By making your voice heard, you help us improve mSeva.",
+        "message": "By making your voice heard, you help us improve Fala Cidadão.",
         "module": "rainmaker-pgr",
         "locale": "en_IN"
     },
@@ -8930,6 +8930,24 @@
     {
         "code": "CS_PHOTO_ADD",
         "message": "Add a photo",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "CS_COMMON_PGR_STATE_AWAITINGINFORMATION",
+        "message": "Awaiting Information",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_TIMELINE_VIEW_MORE_PAST",
+        "message": "View More Past Steps",
+        "module": "rainmaker-pgr",
+        "locale": "en_IN"
+    },
+    {
+        "code": "PGR_TIMELINE_VIEW_LESS_PAST",
+        "message": "View Less Past Steps",
         "module": "rainmaker-pgr",
         "locale": "en_IN"
     }

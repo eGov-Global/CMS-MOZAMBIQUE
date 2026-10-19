@@ -1195,7 +1195,7 @@
     },
     {
         "code": "CS_COMMON_RATING_SUBMIT_TEXT",
-        "message": "By making your voice heard, you help us improve mSeva.",
+        "message": "By making your voice heard, you help us improve Fala Cidadão.",
         "module": "rainmaker-pgr",
         "locale": "en_IN"
     },
@@ -1945,7 +1945,7 @@
     },
     {
         "code": "CS_COMPLAINT_DETAILS_RATING_SUBMIT_TEXT",
-        "message": "By making your voice heard, you help us improve mSeva.",
+        "message": "By making your voice heard, you help us improve Fala Cidadão.",
         "module": "rainmaker-pgr",
         "locale": "en_IN"
     },

@@ -217,7 +217,7 @@ export const ComplaintsList = () => {
           : "",
         description: service.description || "",
         createdTime,
-        filedOn: createdTime ? Digit.DateUtils.ConvertTimestampToDate(createdTime) : "",
+        filedOn: createdTime ? Digit.DateUtils.ConvertTimestampToDate(createdTime, "dd/MM/yyyy") : "",
       };
     });
   }, [visibleWrappers, defsByCode, hierarchyByTenant, t]);
