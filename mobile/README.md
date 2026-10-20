@@ -132,10 +132,23 @@ Repo- or `production`-environment-scoped, under
 
 | Secret | Value |
 |---|---|
-| `KEYSTORE_BASE64` | `base64 -w0 cms_mozambique-release.keystore` |
+| `KEYSTORE_BASE64` | `base64 -w0 falacidadao-upload.jks` |
 | `KEYSTORE_PASSWORD` | Store password |
 | `KEY_PASSWORD` | Key password |
-| `KEY_ALIAS` | `cms_mozambique` |
+| `KEY_ALIAS` | `falacidadao` |
+| `PLAY_SERVICE_ACCOUNT_JSON` | *(optional)* Play service-account key, enables the upload step |
+
+Create the upload key once, on a trusted machine, and keep the file and both
+passwords in the team's password manager:
+
+```bash
+keytool -genkeypair -v -keystore falacidadao-upload.jks -alias falacidadao \
+  -keyalg RSA -keysize 4096 -validity 10000 \
+  -dname "CN=Fala Cidadao, O=Inspeccao-Geral do Estado, C=MZ"
+```
+
+With Play App Signing (the default for new apps) this is only the *upload*
+key: if it is lost, the account owner can ask Google to register a new one.
 
 Without them the build falls back to **debug signing** (see
 `build.gradle.kts`) — fine for CI smoke tests, not installable over a
@@ -144,20 +157,30 @@ release-signed build and not accepted by Google Play. Never commit `*.jks`,
 separately** — losing it means never being able to update the same Play
 listing.
 
-## Google Play readiness
+## Google Play release
 
-The pipeline already produces the Play artifact (the `.aab`) and the
-application ID `mz.gov.falacidadao` is stable. When publishing is
-switched on, the intended flow is:
+Package `mz.gov.falacidadao` (permanent once the first build is uploaded),
+Play listing "Fala Cidadão".
 
-```
-build → sign → AAB → GitHub Release → Play Internal Testing → Production
-```
+1. **First upload by hand.** Google's API only accepts uploads for an app that
+   already has one. Run **Actions → "Mobile Build APK/AAB"** (environment
+   `prod`, track `none`), download the `.aab` from the run's artifacts, and in
+   Play Console create a release on **Test and release → Internal testing**
+   with it. Add the testers' emails there.
+2. **Service account (once).** In Google Cloud, create a service account with
+   the *Google Play Android Developer API* enabled and download a JSON key. In
+   Play Console, **Users and permissions → Invite new users** with the service
+   account's email, permission *Release to testing tracks* for this app (add
+   *Release to production* to use the production track). Store the JSON as the
+   `PLAY_SERVICE_ACCOUNT_JSON` secret in the `production` environment.
+3. **Every later release.** Bump the version, then tag `app-vX.Y.Z` (uploads to
+   internal testing) or run the workflow with track `internal` or
+   `production`. Production uploads are created as a **draft**: open Play
+   Console, check the release and press *Send for review*.
 
-Play credentials (service-account JSON) belong in the same `production`
-GitHub Environment as the signing secrets, and the upload step slots into
-`mobile-build-apk.yml` after "Build AAB". Publishing is deliberately **not**
-wired up yet.
+The build number is the workflow run number, so every upload has a higher
+`versionCode` than the last. The store texts and graphics for the listing are
+in [store/](store/).
 
 ## Source layout
 
