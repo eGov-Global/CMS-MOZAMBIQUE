@@ -8,6 +8,7 @@ import org.egov.pgr.config.PGRConfiguration;
 import org.egov.pgr.producer.Producer;
 import org.egov.pgr.repository.PGRRepository;
 import org.egov.pgr.util.MDMSUtils;
+import org.egov.pgr.util.CitizenIdentityMask;
 import org.egov.pgr.util.PGRUtils;
 import org.egov.pgr.validator.ServiceRequestValidator;
 import org.egov.pgr.web.models.ComplaintTemplateTypeConfig;
@@ -192,7 +193,7 @@ public class PGRService {
         String tenantIdForMdms = criteria.getTenantId() != null ? criteria.getTenantId()
                 : (requestInfo.getUserInfo() != null ? requestInfo.getUserInfo().getTenantId() : null);
         Map<String, ComplaintTemplateTypeConfig> configCache = buildConfigCache(requestInfo, tenantIdForMdms, enrichedServiceWrappers);
-        applyDecryptOrMask(enrichedServiceWrappers, requestInfo, configCache);
+        applyDecryptOrMask(enrichedServiceWrappers, requestInfo, configCache, true);
 
         // NOTE: do not re-sort enrichedServiceWrappers here. It used to be
         // regrouped into a createdTime-descending TreeMap unconditionally,
@@ -262,6 +263,16 @@ public class PGRService {
 
 		if (plainExt != null)
 			updateService.setExtendedAttributes(plainExt);
+
+		// CRQ v2 AC-06: the update RESPONSE must not hand the complainant's
+		// identity back to a caller who may not see it — enrichUser() above
+		// replaced any client-sent citizen block with the REAL user record.
+		// Placed after the producer pushes, so persistence and notifications
+		// carry the untouched data; only this HTTP echo is masked.
+		if (plainExt != null && plainExt.getIsConfidentialSafe()
+				&& !CitizenIdentityMask.isInternalCaller(request.getRequestInfo())
+				&& !isAuthorizedForConfidential(request.getRequestInfo(), updateService, cfg))
+			CitizenIdentityMask.apply(updateService);
 
         return request;
     }
@@ -412,7 +423,7 @@ public class PGRService {
         String tenantIdForMdms = criteria.getTenantId() != null ? criteria.getTenantId()
                 : (requestInfo.getUserInfo() != null ? requestInfo.getUserInfo().getTenantId() : null);
         Map<String, ComplaintTemplateTypeConfig> configCache = buildConfigCache(requestInfo, tenantIdForMdms, enrichedServiceWrappers);
-        applyDecryptOrMask(enrichedServiceWrappers, requestInfo, configCache);
+        applyDecryptOrMask(enrichedServiceWrappers, requestInfo, configCache, false);
 
         Map<Long, List<ServiceWrapper>> sortedWrappers = new TreeMap<>(Collections.reverseOrder());
         for(ServiceWrapper svc : enrichedServiceWrappers){
@@ -517,31 +528,51 @@ public class PGRService {
      * Decrypts or masks extendedAttributes for each wrapper.
      * All-or-nothing: confidential + no viewer role → maskAll. Creator always decrypts.
      * If MDMS config is gone for a confidential complaint, mask to avoid leaking ciphertext.
+     *
+     * maskCitizenIdentity — CRQ v2 AC-06: on the PRESENTATION read paths
+     * (_search / inbox / _admin/_search, i.e. search()) the complainant's
+     * service.citizen block is masked under the SAME gate as
+     * extendedAttributes; plainSearch() passes false because it is the
+     * service-to-service path and machine consumers must never receive the
+     * sentinel where a phone number is expected. Internal/system callers are
+     * exempt even on presentation endpoints (see CitizenIdentityMask).
      */
     private void applyDecryptOrMask(List<ServiceWrapper> wrappers, RequestInfo requestInfo,
-                                     Map<String, ComplaintTemplateTypeConfig> configCache) {
+                                     Map<String, ComplaintTemplateTypeConfig> configCache,
+                                     boolean maskCitizenIdentity) {
+        boolean internalCaller = CitizenIdentityMask.isInternalCaller(requestInfo);
         for (ServiceWrapper wrapper : wrappers) {
             Service svc = wrapper.getService();
             if (svc.getExtendedAttributes() == null) continue;
             ComplaintTemplateTypeConfig cfg = configCache.get(svc.getExtendedAttributes().getCaseRelatedTo());
             if (cfg == null) {
-                if (svc.getExtendedAttributes().getIsConfidentialSafe())
+                if (svc.getExtendedAttributes().getIsConfidentialSafe()) {
                     encryptionDecryptionService.maskAll(svc.getExtendedAttributes(), null);
+                    if (maskCitizenIdentity && !internalCaller && !isAuthorizedForConfidential(requestInfo, svc, null))
+                        CitizenIdentityMask.apply(svc);
+                }
                 continue;
             }
             if (svc.getExtendedAttributes().getIsConfidentialSafe() && !isAuthorizedForConfidential(requestInfo, svc, cfg)) {
                 encryptionDecryptionService.maskAll(svc.getExtendedAttributes(), cfg);
+                if (maskCitizenIdentity && !internalCaller)
+                    CitizenIdentityMask.apply(svc);
             } else {
                 encryptionDecryptionService.decrypt(svc.getExtendedAttributes(), cfg);
             }
         }
     }
 
-    /** Creator always qualifies; otherwise the caller needs one of cfg's allowed viewer roles. */
+    /**
+     * Creator always qualifies; otherwise the caller needs one of cfg's allowed viewer roles.
+     * Null-cfg tolerant: with no template config the check falls back to the default viewer
+     * role, so the citizen-identity mask can honour the complainant/viewer exemptions even
+     * when the MDMS config is unresolvable (extendedAttributes stay fail-closed regardless).
+     */
     private boolean isAuthorizedForConfidential(RequestInfo requestInfo, Service svc, ComplaintTemplateTypeConfig cfg) {
         String callerUuid = requestInfo.getUserInfo() != null ? requestInfo.getUserInfo().getUuid() : null;
         if (callerUuid != null && callerUuid.equals(svc.getAccountId())) return true;
-        List<String> viewerRoles = !CollectionUtils.isEmpty(cfg.getAllowedViewerRoles())
+        List<String> viewerRoles = (cfg != null && !CollectionUtils.isEmpty(cfg.getAllowedViewerRoles()))
                 ? cfg.getAllowedViewerRoles() : List.of(ROLE_CONFIDENTIAL_VIEWER);
         return hasAnyRole(requestInfo, viewerRoles);
     }
