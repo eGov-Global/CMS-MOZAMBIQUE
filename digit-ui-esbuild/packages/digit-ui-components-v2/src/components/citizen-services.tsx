@@ -33,7 +33,7 @@ import { Card } from "./ui/card";
 // #2563EB on CMS Blue) while headings stay in --color-primary-1. Employee
 // module cards already follow this; the citizen rows rendered their labels
 // in the heading colour, which is what made the two surfaces diverge.
-const LINK_COLOR = "var(--color-primary-2, var(--color-primary-main, #c84c0e))";
+const LINK_COLOR = "var(--color-text-heading, var(--color-primary-1, #363636))";
 
 interface ServiceLink {
   link?: string;
