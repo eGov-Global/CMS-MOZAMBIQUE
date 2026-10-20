@@ -1,5 +1,5 @@
 name: cms_mozambique
-description: "CMS Mozambique — DIGIT employee portal as a Flutter WebView app."
+description: "Fala Cidadão — the citizen complaint portal of falacidadao.gov.mz as a Flutter WebView app."
 publish_to: 'none'
 version: 1.0.0+1
 

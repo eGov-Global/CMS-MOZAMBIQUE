@@ -1,9 +1,9 @@
 {
   "appName": "Fala Cidadão (UAT)",
-  "url": "https://cms-pilot.digit.org/digit-ui/employee/user/login",
-  "citizenUrl": "https://cms-pilot.digit.org/digit-ui/citizen/login",
+  "url": "https://uat.falacidadao.gov.mz/digit-ui/employee/user/login",
+  "citizenUrl": "https://uat.falacidadao.gov.mz/digit-ui/citizen/login",
   "logoAsset": "assets/icons/app_icon.png",
-  "primaryColorHex": "#0B4F6C",
+  "primaryColorHex": "#204F37",
   "allowMixedContent": false,
   "javascriptEnabled": true,
   "showAppBar": false,

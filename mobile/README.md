@@ -1,7 +1,7 @@
-# CMS Mozambique — mobile app
+# Fala Cidadão — mobile app
 
-Flutter WebView wrapper for the DIGIT employee + citizen portal at
-`http://digit.mctd.gov.mz/digit-ui/`.
+Flutter WebView wrapper for the Fala Cidadão citizen + employee portal at
+`https://falacidadao.gov.mz/digit-ui/`.
 
 This directory was imported (with history, via `git subtree`) from
 [Hari-egov/CMS-App](https://github.com/Hari-egov/CMS-App). **This monorepo is
@@ -33,7 +33,7 @@ Everything user-facing is driven from
 | `citizenUrl` | Citizen login URL |
 | `startWithCitizen` | `true` → open citizen URL on launch; `false` → employee URL |
 | `logoAsset` | Asset path of the logo shown on the splash |
-| `primaryColorHex` | Theme seed color (e.g. `#0B4F6C`) |
+| `primaryColorHex` | Theme seed color — the site's dark green `#204F37` |
 | `allowMixedContent` | Allow `http` resources inside the page |
 | `javascriptEnabled` | Toggle JS in the WebView |
 | `showAppBar` | Show an app bar with refresh button |
@@ -48,27 +48,23 @@ configuration. Environment variants live in
 
 | File | Points at |
 |---|---|
-| `config/environments/prod.json` | `http://digit.mctd.gov.mz` (byte-identical to the bundled default) |
-| `config/environments/uat.json` | `https://cms-pilot.digit.org` (HTTPS, no mixed content) |
+| `config/environments/prod.json` | `https://falacidadao.gov.mz` (byte-identical to the bundled default) |
+| `config/environments/uat.json` | `https://uat.falacidadao.gov.mz` |
 
 The release workflow's `environment` input copies the chosen file over
 `assets/config/app_config.json` before building — no Dart changes needed. For a
 local non-prod build do the same copy by hand.
 
-### ⚠ HTTP / cleartext — a documented security exception
+### HTTPS only
 
-Production currently uses `http://digit.mctd.gov.mz` with
-`allowMixedContent: true` and `android:usesCleartextTraffic="true"`
-(plus an iOS ATS exception for `digit.mctd.gov.mz` in `Info.plist`)
-**because the MCTD production endpoint's HTTPS is broken**. This is technical
-debt, not a preference.
-
-**TODO (tracked debt):** once `https://digit.mctd.gov.mz` works — switch
-`url`/`citizenUrl` to `https`, set `allowMixedContent: false`, remove
-`usesCleartextTraffic` from
-[android/app/src/main/AndroidManifest.xml](android/app/src/main/AndroidManifest.xml),
-and drop the ATS exception. Do not add further cleartext endpoints in the
-meantime; UAT already uses HTTPS.
+Both environments are HTTPS with `allowMixedContent: false`; cleartext traffic
+is off on Android (no `usesCleartextTraffic`) and iOS has no App Transport
+Security exception. The servers must send the **full certificate chain**
+(site certificate + Thawte TLS RSA CA G1 intermediate): Android's WebView does
+not fetch missing intermediates, so a leaf-only chain shows the error screen
+instead of the site. Check with
+`openssl s_client -connect falacidadao.gov.mz:443 -servername falacidadao.gov.mz`
+— it must end with `Verify return code: 0`.
 
 ## Run locally
 
@@ -86,7 +82,7 @@ flutter build ios --release                       # iOS (macOS + Xcode required)
 
 Release APKs are renamed via
 [android/app/build.gradle.kts](android/app/build.gradle.kts) to
-`CMS_Mozambique-v<versionName>-b<versionCode>[-<abi>]-release.apk`.
+`FalaCidadao-v<versionName>-b<versionCode>[-<abi>]-release.apk`.
 
 ### Change the launcher icon / app display name
 

@@ -115,7 +115,7 @@ void main() {
     WebViewPlatform.instance = _FakeWebViewPlatform();
     ConnectivityPlatform.instance = _FakeConnectivityPlatform();
     PackageInfo.setMockInitialValues(
-      appName: 'CMS Mozambique',
+      appName: 'Fala Cidadão',
       packageName: 'mz.gov.falacidadao',
       version: '0.0.0',
       buildNumber: '0',
