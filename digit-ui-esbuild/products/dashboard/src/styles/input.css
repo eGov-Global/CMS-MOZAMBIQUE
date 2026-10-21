@@ -25,7 +25,7 @@
      * sit on. Chaining to it painted the dashboard white and left the seam
      * exactly where it was. The value below is the one `.body-container`
      * actually paints. */
-    --background: #EEEEEE;
+    --background: lab(98.2586% -0.2231 -0.716782);
     --foreground: lab(5.23127% -1.15929 -6.2068);
     --surface: lab(100% 0 0);
     --surface-2: lab(97.097% -0.443935 -1.43216);
@@ -2538,6 +2538,7 @@
   box-sizing: border-box;
   padding-left: var(--dashboard-embedded-inset);
   padding-right: var(--dashboard-embedded-inset);
+  padding-bottom: 24px;
 }
 
 .dashboard-root.dashboard-embedded .dashboard-grid-wrap .react-grid-layout {
@@ -2557,6 +2558,7 @@
 .dashboard-root.dashboard-embedded .dashboard-filters-bar {
   padding-left: var(--dashboard-embedded-inset);
   padding-right: var(--dashboard-embedded-inset);
+  margin-top: 12px;
   margin-bottom: 12px;
 }
 
@@ -2656,9 +2658,7 @@
    * The gap matters on its own: clearing only the header height made the
    * dashboard the one page whose content started hard against the bar while
    * every other surface had 16px under it. */
-  padding-top: calc(
-    var(--employee-header-h, 56px) + var(--employee-header-gap, 16px)
-  ) !important;
+  padding-top: var(--employee-header-h, 56px) !important;
   box-sizing: border-box !important;
 }
 
@@ -2874,14 +2874,8 @@
  * Nothing depends on the fill: the page behind is already the dashboard
  * surface, and the header is separated from the content by spacing rather
  * than by a block of colour. */
-.dashboard-root .dashboard-header,
-.dashboard-root .dashboard-header-top {
+.dashboard-root .dashboard-header {
   background: transparent !important;
-  /* The rule underneath goes with the fill. Once the band was gone it was the
-   * only thing left drawing the header as a separate slab, running the full
-   * width while its content sat 52px in — the same mismatch, one pixel tall.
-   * The header is already separated from the filters card by spacing. */
-  border-bottom: 0 !important;
 }
 
 /* Header controls, on DIGIT's button scale.
