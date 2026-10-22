@@ -39,11 +39,12 @@ def dump_rows(path, tenant):
     return out
 
 
-def live_rows(container, tenant):
+def live_rows(container, tenant, active=True):
     out = {}
     for sc in (ACT_TEST, ACT, ROLES, LINKS):
         r = subprocess.run(["docker", "exec", container, "psql", "-U", "egov", "-d", "egov", "-Atc",
-                            f"select data from eg_mdms_data where tenantid='{tenant}' and schemacode='{sc}' and isactive"],
+                            f"select data from eg_mdms_data where tenantid='{tenant}' and schemacode='{sc}' "
+                            f"and {'' if active else 'not '}isactive"],
                            capture_output=True, text=True, check=True)
         out[sc] = [json.loads(l) for l in r.stdout.splitlines() if l.strip()]
     return out
@@ -97,6 +98,10 @@ def main():
 
     rel = dump_rows(a.dump, a.source_tenant)
     cur = live_rows(a.container, a.tenant)
+    # A link the tenant switched OFF (isactive=false) was removed on purpose
+    # (mz UAT 2026-10-22: analytics/_access off for six roles). Re-adding would
+    # undo that, and mdms-v2 refuses it anyway (x-unique rolecode+actionid).
+    off = live_rows(a.container, a.tenant, active=False)
     excluded = {r for r in a.exclude_roles.split(",") if r}
 
     rel_url_by_id = {str(x["id"]): x.get("url") for x in rel[ACT_TEST] + rel[ACT]}
@@ -132,7 +137,9 @@ def main():
     cur_url_by_id = {str(x["id"]): x.get("url") for x in cur[ACT_TEST] + cur[ACT]}
     for r in cur[LINKS]:
         cur_pairs.add((r.get("rolecode"), cur_url_by_id.get(str(r.get("actionid")))))
-    link_ids = {int(r["id"]) for r in cur[LINKS] if str(r.get("id", "")).isdigit()}
+    off_pairs = {(r.get("rolecode"), cur_url_by_id.get(str(r.get("actionid")))) for r in off[LINKS]}
+    kept_off = []
+    link_ids = {int(r["id"]) for r in cur[LINKS] + off[LINKS] if str(r.get("id", "")).isdigit()}
     next_link = max(link_ids | {0}) + 1
     new_links, skipped_roles = [], set()
     for r in rel[LINKS]:
@@ -141,6 +148,8 @@ def main():
             continue
         if role not in cur_roles or role in excluded:
             skipped_roles.add(role); continue
+        if (role, url) in off_pairs:
+            kept_off.append((role, url)); cur_pairs.add((role, url)); continue
         cur_pairs.add((role, url))
         new_links.append({"id": next_link, "rolecode": role, "actionid": cur_id_by_url[url],
                           "actioncode": r.get("actioncode", ""), "tenantId": a.tenant})
@@ -155,6 +164,10 @@ def main():
         print(f"   {role:24} +{n}")
     print(f"roles in release but not in tenant (NOT added): {missing_roles}")
     print(f"links skipped for those/excluded roles: {sorted(skipped_roles)}")
+    if kept_off:
+        print(f"links left switched OFF by the tenant (NOT re-added): {len(kept_off)}")
+        for role, url in sorted(kept_off):
+            print(f"   {role:24} {url}")
     if not a.apply:
         print("\nDRY RUN — nothing written. Re-run with --apply.")
         return
