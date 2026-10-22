@@ -513,8 +513,16 @@ step_access_control() {
     confirm "apply the tenant access fixes above?" || die "stopped at tenant access fixes"
     python3 -I "$LIB_DIR/fix_access.py" "${fixcommon[@]}" "${fix[@]}" --apply \
       --log "$LOG_DIR/fix-access.jsonl" | tail -1 | sed 's/^/  /' || die "fix_access apply reported errors — see $LOG_DIR/fix-access.jsonl"
-    python3 -I "$LIB_DIR/fix_access.py" "${fixcommon[@]}" "${fix[@]}" | grep -q "DRY RUN: 0 action rows, 0 role links, 0 tiles, 0 packs" \
-      && ok "tenant access fixes fully applied" || die "tenant access fixes incomplete — re-run step 5"
+    # Same async-persist grace as the sync verify above.
+    local fixleft="" j
+    for j in 1 2 3 4 5 6; do
+      fixleft="$(python3 -I "$LIB_DIR/fix_access.py" "${fixcommon[@]}" "${fix[@]}" | grep '^DRY RUN:')"
+      [ "$fixleft" = "DRY RUN: 0 action rows, 0 role links, 0 tiles, 0 packs" ] && break
+      sleep 5
+    done
+    [ "$fixleft" = "DRY RUN: 0 action rows, 0 role links, 0 tiles, 0 packs" ] \
+      && ok "tenant access fixes fully applied" \
+      || die "tenant access fixes incomplete ($fixleft) — see: python3 -I $LIB_DIR/fix_access.py <same args>"
   fi
   docker restart "$ACCESSCONTROL_CONTAINER" >/dev/null && ok "$ACCESSCONTROL_CONTAINER restarted"
   FOLLOW_UPS+=("review the added records ($LOG_DIR/accesscontrol-sync.jsonl) with the team; roles in EXCLUDE_ROLES and custom roles got nothing")

@@ -46,10 +46,10 @@ class Ctx:
         self.log = open(a.log, "a") if a.apply else None
         self.tok = self.ui = None
 
-    def rows(self, schema):
+    def rows(self, schema, active=True):
         out = subprocess.run(["docker", "exec", self.a.container, "psql", "-U", "egov", "-d", "egov", "-Atc",
                               f"select data from eg_mdms_data where tenantid='{self.a.tenant}' "
-                              f"and schemacode='{schema}' and isactive"],
+                              f"and schemacode='{schema}' and {'' if active else 'not '}isactive"],
                              capture_output=True, text=True, check=True).stdout
         return [json.loads(l) for l in out.splitlines() if l.strip()]
 
@@ -133,7 +133,11 @@ def main():
     links = x.rows(LINKS)
     url_by_id = {int(r["id"]): r.get("url") for r in acts + acts_test}
     have_link = {(l.get("rolecode"), url_by_id.get(int(l.get("actionid", -1)))) for l in links}
-    next_link = max([int(l["id"]) for l in links if str(l.get("id", "")).isdigit()] + [0]) + 1
+    # Links the tenant switched OFF stay off: re-adding would undo a deliberate
+    # removal, and mdms-v2 refuses it anyway (x-unique rolecode+actionid).
+    off_links = x.rows(LINKS, active=False)
+    off_link = {(l.get("rolecode"), url_by_id.get(int(l.get("actionid", -1)))) for l in off_links}
+    next_link = max([int(l["id"]) for l in links + off_links if str(l.get("id", "")).isdigit()] + [0]) + 1
     template = next((r for r in acts if r.get("url", "").startswith(CAP_PREFIX)), None) \
         or next((r for r in acts if "/analytics/" in r.get("url", "")), acts[0])
     plan = {"actions": 0, "links": 0, "kpi": 0, "pack": 0}
@@ -176,6 +180,9 @@ def main():
             print(f"  skip   {role:22} {url} (role not in tenant)"); return
         if (role, url) in have_link:
             return
+        if (role, url) in off_link:
+            have_link.add((role, url))
+            print(f"  kept   {role:22} {url}: switched OFF by the tenant, not re-added"); return
         if a.apply and id_by_url[url] in pending:
             wait_stored(id_by_url[url])
         data = {"id": next_link, "rolecode": role, "actionid": id_by_url[url], "actioncode": "",
