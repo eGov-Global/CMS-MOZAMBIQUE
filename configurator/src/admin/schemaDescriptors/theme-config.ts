@@ -126,6 +126,11 @@ export const themeConfigDescriptor: SchemaDescriptor = {
       'colors.chart-4',
       'colors.chart-5',
     ] },
+
+    { title: 'Sidebar footer logo', fields: [
+      'sidebarFooterLogo.enabled',
+      'sidebarFooterLogo.fileStoreId',
+    ] },
   ],
   fields: [
     // ── Identity ────────────────────────────────────────────────────────────
@@ -305,5 +310,17 @@ export const themeConfigDescriptor: SchemaDescriptor = {
       help: 'Fourth data-series color.' },
     { path: 'colors.chart-5', widget: 'color', label: 'Chart 5',
       help: 'Fifth data-series color.' },
+
+    // ── Sidebar footer logo ─────────────────────────────────────────────────
+    // Off unless enabled; digit-ui then shows the uploaded logo, or the eGov
+    // lockup when none is uploaded. The rail draws it 18px high (14px closed),
+    // so only a 4:1 strip fits without being squashed.
+    { path: 'sidebarFooterLogo.enabled', widget: 'boolean', label: 'Show a logo at the foot of the sidebar',
+      whenUnset: false,
+      help: 'Shown under Logout in the employee and citizen sidebar and the phone menu. Off by default.' },
+    { path: 'sidebarFooterLogo.fileStoreId', widget: 'image-upload', label: 'Logo image',
+      aspectRatio: 4, aspectTolerance: 0.02, minWidth: 320, minHeight: 80,
+      defaultPreview: `${import.meta.env.BASE_URL}brand/egov-logo-white.png`,
+      help: 'Required shape 4:1 (e.g. 800 × 200 px), PNG or JPG. Use a light logo on a transparent background — the sidebar is dark. Without an upload, the eGov logo is shown.' },
   ],
 };
