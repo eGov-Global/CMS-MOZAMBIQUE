@@ -212,13 +212,17 @@ const PGRSearchInbox = () => {
   const serviceDefs = Digit.Hooks.pgr.useServiceDefs(tenantId, "PGR");
 
   /**
-   * Preprocess config using translation and inject complaint types into the serviceCode dropdown
+   * Preprocess config using translation and inject complaint types into the serviceCode dropdown.
+   * The preprocess writes into the object it is given and returns it, so it
+   * works on a copy: a new list of complaint types must yield a new config,
+   * or tabConfig below — memoised on this reference — keeps the copy it made
+   * before the types arrived and the category filters stay empty (#191).
    */
   var updatedConfig = useMemo(
     () =>
       Digit.Utils.preProcessMDMSConfigInboxSearch(
         t,
-        pageConfig,
+        _.cloneDeep(pageConfig),
         "sections.filter.uiConfig.fields",
         {
           updateDependent: [
