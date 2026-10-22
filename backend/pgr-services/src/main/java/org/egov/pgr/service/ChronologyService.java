@@ -86,8 +86,10 @@ public class ChronologyService {
      * RESOLVEBYSUPERVISOR is NOT here either: the citizen UI has never shown
      * its comment, so passing it would be a behaviour change, not parity —
      * revisit with product if the CRQ's closure rule should extend to it.
+     * WorkflowService applies the same set to the search response's latest
+     * step (#193), so the two citizen views cannot disagree.
      */
-    private static final Set<String> CITIZEN_CONTENT_ACTIONS = Set.of("RESOLVE", "REJECT");
+    static final Set<String> CITIZEN_CONTENT_ACTIONS = Set.of("RESOLVE", "REJECT");
 
     private final ServiceRequestRepository repository;
     private final PGRRepository pgrRepository;
