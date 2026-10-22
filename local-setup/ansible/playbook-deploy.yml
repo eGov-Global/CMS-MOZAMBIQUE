@@ -4924,7 +4924,7 @@
               -p {{ nginx_host_port | default(80) }}:80 \
               -v {{ digit_dir }}/nginx/site.conf:/etc/nginx/conf.d/default.conf:ro \
               -v {{ configurator_www_dir }}:/var/www/configurator:ro \
-              {{ ('-v ' ~ digit_dir ~ '/nginx/.htpasswd-status:/etc/nginx/.htpasswd-status:ro \\') if (nginx_features.status | default(true)) else '\\' }}
+              {{ ('-v ' ~ digit_dir ~ '/nginx/.htpasswd-status:/etc/nginx/.htpasswd-status:ro') if (nginx_features.status | default(true)) else '' }} \
               nginx:1.27-alpine
           register: mac_nginx
           changed_when: true
