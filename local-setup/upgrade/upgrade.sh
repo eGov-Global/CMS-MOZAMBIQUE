@@ -340,6 +340,25 @@ PY
     warn "the deploy manages the $FIREWALL firewall (incoming: SSH, 80, 443 only). Current rules are saved in step 4;"
     warn "  if other machines need other ports, set manage_host_firewall: false (or allow them) in host_vars first"
   fi
+  # A container started by hand (docker run) under a name the compose files
+  # declare makes the deploy's `up -d` fail on a name conflict (mz UAT,
+  # 2026-10-19 and -22: a hand-run xstate-chatbot). Name them before any downtime.
+  if command -v docker >/dev/null 2>&1; then
+    local names c proj clash=""
+    names="$(cat "$REPO"/local-setup/docker-compose.egov-digit.yaml "$REPO"/local-setup/docker-compose.migrations.yml \
+               "$REPO"/local-setup/docker-compose.monitoring.yml "$REPO"/local-setup/docker-compose.matomo.yml \
+               "$REPO/local-setup/docker-compose.$TENANT.yml" 2>/dev/null \
+             | sed -nE 's/^[[:space:]]+container_name:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/p' | sort -u)"
+    for c in $names; do
+      proj="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)" || continue
+      [ "$proj" = "$(basename "$DIGIT_DIR")" ] || clash="$clash $c(${proj:-docker run})"
+    done
+    if [ -z "$clash" ]; then ok "no hand-started containers clash with compose names"
+    else
+      bad "containers not started by the digit compose project use names the deploy needs:$clash"
+      bad "  check them (docker inspect NAME), then docker rm -f NAME — or the deploy fails on a name conflict"; fail=1
+    fi
+  fi
   command -v ansible-playbook >/dev/null 2>&1 && ok "ansible-playbook present" \
     || { bad "ansible-playbook not on PATH (needed by step 6)"; fail=1; }
   docker info >/dev/null 2>&1 && ok "docker daemon reachable" \
