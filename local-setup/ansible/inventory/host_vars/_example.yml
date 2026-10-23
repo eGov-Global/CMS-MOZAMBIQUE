@@ -408,6 +408,10 @@ enable_search_stack: false
 # matomo_site_name: ""            # defaults to <domain>; the label on reports
 # matomo_archive_interval: 3600   # seconds between report-archiving passes
 # upstream_matomo_port: 18081     # loopback bind + the Host header nginx sends
+# matomo_dashboard: false         # ALSO serve the full Matomo UI at <domain>/matomo/
+#                                 # (needs nginx_features.matomo). Puts an admin
+#                                 # console with visitor data on the public domain —
+#                                 # keep the strong admin password.
 
 # Pull + start digit-mcp + mcp-postgres. The MCP server exposes a REST
 # shim on :3000 (POST /v1/tenant/bootstrap, POST /v1/tools/:name) that
@@ -1065,7 +1069,8 @@ nginx_features:
   integration_tests: false   # /tests/ + -v2/ — test dashboards (requires enable_integration_tests: true)
   integration_tests_runner: false  # /tests/api/ — RUN-button daemon proxy (requires enable_integration_tests_runner: true)
   matomo: false              # /matomo/matomo.js + .php — the two Matomo TRACKING endpoints only
-                             # (requires enable_matomo: true). The Matomo admin UI is NOT proxied:
+                             # (requires enable_matomo: true). The Matomo admin UI is NOT proxied
+                             # unless matomo_dashboard: true (see the Matomo section above):
                              # it emits absolute asset URLs that break under a path prefix, and it
                              # has no business being public. Tunnel to 127.0.0.1:18081 instead.
   # Deliberately DEFAULTS TO TRUE (group_vars/digit.yml, #1604): Grafana
