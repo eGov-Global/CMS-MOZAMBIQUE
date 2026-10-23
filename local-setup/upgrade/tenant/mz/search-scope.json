@@ -1,0 +1,13 @@
+{
+  "complaint": {
+    "scope": {
+      "axes": ["department", "jurisdiction"],
+      "roleScopes": {
+        "CMS_SUPERVISOR":        {"department": "OWN", "jurisdiction": "ALL"},
+        "CMS_CASE_MANAGER":      {"department": "OWN", "jurisdiction": "ALL"},
+        "CMS_RECEPTION_OFFICER": {"department": "OWN", "jurisdiction": "ALL"}
+      },
+      "default": {"department": "ALL", "jurisdiction": "ALL"}
+    }
+  }
+}

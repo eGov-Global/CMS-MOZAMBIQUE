@@ -7,6 +7,7 @@ import { BooleanInput } from './BooleanInput';
 import { LocaleListInput } from './LocaleListInput';
 import { JsonInput } from './JsonInput';
 import { ObjectTableInput } from './ObjectTableInput';
+import { ImageUploadInput } from './ImageUploadInput';
 import type { FieldSpec } from '../schemaDescriptors/types';
 
 interface WidgetDispatchProps {
@@ -37,8 +38,20 @@ export function WidgetForFieldSpec({ spec, source }: WidgetDispatchProps) {
       return <JsonInput {...shared} help={spec.help} />;
     case 'object-table':
       return <ObjectTableInput {...shared} columns={spec.columns ?? []} help={spec.help} />;
+    case 'image-upload':
+      return (
+        <ImageUploadInput
+          {...shared}
+          help={spec.help}
+          aspectRatio={spec.aspectRatio ?? 1}
+          aspectTolerance={spec.aspectTolerance}
+          minWidth={spec.minWidth}
+          minHeight={spec.minHeight}
+          defaultPreview={spec.defaultPreview}
+        />
+      );
     case 'boolean':
-      return <BooleanInput {...shared} help={spec.help} />;
+      return <BooleanInput {...shared} help={spec.help} whenUnset={spec.whenUnset} />;
     case 'integer':
     case 'number':
       return <DigitFormInput {...shared} type="number" help={spec.help} />;
@@ -51,4 +64,4 @@ export function WidgetForFieldSpec({ spec, source }: WidgetDispatchProps) {
   }
 }
 
-export { ColorInput, RegexInput, ChipArrayInput, DurationMsInput, BooleanInput, LocaleListInput, JsonInput, ObjectTableInput };
+export { ColorInput, RegexInput, ChipArrayInput, DurationMsInput, BooleanInput, LocaleListInput, JsonInput, ObjectTableInput, ImageUploadInput };

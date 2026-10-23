@@ -20,7 +20,8 @@ export type WidgetKind =
   | 'duration-ms' // number input alongside d/h/m/s display
   | 'locale-list' // table editor for {label, value}[] arrays (e.g. StateInfo.languages)
   | 'json'        // raw-JSON textarea for object/array fields (parse-validated; blocks save while invalid)
-  | 'object-table'; // table editor for arrays of flat objects with configurable columns
+  | 'object-table' // table editor for arrays of flat objects with configurable columns
+  | 'image-upload'; // filestore upload storing the fileStoreId; enforces an aspect ratio
 
 /** A single field override. `path` is dot-notation into the record (e.g. "rules.pattern"). */
 export interface FieldSpec {
@@ -38,6 +39,18 @@ export interface FieldSpec {
   pattern?: string;
   /** For 'object-table': column definitions; each row is an object keyed by these. */
   columns?: { key: string; label: string }[];
+  /**
+   * For boolean widgets: what an unset value means to the app reading it. The
+   * box shows that, but nothing is written until the operator changes it.
+   */
+  whenUnset?: boolean;
+  /** For 'image-upload': required width ÷ height (4 = 4:1), its tolerance as a
+   *  fraction, the smallest accepted size, and the image shown while unset. */
+  aspectRatio?: number;
+  aspectTolerance?: number;
+  minWidth?: number;
+  minHeight?: number;
+  defaultPreview?: string;
 }
 
 /** A grouping of fields shown as a titled section in the form. */

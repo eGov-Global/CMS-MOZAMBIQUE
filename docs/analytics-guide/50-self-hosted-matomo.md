@@ -21,6 +21,14 @@
 >
 > The manual walkthrough below remains the reference for what the phase does,
 > for non-docker installs, and for debugging when a step fails.
+>
+> **Names and ports changed.** The compose overlay is now layered by the Ansible
+> deploy (`enable_matomo: true`): containers are `digit-matomo` /
+> `digit-matomo-db` / `digit-matomo-archiver`, the admin UI is on
+> `127.0.0.1:18081` by default (`upstream_matomo_port`), and the DB password
+> comes from `.env` (OpenBao). Where the walkthrough below says `matomo`,
+> `matomo-db` or port `8080`, read those. See
+> [`docs/matomo-deployment.md`](../matomo-deployment.md) for the current layout.
 
 Every step below was executed on a real box, in this order, and the traps noted
 are ones we actually hit — not hypotheticals. Follow it top to bottom and you

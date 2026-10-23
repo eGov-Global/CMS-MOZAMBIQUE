@@ -15,7 +15,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "mz.gov.mctd.cms_mozambique"
+    namespace = "mz.gov.falacidadao"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -29,7 +29,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "mz.gov.mctd.cms_mozambique"
+        applicationId = "mz.gov.falacidadao"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -65,7 +65,7 @@ android {
                     ?.identifier
                 val abiSuffix = if (abi.isNullOrEmpty()) "" else "-$abi"
                 output.outputFileName =
-                    "CMS_Mozambique-v${variant.versionName}-b${variant.versionCode}$abiSuffix-${variant.buildType.name}.apk"
+                    "FalaCidadao-v${variant.versionName}-b${variant.versionCode}$abiSuffix-${variant.buildType.name}.apk"
             }
     }
 }

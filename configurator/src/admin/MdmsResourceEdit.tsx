@@ -6,7 +6,7 @@ import { useEditContext, useResourceContext } from 'ra-core';
 import { getResourceConfig, getResourceLabel } from '@/providers/bridge';
 import { getDescriptor } from './schemaDescriptors';
 import { customEditors } from './themeEditor';
-import { useCanWriteResource } from '@/hooks/useCanWriteResource';
+import { useMastersCapability } from '@/hooks/useMastersCapability';
 
 function MdmsEditFields() {
   const resource = useResourceContext() ?? '';
@@ -72,15 +72,21 @@ export function MdmsResourceEdit() {
   const config = getResourceConfig(resource);
   const descriptor = getDescriptor(config?.schema);
   const label = getResourceLabel(resource);
-  // Role gate (CCSD-1998): called before any early return to keep hook order
+  // Role gate: same role-action check that hides the Create/Edit buttons
+  // (useMastersCapability). Called before any early return to keep hook order
   // stable. Also blocks deep links straight to /manage/<resource>/:id/edit.
-  const canWrite = useCanWriteResource(resource);
+  // Permissions resolve asynchronously and read as "no roles" until they do;
+  // render nothing meanwhile rather than flashing the restricted notice.
+  const { roles, canEditResource } = useMastersCapability();
+  const permissionsLoaded = roles.length > 0;
+  const canWrite = canEditResource(resource);
 
+  if (!permissionsLoaded) return null;
   if (!canWrite) {
     return (
       <div className="p-6">
         <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
-          Editing {label} is restricted to: {(config?.writeRoles ?? []).join(', ')}.
+          Editing {label} is not permitted for your role.
         </div>
       </div>
     );

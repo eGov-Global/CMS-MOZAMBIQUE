@@ -19,7 +19,7 @@ export const GEOGRAPHY_OPTIONS = [
   {
     id: "all",
     get label() {
-      return translate("DASHBOARD_FILTERS_ALL_WARDS", "All wards");
+      return translate("DASHBOARD_FILTERS_ALL_DISTRICTS", "All districts");
     },
   },
 ];
@@ -28,7 +28,7 @@ export const COMPLAINT_TYPE_OPTIONS = [
   {
     id: "all",
     get label() {
-      return translate("DASHBOARD_FILTERS_ALL_TYPES", "All types");
+      return translate("DASHBOARD_FILTERS_ALL_TYPES", "All categories");
     },
   },
 ];
@@ -74,7 +74,7 @@ export const GLOBAL_FILTER_FIELDS = [
     id: "complaintType",
     type: "select",
     get label() {
-      return translate("DASHBOARD_FILTERS_COMPLAINT_TYPE", "Complaint type");
+      return translate("DASHBOARD_FILTERS_COMPLAINT_TYPE", "Complaint category");
     },
     defaultValue: "all",
     options: COMPLAINT_TYPE_OPTIONS,

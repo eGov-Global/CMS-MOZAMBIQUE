@@ -1,6 +1,7 @@
 package org.egov.pgr.analytics;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.egov.pgr.policy.PgrSearchScope;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +20,7 @@ public class KpiQueryComposerHierLevelTest {
     private final AnalyticsCatalog catalog = new AnalyticsCatalog();
     private final KpiQueryComposer composer = new KpiQueryComposer(catalog);
     private final AnalyticsPlanner planner = new AnalyticsPlanner(catalog);
-    private final AnalyticsScope stateScope = new AnalyticsScope("ke", true, null, null, null);
+    private final PgrSearchScope stateScope = new PgrSearchScope("ke", true, null, null, null);
     /** hierLevel behavior doesn't depend on wall-clock time; one fixed calendar keeps the suite deterministic. */
     private final BusinessCalendar calendar =
             BusinessCalendar.of(java.time.ZoneId.of("Africa/Nairobi"), 1_700_000_000_000L);
@@ -55,7 +56,7 @@ public class KpiQueryComposerHierLevelTest {
         JsonNode base = json("{\"grain\":\"daily\",\"dimensions\":[\"service_code\"],"
                 + "\"measures\":[{\"name\":\"open\",\"agg\":\"count\"}]}");
         JsonNode merged = composer.mergeParams(base, json("{\"hierLevel\":\"2\"}"), calendar);
-        assertEquals(base, merged);   // param inapplicable on daily — graceful skip, like ward
+        assertEquals(base, merged);   // param inapplicable on daily — graceful skip, like zone
     }
 
     @Test
@@ -104,11 +105,11 @@ public class KpiQueryComposerHierLevelTest {
     }
 
     @Test
-    public void composesWithWindowWardAndServiceCodeParams() {
+    public void composesWithWindowZoneAndServiceCodeParams() {
         JsonNode merged = composer.mergeParams(byTypeBase(),
-                json("{\"hierLevel\":\"1\",\"window\":\"last_7d\",\"ward\":\"W1\",\"serviceCode\":\"StreetLightNotWorking\"}"), calendar);
+                json("{\"hierLevel\":\"1\",\"window\":\"last_7d\",\"zone\":\"Z1\",\"serviceCode\":\"StreetLightNotWorking\"}"), calendar);
         assertEquals("last_7d", merged.get("window").get("name").asText());
-        assertEquals("W1", merged.get("filters").get("ward_code").get("eq").asText());
+        assertEquals("Z1", merged.get("filters").get("zone_code").get("eq").asText());
         assertEquals("StreetLightNotWorking", merged.get("filters").get("service_code").get("eq").asText());
         assertTrue(merged.get("dimensions").get(0).isObject());
         // ...and the planner accepts the combination (WHERE on raw service_code column,
@@ -147,7 +148,7 @@ public class KpiQueryComposerHierLevelTest {
         assertEquals("SELECT coalesce(nullif(split_part(complaint_node_path,'.',least(1,complaint_depth)),''),"
                 + " service_code) AS service_code, count(*) AS total"
                 + " FROM complaint_facts"
-                + " WHERE created_at >= ? AND created_at < ? AND tenant_id LIKE ?"
+                + " WHERE created_at >= ? AND created_at < ? AND (tenant_id = ? OR tenant_id LIKE ?)"
                 + " GROUP BY 1 ORDER BY total DESC NULLS LAST LIMIT 8", p.sql);
         assertEquals(java.util.Arrays.asList("service_code", "total"), p.columns);
     }

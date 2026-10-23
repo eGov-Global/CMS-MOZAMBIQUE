@@ -1,9 +1,12 @@
 package org.egov.pgr.service;
 
 import org.egov.pgr.config.PGRConfiguration;
+import org.egov.pgr.policy.FieldVisibilityService;
+import org.egov.pgr.policy.SearchAccessPolicyService;
 import org.egov.pgr.producer.Producer;
 import org.egov.pgr.repository.PGRRepository;
 import org.egov.pgr.util.MDMSUtils;
+import org.egov.pgr.util.PGRUtils;
 import org.egov.pgr.validator.ServiceRequestValidator;
 import org.egov.pgr.web.models.*;
 import org.junit.Before;
@@ -31,8 +34,6 @@ public class ComplaintsEventsTest {
     @Mock
     private WorkflowService workflowService;
     @Mock
-    private ServiceRequestValidator serviceRequestValidator;
-    @Mock
     private ServiceRequestValidator validator;
     @Mock
     private Producer producer;
@@ -44,6 +45,18 @@ public class ComplaintsEventsTest {
     private MDMSUtils mdmsUtils;
     @Mock
     private ComplaintDomainEventService complaintDomainEventService;
+    @Mock
+    private PGRUtils pgrUtils;
+    @Mock
+    private ExtendedAttributesValidationService extendedAttributesValidationService;
+    @Mock
+    private EncryptionDecryptionService encryptionDecryptionService;
+    @Mock
+    private SearchAccessPolicyService searchAccessPolicyService;
+    @Mock
+    private FieldVisibilityService fieldVisibilityService;
+    @Mock
+    private EscalationService escalationService;
 
     @InjectMocks
     private PGRService pgrService;
@@ -61,6 +74,8 @@ public class ComplaintsEventsTest {
         when(config.getUpdateTopic()).thenReturn("update-pgr-request");
         when(config.getInboxUpdateTopic()).thenReturn("inbox-pgr-events");
         when(mdmsUtils.mDMSCall(any(ServiceRequest.class))).thenReturn(buildMdmsData());
+        when(validator.validateUpdate(any(ServiceRequest.class), any())).thenAnswer(
+                invocation -> ((ServiceRequest) invocation.getArgument(0)).getService());
         when(config.getIsComplaintsDomainEventEnabled()).thenReturn(true);
         when(config.getComplaintsDomainEventsTopic()).thenReturn("complaints.domain.events");
         when(config.getComplaintsDomainEventDefaultLocale()).thenReturn("en_IN");

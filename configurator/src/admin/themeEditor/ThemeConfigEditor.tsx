@@ -3,6 +3,7 @@ import { useEditContext, useResourceContext } from 'ra-core';
 import { DigitEdit } from '../DigitEdit';
 import { DigitFormInput } from '../DigitFormInput';
 import { ColorInput } from '../widgets/ColorInput';
+import { WidgetForFieldSpec } from '../widgets';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { getDescriptor } from '../schemaDescriptors';
 import type { FieldGroup, FieldSpec } from '../schemaDescriptors/types';
@@ -101,6 +102,13 @@ function renderGroupFields(group: FieldGroup, allFields: FieldSpec[]): ReactNode
   return group.fields.map((path) => {
     const spec = byPath.get(path);
     if (!spec) return null;
+    if (spec.widget && spec.widget !== 'color') {
+      return (
+        <div key={path} className="md:col-span-2">
+          <WidgetForFieldSpec spec={spec} source={spec.path} />
+        </div>
+      );
+    }
     return <HoveredColorField key={path} spec={spec} />;
   });
 }

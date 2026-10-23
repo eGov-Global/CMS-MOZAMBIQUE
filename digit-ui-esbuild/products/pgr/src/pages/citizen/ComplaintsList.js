@@ -1,216 +1,47 @@
 /* eslint-disable react/prop-types */
-// Citizen "My Complaints" list — v2 (Tailwind + shadcn-style chrome).
+// Citizen "My Complaints": the citizen's own complaints as an inbox, the way
+// employees see theirs (#2223). A table on a desktop (Complaint No., Concern,
+// Status, Filed on); on a phone, where a table doesn't fit, a list with the
+// same facts per row. A search over the complaint number and the text
+// (description, subcategory and category) narrows it, newest first, ten to a
+// page. Any row opens the complaint.
 //
-// Strangler-fig replacement for the legacy ComplaintsList.js (which
-// rendered react-components Cards + the per-item <Complaint /> tile).
-// Data layer is preserved — same `useComplaintsListByMobile` hook, same
-// ServiceWrapper shape, same revalidate-on-mount cadence.
-//
-// What changes:
-//   - v2 page chrome: header row with brand-tinted title + "File new
-//     complaint" primary CTA on the right.
-//   - List area is the only scrollable region (flex: 1, overflow-y),
-//     so the page footer stays pinned at the viewport bottom.
-//   - Each complaint is a v2 Card showing: service category, complaint
-//     id, created date, plus a colored status pill (open / closed /
-//     rejected) on the right. Click anywhere to drill in.
-//   - Empty + error states use the same Card surface and theme colors
-//     instead of the legacy raw <Card> with text.
+// "Concern" is the complaint's subcategory with its description under it, cut
+// to one line (two on a phone).
 
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { complaintLabel } from "../../utils/complaintLabel";
+import { pageOf, searchComplaints, statusTone } from "../../utils/citizenComplaints";
+import { trackEvent } from "../../utils/analytics";
 import { isVisibleOnEntrance } from "../../utils/testingTenant";
 import { useTranslation } from "react-i18next";
-import { useHistory, useRouteMatch } from "react-router-dom";
+import { Link, useHistory, useRouteMatch } from "react-router-dom";
 
 import { Loader } from "@egovernments/digit-ui-react-components";
-import { Button, Card } from "@egovernments/digit-ui-components-v2";
-import { ChevronRight, FilePlus2, Inbox } from "lucide-react";
-import { LOCALE, LOCALIZATION_KEY } from "../../constants/Localization";
+import { Button, Card, Input } from "@egovernments/digit-ui-components-v2";
+import { ChevronLeft, ChevronRight, FilePlus2, Inbox, Search } from "lucide-react";
+import { LOCALE } from "../../constants/Localization";
 
-// Terminal states across standard PGR + the mz.igsae CMS workflow (CANCELLED/CLOSEDAFTER*
-// are CMS terminals). Keyed by status name — see ComplaintDetails.js for the rationale.
-const CLOSED_STATUSES = ["RESOLVED", "REJECTED", "CLOSEDAFTERREJECTION", "CLOSEDAFTERRESOLUTION", "CANCELLED"];
-const REJECTED_STATUSES = ["REJECTED", "CLOSEDAFTERREJECTION", "CANCELLED"];
+const PAGE_SIZE = 10;
+// pgr-services' largest page. The search runs over what this returns, so a
+// citizen's complaints are fetched in one go rather than the default 100.
+const FETCH_LIMIT = 200;
+// The search and page, kept for the tab so Back from a complaint returns to
+// the same view rather than the first page. Only Back, Forward and a reload
+// restore it: opening My Complaints afresh starts clean.
+const VIEW_KEY = "pgr.citizen.my-complaints.view";
 
-function statusToTone(status) {
-  if (REJECTED_STATUSES.includes(status)) return "rejected";
-  if (CLOSED_STATUSES.includes(status)) return "closed";
-  return "open";
-}
-
-const TONE_STYLES = {
-  open: {
-    bg: "var(--color-primary-selected-bg, #FFF4D7)",
-    fg: "var(--color-warning, #9E5F00)",
-    label: "OPEN",
-  },
-  closed: {
-    bg: "var(--color-success-bg, #E8F3EE)",
-    fg: "var(--color-success, #00703C)",
-    label: "CLOSED",
-  },
-  rejected: {
-    bg: "var(--color-error-bg, #FAE5E2)",
-    fg: "var(--color-error, #d4351c)",
-    label: "REJECTED",
-  },
-};
-
-function StatusPill({ status, t }) {
-  const tone = statusToTone(status);
-  const palette = TONE_STYLES[tone];
-  // QA #17: label with the FULL workflow status (same CS_COMMON_<status> key
-  // the details page header uses) so the card and the opened complaint always
-  // agree. The 3-way tone bucket now drives the pill COLOR only. Falls back to
-  // the bucket label when the status key isn't localized.
-  const statusKey = `CS_COMMON_${status}`;
-  const translatedStatus = t(statusKey);
-  let label;
-  if (translatedStatus !== statusKey) {
-    label = translatedStatus.toUpperCase();
-  } else {
-    const labelKey = `CS_COMMON_${palette.label}`;
-    const translated = t(labelKey);
-    label = translated === labelKey ? palette.label : translated.toUpperCase();
+function readView() {
+  try {
+    const saved = JSON.parse(window.sessionStorage.getItem(VIEW_KEY) || "null");
+    return { query: typeof saved?.query === "string" ? saved.query : "", page: Number(saved?.page) || 1 };
+  } catch {
+    return { query: "", page: 1 };
   }
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "2px 10px",
-        borderRadius: "9999px",
-        fontSize: "0.6875rem",
-        fontWeight: 600,
-        letterSpacing: "0.04em",
-        backgroundColor: palette.bg,
-        color: palette.fg,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {label}
-    </span>
-  );
 }
 
-function ComplaintRow({ data, onClick, t, typeName }) {
-  const { serviceRequestId, applicationStatus, auditDetails } = data;
-  // The list aggregates complaints across authority tenants (mz.ige/mz.igsae/…)
-  // while the list-level serviceDefs are fetched at the CITIZEN's tenant — so
-  // foreign complaints missed the map and rendered the raw serviceCode. Fetch
-  // the hierarchy at THIS complaint's tenant (same read-at-complaint-tenant fix
-  // as the details page; react-query dedupes rows of the same tenant into one
-  // request, cached indefinitely). NOTE the useCustomMDMS v2 quirk: the tenant
-  // must ride inside the 5th (mdmsv2) arg — the positional one is ignored.
-  const { data: ownRows } = Digit.Hooks.useCustomMDMS(
-    data.tenantId,
-    "RAINMAKER-PGR",
-    [{ name: "ComplaintHierarchy" }],
-    {
-      cacheTime: Infinity,
-      enabled: !!data.tenantId,
-      select: (raw) => raw?.["RAINMAKER-PGR"]?.ComplaintHierarchy || [],
-    },
-    { schemaCode: "PGR_COMPLAINT_HIERARCHY_DETAILS", tenantId: data.tenantId }
-  );
-  const own = React.useMemo(() => {
-    const rows = Array.isArray(ownRows) ? ownRows : [];
-    const self = rows.find((n) => n?.code === data.serviceCode);
-    return self ? { code: self.code, name: self.name } : null;
-  }, [ownRows, data.serviceCode]);
-  // Card title = the LEAF complaint type (what the citizen actually filed —
-  // "Operating without a licence"), not a hierarchy ancestor: on a personal
-  // list the specific type is how people recognize their complaint, while the
-  // 1st level ("Business") would render near-identical cards. Key-based
-  // localization (COMPLAINT_HIERARCHY.<code>) with the node name as fallback;
-  // OTHERS when nothing resolves.
-  const title =
-    complaintLabel(t, own?.code || data.serviceCode, own?.name || typeName) || t("CS_COMPLAINT_TYPE_OTHERS");
-  const dateStr = auditDetails?.createdTime
-    ? Digit.DateUtils.ConvertTimestampToDate(auditDetails.createdTime)
-    : "";
-  return (
-    <Card
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
-      style={{
-        cursor: "pointer",
-        transition: "border-color 0.15s ease-out, box-shadow 0.15s ease-out, transform 0.05s ease-out",
-        padding: "16px 20px",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor =
-          "var(--color-primary-1, var(--color-primary-main, #c84c0e))";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = "";
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              marginBottom: "6px",
-              flexWrap: "wrap",
-            }}
-          >
-            <h3
-              style={{
-                margin: 0,
-                fontSize: "0.95rem",
-                fontWeight: 600,
-                color: "var(--color-primary-1, var(--color-primary-main, #c84c0e))",
-              }}
-            >
-              {title}
-            </h3>
-            <StatusPill status={applicationStatus} t={t} />
-          </div>
-          <div
-            style={{
-              fontSize: "0.8125rem",
-              color: "var(--color-text-secondary, #6B7280)",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "16px",
-              alignItems: "center",
-            }}
-          >
-            <span>
-              <span style={{ fontWeight: 500, color: "var(--color-text-heading, #363636)" }}>
-                {t(`${LOCALIZATION_KEY.CS_COMMON}_COMPLAINT_NO`)}:
-              </span>{" "}
-              {serviceRequestId}
-            </span>
-            {dateStr ? <span>{dateStr}</span> : null}
-            {/* QA #17: bottom state line removed — the title pill now carries
-                the full workflow status, so this duplicate (and previously
-                contradictory) line is gone. */}
-          </div>
-        </div>
-        <ChevronRight
-          aria-hidden
-          style={{
-            height: "1.25rem",
-            width: "1.25rem",
-            flexShrink: 0,
-            color: "var(--color-text-secondary, #9CA3AF)",
-          }}
-        />
-      </div>
-    </Card>
-  );
+function StatusPill({ status, label }) {
+  return <span className={`cms-status-pill is-${statusTone(status)}`}>{label}</span>;
 }
 
 function EmptyState({ icon, title, body, action }) {
@@ -253,6 +84,33 @@ function EmptyState({ icon, title, body, action }) {
   );
 }
 
+/**
+ * Loads ComplaintHierarchy at ONE complaint tenant and reports it upward.
+ * The list aggregates complaints across authority tenants (mz.ige/mz.igsae/…)
+ * while serviceDefs are fetched at the CITIZEN's tenant, so foreign complaints
+ * would miss the map and render the raw serviceCode. One loader per distinct
+ * tenant; react-query dedupes and caches the fetch. NOTE the useCustomMDMS v2
+ * quirk: the tenant must ride inside the 5th (mdmsv2) arg.
+ */
+function TenantHierarchyLoader({ tenantId, onLoad }) {
+  const { data } = Digit.Hooks.useCustomMDMS(
+    tenantId,
+    "RAINMAKER-PGR",
+    [{ name: "ComplaintHierarchy" }],
+    {
+      cacheTime: Infinity,
+      enabled: !!tenantId,
+      select: (raw) => raw?.["RAINMAKER-PGR"]?.ComplaintHierarchy || [],
+    },
+    { schemaCode: "PGR_COMPLAINT_HIERARCHY_DETAILS", tenantId }
+  );
+  useEffect(() => {
+    if (Array.isArray(data)) onLoad(tenantId, data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, tenantId]);
+  return null;
+}
+
 export const ComplaintsList = () => {
   const User = Digit.UserService.getUser();
   const mobileNumber =
@@ -263,29 +121,45 @@ export const ComplaintsList = () => {
   const { t } = useTranslation();
   const history = useHistory();
   const { path } = useRouteMatch();
-  const { isLoading, error, data, revalidate } = Digit.Hooks.pgr.useComplaintsListByMobile(
-    tenantId,
-    mobileNumber
-  );
+  const { isLoading, error, data, revalidate } = Digit.Hooks.pgr.useComplaintsList(tenantId, {
+    mobileNumber,
+    limit: FETCH_LIMIT,
+  });
 
-  // serviceCode → the LEAF's own name, as a mount-time fallback while each
-  // row's own-tenant hierarchy fetch resolves (only helps complaints filed at
-  // the citizen's tenant; foreign-tenant rows resolve via the row fetch).
+  // The tenant's complaint types: each subcategory with its category
+  // (menuPath), so a row can name both and the search can match either.
   const serviceDefs = Digit.Hooks.pgr.useServiceDefs(tenantId, "PGR");
-  const typeBySvcCode = React.useMemo(() => {
+  const defsByCode = useMemo(() => {
     const map = {};
     (serviceDefs || []).forEach((def) => {
-      if (def?.serviceCode) map[def.serviceCode] = { name: def.name };
+      if (def?.serviceCode) map[def.serviceCode] = def;
     });
     return map;
   }, [serviceDefs]);
+
+  const [initialView] = useState(() => (history.action === "POP" ? readView() : { query: "", page: 1 }));
+  const [query, setQuery] = useState(initialView.query);
+  const [page, setPage] = useState(initialView.page);
 
   useEffect(() => {
     revalidate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const goCreate = () => history.push(`/${window.contextPath}/citizen/pgr/create-complaint`);
+  // A new search starts from its first page; the one restored on return
+  // keeps its page.
+  const restoredQuery = React.useRef(query);
+  useEffect(() => {
+    if (query !== restoredQuery.current) setPage(1);
+    restoredQuery.current = null;
+  }, [query]);
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(VIEW_KEY, JSON.stringify({ query, page }));
+    } catch {
+      // Storage blocked: the view just isn't kept.
+    }
+  }, [query, page]);
 
   const tr = (key, fallback) => {
     const v = t(key);
@@ -299,14 +173,84 @@ export const ComplaintsList = () => {
   // testing-tenant rows; the testing entrance lists ONLY them. Which tenants
   // are "testing" comes from the isTestingTenant flag (config fallback) —
   // see utils/testingTenant. Deployments without a testing setup are untouched.
-  const visibleWrappers = React.useMemo(() => {
-    const all = data?.ServiceWrappers || [];
-    return all.filter(({ service }) => isVisibleOnEntrance(service?.tenantId));
-  }, [data]);
+  const visibleWrappers = useMemo(
+    () => (data?.ServiceWrappers || []).filter(({ service }) => isVisibleOnEntrance(service?.tenantId)),
+    [data]
+  );
+
+  // ComplaintHierarchy per complaint tenant: code -> node, filled in by one
+  // TenantHierarchyLoader per distinct tenant (multi-authority deployments).
+  const complaintTenants = useMemo(
+    () => [...new Set(visibleWrappers.map(({ service }) => service?.tenantId).filter(Boolean))],
+    [visibleWrappers]
+  );
+  const [hierarchyByTenant, setHierarchyByTenant] = useState({});
+  const onHierarchy = React.useCallback((tenant, nodes) => {
+    const byCode = {};
+    nodes.forEach((n) => {
+      if (n?.code) byCode[n.code] = n;
+    });
+    setHierarchyByTenant((prev) => ({ ...prev, [tenant]: byCode }));
+  }, []);
+
+  const rows = useMemo(() => {
+    const names = Digit.SessionStorage.get("complaintHierarchyNameByCode") || {};
+    return visibleWrappers.map(({ service }) => {
+      const def = defsByCode[service.serviceCode];
+      // Prefer the complaint's OWN tenant hierarchy (the leaf and its parent
+      // category); fall back to the citizen-tenant serviceDefs.
+      const nodes = hierarchyByTenant[service.tenantId] || {};
+      const own = nodes[service.serviceCode];
+      const parent = own?.parentCode ? nodes[own.parentCode] : null;
+      const createdTime = service.auditDetails?.createdTime || 0;
+      const statusKey = `CS_COMMON_${service.applicationStatus}`;
+      const statusLabel = t(statusKey);
+      return {
+        id: service.serviceRequestId,
+        status: service.applicationStatus,
+        statusLabel: statusLabel && statusLabel !== statusKey ? statusLabel : service.applicationStatus,
+        concern: complaintLabel(t, service.serviceCode, own?.name || def?.name || names[service.serviceCode]),
+        category: parent
+          ? complaintLabel(t, parent.code, parent.name)
+          : def?.menuPath
+          ? complaintLabel(t, def.menuPath, def.menuPathName)
+          : "",
+        description: service.description || "",
+        createdTime,
+        filedOn: createdTime ? Digit.DateUtils.ConvertTimestampToDate(createdTime, "dd/MM/yyyy") : "",
+      };
+    });
+  }, [visibleWrappers, defsByCode, hierarchyByTenant, t]);
+
+  const matches = useMemo(() => searchComplaints(rows, query), [rows, query]);
+  const shown = pageOf(matches, page, PAGE_SIZE);
+  const searching = query.trim().length > 0;
+
+  const goCreate = () => history.push(`/${window.contextPath}/citizen/pgr/create-complaint`);
+  const detailsUrl = (id) => `${path}/${id}`;
+  const onOpen = (id, from) => trackEvent("pgr.my-complaints.open", { category: "pgr", label: from, value: searching ? 1 : 0 });
+  const open = (id, from) => {
+    onOpen(id, from);
+    history.push(detailsUrl(id));
+  };
+
+  const count = rows.length;
+  const countLabel =
+    count === 1 ? tr("CS_MY_COMPLAINTS_COUNT_ONE", "1 complaint") : tr("CS_MY_COMPLAINTS_COUNT", "{count} complaints").replace("{count}", count);
+  const range = tr("CS_MY_COMPLAINTS_RANGE", "{from}–{to} of {total}")
+    .replace("{from}", shown.from)
+    .replace("{to}", shown.to)
+    .replace("{total}", shown.total);
+  const headers = {
+    number: tr("CS_MY_COMPLAINTS_COL_NUMBER", "Complaint No."),
+    concern: tr("CS_MY_COMPLAINTS_COL_CONCERN", "Concern"),
+    status: tr("CS_MY_COMPLAINTS_COL_STATUS", "Status"),
+    filedOn: tr("CS_MY_COMPLAINTS_COL_FILED_ON", "Filed on"),
+  };
 
   return (
     <div
-      className="v2-scope"
+      className="v2-scope cms-complaints"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -315,40 +259,19 @@ export const ComplaintsList = () => {
         width: "100%",
       }}
     >
-      <header
-        style={{
-          padding: "1rem 1.5rem 0.5rem 1.5rem",
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "16px",
-          flexWrap: "wrap",
-        }}
-      >
-        <h1
-          style={{
-            fontSize: "1.5rem",
-            fontWeight: 700,
-            margin: 0,
-            color: "var(--color-primary-1, var(--color-primary-main, #c84c0e))",
-            lineHeight: 1.25,
-          }}
-        >
-          {tr(LOCALE.MY_COMPLAINTS, "My Complaints")}
-        </h1>
+      {complaintTenants.map((tenant) => (
+        <TenantHierarchyLoader key={tenant} tenantId={tenant} onLoad={onHierarchy} />
+      ))}
+      <header className="cms-complaints-head">
+        <div className="cms-complaints-title">
+          <h1>{tr(LOCALE.MY_COMPLAINTS, "My Complaints")}</h1>
+          {count > 0 ? <span className="cms-complaints-count">{countLabel}</span> : null}
+        </div>
         <Button onClick={goCreate} leading={<FilePlus2 className="h-4 w-4" />}>
           {tr("CS_COMMON_FILE_A_COMPLAINT", "File a Complaint")}
         </Button>
       </header>
-      <div
-        style={{
-          flex: "1 1 auto",
-          minHeight: 0,
-          overflowY: "auto",
-          padding: "0.5rem 1.5rem 1.5rem 1.5rem",
-        }}
-      >
+      <div className="cms-complaints-body">
         {isLoading ? (
           <div style={{ padding: "32px 0" }}>
             <Loader />
@@ -364,7 +287,7 @@ export const ComplaintsList = () => {
               </Button>
             }
           />
-        ) : !visibleWrappers.length ? (
+        ) : count === 0 ? (
           <EmptyState
             icon={<Inbox style={{ height: "1.5rem", width: "1.5rem" }} />}
             title={tr("CS_NO_COMPLAINTS_TITLE", "No complaints yet")}
@@ -376,23 +299,133 @@ export const ComplaintsList = () => {
             }
           />
         ) : (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "12px",
-            }}
-          >
-            {visibleWrappers.map(({ service }) => (
-              <ComplaintRow
-                key={service.serviceRequestId}
-                data={service}
-                t={t}
-                typeName={typeBySvcCode[service.serviceCode]?.name || (Digit.SessionStorage.get("complaintHierarchyNameByCode") || {})[service.serviceCode]}
-                onClick={() => history.push(`${path}/${service.serviceRequestId}`)}
+          <>
+            <div className="cms-complaints-search">
+              <Search aria-hidden className="cms-complaints-search-icon" />
+              <Input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onBlur={() => {
+                  if (searching) trackEvent("pgr.my-complaints.search", { category: "pgr", value: matches.length });
+                }}
+                placeholder={tr("CS_MY_COMPLAINTS_SEARCH", "Search for a complaint")}
+                aria-label={tr("CS_MY_COMPLAINTS_SEARCH", "Search for a complaint")}
+                className="cms-complaints-search-field"
               />
-            ))}
-          </div>
+            </div>
+            {matches.length === 0 ? (
+              <EmptyState
+                icon={<Search style={{ height: "1.5rem", width: "1.5rem" }} />}
+                title={tr("CS_MY_COMPLAINTS_NO_MATCH_TITLE", "No complaints match your search")}
+                body={tr("CS_MY_COMPLAINTS_NO_MATCH_BODY", "Try a complaint number, or a word from the description.")}
+                action={
+                  <Button variant="outline" onClick={() => setQuery("")}>
+                    {tr("CS_MY_COMPLAINTS_CLEAR_SEARCH", "Clear search")}
+                  </Button>
+                }
+              />
+            ) : (
+              <div className="cms-complaints-card">
+                <table className="cms-complaints-table">
+                  <colgroup>
+                    <col className="cms-complaints-col-number" />
+                    <col />
+                    <col className="cms-complaints-col-status" />
+                    <col className="cms-complaints-col-date" />
+                    <col className="cms-complaints-col-go" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th scope="col">{headers.number}</th>
+                      <th scope="col">{headers.concern}</th>
+                      <th scope="col">{headers.status}</th>
+                      <th scope="col">{headers.filedOn}</th>
+                      <th scope="col" aria-hidden />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shown.rows.map((row) => (
+                      // The number is the link for the keyboard; the rest of
+                      // the row takes the pointer there too.
+                      <tr key={row.id} onClick={() => open(row.id, "table")}>
+                        <td>
+                          <Link
+                            className="cms-complaints-number"
+                            to={detailsUrl(row.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpen(row.id, "table");
+                            }}
+                          >
+                            {row.id}
+                          </Link>
+                        </td>
+                        <td>
+                          <div className="cms-complaints-concern" title={row.concern}>
+                            {row.concern}
+                          </div>
+                          {row.description ? (
+                            <div className="cms-complaints-desc" title={row.description}>
+                              {row.description}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td>
+                          <StatusPill status={row.status} label={row.statusLabel} />
+                        </td>
+                        <td className="cms-complaints-date">{row.filedOn}</td>
+                        <td className="cms-complaints-go" aria-hidden>
+                          <ChevronRight />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <ul className="cms-complaints-list">
+                  {shown.rows.map((row) => (
+                    <li key={row.id}>
+                      <Link className="cms-complaints-item" to={detailsUrl(row.id)} onClick={() => onOpen(row.id, "list")}>
+                        <span className="cms-complaints-item-body">
+                          <span className="cms-complaints-item-top">
+                            <StatusPill status={row.status} label={row.statusLabel} />
+                            <span className="cms-complaints-date">{row.filedOn}</span>
+                          </span>
+                          <span className="cms-complaints-concern">{row.concern}</span>
+                          {row.description ? <span className="cms-complaints-desc">{row.description}</span> : null}
+                          <span className="cms-complaints-number">{row.id}</span>
+                        </span>
+                        <ChevronRight aria-hidden className="cms-complaints-go" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                <div className="cms-complaints-pager">
+                  <span>{range}</span>
+                  {shown.pages > 1 ? (
+                    <span className="cms-complaints-pager-buttons">
+                      <button
+                        type="button"
+                        onClick={() => setPage(shown.page - 1)}
+                        disabled={shown.page <= 1}
+                        aria-label={tr("CS_COMMON_PREVIOUS", "Previous")}
+                      >
+                        <ChevronLeft aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPage(shown.page + 1)}
+                        disabled={shown.page >= shown.pages}
+                        aria-label={tr("CS_COMMON_NEXT", "Next")}
+                      >
+                        <ChevronRight aria-hidden />
+                      </button>
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

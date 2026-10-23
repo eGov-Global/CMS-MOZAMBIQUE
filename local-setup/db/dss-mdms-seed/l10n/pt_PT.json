@@ -80,6 +80,16 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_CHANNEL",
+    "message": "Canal",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_CREATED",
+    "message": "Criadas",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_CSAT",
     "message": "CSAT",
     "module": "rainmaker-dashboard"
@@ -87,6 +97,11 @@
   {
     "code": "DASHBOARD_COL_DEPT",
     "message": "Dep.",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_DISTRICT",
+    "message": "Distrito",
     "module": "rainmaker-dashboard"
   },
   {
@@ -135,6 +150,11 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_RESOLUTION_RATE",
+    "message": "Taxa de resolução",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_RESOLVED",
     "message": "Resolvidas",
     "module": "rainmaker-dashboard"
@@ -147,6 +167,11 @@
   {
     "code": "DASHBOARD_COL_ROLE",
     "message": "Função",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_SHARE_PCT",
+    "message": "% das manifestações",
     "module": "rainmaker-dashboard"
   },
   {
@@ -170,8 +195,23 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_TOTAL",
+    "message": "Total",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_TREND",
+    "message": "Tendência",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_TYPE",
     "message": "Tipo",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_VOLUME",
+    "message": "Volume",
     "module": "rainmaker-dashboard"
   },
   {
@@ -182,6 +222,11 @@
   {
     "code": "DASHBOARD_COMMON_CATALOG_UNAVAILABLE",
     "message": "Catálogo indisponível",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_CITY",
+    "message": "Cidade",
     "module": "rainmaker-dashboard"
   },
   {
@@ -215,6 +260,11 @@
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COMMON_OFFICER",
+    "message": "Funcionário",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COMMON_REMOVE",
     "message": "Remover",
     "module": "rainmaker-dashboard"
@@ -232,6 +282,36 @@
   {
     "code": "DASHBOARD_COMMON_UPDATED",
     "message": "Atualizado",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_JUST_NOW",
+    "message": "agora mesmo",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_MIN_AGO",
+    "message": "há {{n}} min",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_HR_AGO",
+    "message": "há {{n}} h",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_HRS_AGO",
+    "message": "há {{n}} h",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_DAY_AGO",
+    "message": "há {{n}} dia",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_DAYS_AGO",
+    "message": "há {{n}} dias",
     "module": "rainmaker-dashboard"
   },
   {
@@ -307,6 +387,11 @@
   {
     "code": "DASHBOARD_FILTERS_ALL_WARDS",
     "message": "Todos os bairros",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_FILTERS_ALL_DISTRICTS",
+    "message": "Todos os distritos",
     "module": "rainmaker-dashboard"
   },
   {
@@ -447,6 +532,11 @@
   {
     "code": "DASHBOARD_HEADER_KPIS_AVAILABLE",
     "message": "KPIs disponíveis para a sua função",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_HEADER_LANGUAGE",
+    "message": "Idioma",
     "module": "rainmaker-dashboard"
   },
   {

@@ -95,6 +95,16 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_CHANNEL",
+    "message": "Channel",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_CREATED",
+    "message": "Created",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_CSAT",
     "message": "CSAT",
     "module": "rainmaker-dashboard"
@@ -102,6 +112,11 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   {
     "code": "DASHBOARD_COL_DEPT",
     "message": "Dept",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_DISTRICT",
+    "message": "District",
     "module": "rainmaker-dashboard"
   },
   {
@@ -150,6 +165,11 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_RESOLUTION_RATE",
+    "message": "Resolution",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_RESOLVED",
     "message": "Resolved",
     "module": "rainmaker-dashboard"
@@ -162,6 +182,11 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   {
     "code": "DASHBOARD_COL_ROLE",
     "message": "Role",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_SHARE_PCT",
+    "message": "% of complaints",
     "module": "rainmaker-dashboard"
   },
   {
@@ -181,12 +206,27 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   },
   {
     "code": "DASHBOARD_COL_SUBTYPE",
-    "message": "Subtype",
+    "message": "Subcategory",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_TOTAL",
+    "message": "Total",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_TREND",
+    "message": "Trend",
     "module": "rainmaker-dashboard"
   },
   {
     "code": "DASHBOARD_COL_TYPE",
-    "message": "Type",
+    "message": "Category",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_VOLUME",
+    "message": "Volume",
     "module": "rainmaker-dashboard"
   },
   {
@@ -197,6 +237,11 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   {
     "code": "DASHBOARD_COMMON_CATALOG_UNAVAILABLE",
     "message": "Catalog unavailable",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_CITY",
+    "message": "City",
     "module": "rainmaker-dashboard"
   },
   {
@@ -230,6 +275,11 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COMMON_OFFICER",
+    "message": "Officer",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COMMON_REMOVE",
     "message": "Remove",
     "module": "rainmaker-dashboard"
@@ -247,6 +297,36 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   {
     "code": "DASHBOARD_COMMON_UPDATED",
     "message": "Updated",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_JUST_NOW",
+    "message": "just now",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_MIN_AGO",
+    "message": "{{n}} min ago",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_HR_AGO",
+    "message": "{{n}} hr ago",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_HRS_AGO",
+    "message": "{{n}} hrs ago",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_DAY_AGO",
+    "message": "{{n}} day ago",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_DAYS_AGO",
+    "message": "{{n}} days ago",
     "module": "rainmaker-dashboard"
   },
   {
@@ -316,12 +396,17 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   },
   {
     "code": "DASHBOARD_FILTERS_ALL_TYPES",
-    "message": "All types",
+    "message": "All categories",
     "module": "rainmaker-dashboard"
   },
   {
     "code": "DASHBOARD_FILTERS_ALL_WARDS",
     "message": "All wards",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_FILTERS_ALL_DISTRICTS",
+    "message": "All districts",
     "module": "rainmaker-dashboard"
   },
   {
@@ -331,12 +416,12 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   },
   {
     "code": "DASHBOARD_FILTERS_COMPLAINT_TYPE",
-    "message": "Complaint type",
+    "message": "Complaint category",
     "module": "rainmaker-dashboard"
   },
   {
     "code": "DASHBOARD_FILTERS_COMPLAINT_TYPE_FILTER",
-    "message": "Complaint type filter",
+    "message": "Complaint category filter",
     "module": "rainmaker-dashboard"
   },
   {
@@ -411,7 +496,7 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   },
   {
     "code": "DASHBOARD_GROUPBY_LEVEL_SUB_TYPE",
-    "message": "Sub-type",
+    "message": "Subcategory",
     "module": "rainmaker-dashboard"
   },
   {
@@ -462,6 +547,11 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   {
     "code": "DASHBOARD_HEADER_KPIS_AVAILABLE",
     "message": "KPIs available to your role",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_HEADER_LANGUAGE",
+    "message": "Language",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1231,7 +1321,7 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   },
   {
     "code": "DASHBOARD_TYPE_FILTER_NOT_APPLIED",
-    "message": "Type filter not applied",
+    "message": "Category filter not applied",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1311,12 +1401,12 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   },
   {
     "code": "CMS-DASHBOARD.DASHBOARD_KPI_CL_CHART_COMPLAINTS_BY_TYPE",
-    "message": "Complaints by type",
+    "message": "Complaints by category",
     "module": "rainmaker-dashboard"
   },
   {
     "code": "CMS-DASHBOARD.DASHBOARD_KPI_CL_CHART_COMPLAINTS_BY_TYPE_SUBTITLE",
-    "message": "Complaints filed, by type",
+    "message": "Complaints filed, by category",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1401,7 +1491,7 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   },
   {
     "code": "CMS-DASHBOARD.DASHBOARD_KPI_CL_CHART_OPEN_BY_TYPE_STAGE_SUBTITLE",
-    "message": "Subtypes with the most open complaints, each broken down by which workflow stage they're stuck in.",
+    "message": "Subcategories with the most open complaints, each broken down by which workflow stage they're stuck in.",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1536,12 +1626,12 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   },
   {
     "code": "CMS-DASHBOARD.DASHBOARD_KPI_CL_TABLE_COMPLAINT_TYPE_DETAILS",
-    "message": "Complaint type details",
+    "message": "Complaint category details",
     "module": "rainmaker-dashboard"
   },
   {
     "code": "CMS-DASHBOARD.DASHBOARD_KPI_CL_TABLE_COMPLAINT_TYPE_DETAILS_SUBTITLE",
-    "message": "Resolution, SLA and reopen metrics per complaint type - all complaints, narrowed by the date filter",
+    "message": "Resolution, SLA and reopen metrics per complaint category - all complaints, narrowed by the date filter",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1556,12 +1646,12 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   },
   {
     "code": "CMS-DASHBOARD.DASHBOARD_KPI_CL_TABLE_RECURRING_WARD_SUBTYPE",
-    "message": "Recurring complaints by ward & sub-type",
+    "message": "Recurring complaints by ward & subcategory",
     "module": "rainmaker-dashboard"
   },
   {
     "code": "CMS-DASHBOARD.DASHBOARD_KPI_CL_TABLE_RECURRING_WARD_SUBTYPE_SUBTITLE",
-    "message": "Ward × subtype pairs with ≥ 3 complaints in period",
+    "message": "Ward × subcategory pairs with ≥ 3 complaints in period",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1576,12 +1666,12 @@ export const DASHBOARD_L10N_MESSAGES: { code: string; message: string; module: s
   },
   {
     "code": "CMS-DASHBOARD.DASHBOARD_KPI_CL_TABLE_SUBTYPE_PERFORMANCE",
-    "message": "Complaint sub-type performance",
+    "message": "Complaint subcategory performance",
     "module": "rainmaker-dashboard"
   },
   {
     "code": "CMS-DASHBOARD.DASHBOARD_KPI_CL_TABLE_SUBTYPE_PERFORMANCE_SUBTITLE",
-    "message": "Share, resolution time and SLA by subtype",
+    "message": "Share, resolution time and SLA by subcategory",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1714,6 +1804,16 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_CHANNEL",
+    "message": "Canal",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_CREATED",
+    "message": "Criadas",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_CSAT",
     "message": "CSAT",
     "module": "rainmaker-dashboard"
@@ -1721,6 +1821,11 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
   {
     "code": "DASHBOARD_COL_DEPT",
     "message": "Dep.",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_DISTRICT",
+    "message": "Distrito",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1769,6 +1874,11 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_RESOLUTION_RATE",
+    "message": "Taxa de resolução",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_RESOLVED",
     "message": "Resolvidas",
     "module": "rainmaker-dashboard"
@@ -1781,6 +1891,11 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
   {
     "code": "DASHBOARD_COL_ROLE",
     "message": "Função",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_SHARE_PCT",
+    "message": "% das manifestações",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1804,8 +1919,23 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COL_TOTAL",
+    "message": "Total",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_TREND",
+    "message": "Tendência",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COL_TYPE",
     "message": "Tipo",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COL_VOLUME",
+    "message": "Volume",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1816,6 +1946,11 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
   {
     "code": "DASHBOARD_COMMON_CATALOG_UNAVAILABLE",
     "message": "Catálogo indisponível",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_CITY",
+    "message": "Cidade",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1849,6 +1984,11 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
     "module": "rainmaker-dashboard"
   },
   {
+    "code": "DASHBOARD_COMMON_OFFICER",
+    "message": "Funcionário",
+    "module": "rainmaker-dashboard"
+  },
+  {
     "code": "DASHBOARD_COMMON_REMOVE",
     "message": "Remover",
     "module": "rainmaker-dashboard"
@@ -1866,6 +2006,36 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
   {
     "code": "DASHBOARD_COMMON_UPDATED",
     "message": "Atualizado",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_JUST_NOW",
+    "message": "agora mesmo",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_MIN_AGO",
+    "message": "há {{n}} min",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_HR_AGO",
+    "message": "há {{n}} h",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_HRS_AGO",
+    "message": "há {{n}} h",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_DAY_AGO",
+    "message": "há {{n}} dia",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_COMMON_UPDATED_DAYS_AGO",
+    "message": "há {{n}} dias",
     "module": "rainmaker-dashboard"
   },
   {
@@ -1941,6 +2111,11 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
   {
     "code": "DASHBOARD_FILTERS_ALL_WARDS",
     "message": "Todos os bairros",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_FILTERS_ALL_DISTRICTS",
+    "message": "Todos os distritos",
     "module": "rainmaker-dashboard"
   },
   {
@@ -2081,6 +2256,11 @@ export const DASHBOARD_L10N_MESSAGES_PT_PT: { code: string; message: string; mod
   {
     "code": "DASHBOARD_HEADER_KPIS_AVAILABLE",
     "message": "KPIs disponíveis para a sua função",
+    "module": "rainmaker-dashboard"
+  },
+  {
+    "code": "DASHBOARD_HEADER_LANGUAGE",
+    "message": "Idioma",
     "module": "rainmaker-dashboard"
   },
   {

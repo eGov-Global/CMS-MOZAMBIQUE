@@ -144,9 +144,18 @@ public class WorkflowService {
                 throw new CustomException("WORKFLOW_NOT_FOUND", "The workflow object is not found");
 
             Map<String, Workflow> businessIdToWorkflow = getWorkflow(processInstanceResponse.getProcessInstances());
+            Map<String, ProcessInstance> businessIdToInstance = new HashMap<>();
+            processInstanceResponse.getProcessInstances()
+                    .forEach(pi -> businessIdToInstance.put(pi.getBusinessId(), pi));
+            boolean citizenCaller = ChronologyService.RequesterKind.of(requestInfo) == ChronologyService.RequesterKind.CITIZEN;
 
             tenantSpecificWrappers.forEach(pgrEntity -> {
-                pgrEntity.setWorkflow(businessIdToWorkflow.get(pgrEntity.getService().getServiceRequestId()));
+                String serviceRequestId = pgrEntity.getService().getServiceRequestId();
+                Workflow workflow = businessIdToWorkflow.get(serviceRequestId);
+                if (citizenCaller)
+                    hideInternalStepContent(workflow, businessIdToInstance.get(serviceRequestId),
+                            pgrEntity.getService().getAccountId());
+                pgrEntity.setWorkflow(workflow);
             });
 
             enrichedServiceWrappers.addAll(tenantSpecificWrappers);
@@ -249,6 +258,28 @@ public class WorkflowService {
             }
         }
         return false;
+    }
+
+    /**
+     * #193: the search response carries the LATEST workflow step's comment and
+     * attachments, and the citizen's complaint page shows those attachments.
+     * For a citizen caller they are kept only when the chronology would show
+     * them too: the citizen's own step (APPLY / REOPEN / RATE …) or a step
+     * addressed to them (ChronologyService.CITIZEN_CONTENT_ACTIONS — RESOLVE,
+     * REJECT). Any other step is an internal working step: action and state
+     * stay, its comment and documents do not.
+     */
+    static void hideInternalStepContent(Workflow workflow, ProcessInstance latestStep, String complainantUuid) {
+        if (workflow == null)
+            return;
+        String actorUuid = latestStep != null && latestStep.getAssigner() != null ? latestStep.getAssigner().getUuid() : null;
+        boolean ownStep = complainantUuid != null && complainantUuid.equals(actorUuid);
+        String action = workflow.getAction();
+        boolean addressedToCitizen = action != null && ChronologyService.CITIZEN_CONTENT_ACTIONS.contains(action);
+        if (ownStep || addressedToCitizen)
+            return;
+        workflow.setComments(null);
+        workflow.setVerificationDocuments(null);
     }
 
     /**

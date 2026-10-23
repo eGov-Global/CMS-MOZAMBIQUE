@@ -74,7 +74,7 @@ public class AnalyticsServiceParamValidationTest {
     @Test
     public void undeclaredParamsAreNotValidated() {
         service.validateAllowedParams(def(SEEDED_PARAMS),
-                json("{\"ward\":\"W1\",\"serviceCode\":\"x\",\"series\":\"daily\"}"));
+                json("{\"zone\":\"Z1\",\"serviceCode\":\"x\",\"series\":\"daily\"}"));
     }
 
     @Test
