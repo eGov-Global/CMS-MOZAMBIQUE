@@ -15,8 +15,11 @@ import { receptionOnlyCreatedByUuid } from "./UICustomizations";
  *   feature flag (Visibility V1 My/All tabs). When OFF the legacy
  *   assigned-to-me / assigned-to-all radio is restored in the filter card,
  *   since the tabs that replaced it are not rendered.
+ * @param {boolean} visibilityServerSide — InboxVisibilityConfig.serverSide.
+ *   When ON, pgr-services resolves My Complaints (created-by for creator
+ *   roles), so the reception "only my complaints" checkbox is not rendered.
  */
-const PGRSearchInboxConfig = (visibilityEnabled = true) => {
+const PGRSearchInboxConfig = (visibilityEnabled = true, visibilityServerSide = false) => {
     const tenantId = Digit.ULBService.getCurrentTenantId();
     return {
         label: "CS_COMMON_INBOX",
@@ -225,7 +228,7 @@ const PGRSearchInboxConfig = (visibilityEnabled = true) => {
                         // reception role — the same condition under which the search
                         // scopes to createdBy at all, so the control never appears
                         // without something to control.
-                        ...(receptionOnlyCreatedByUuid()
+                        ...(!visibilityServerSide && receptionOnlyCreatedByUuid()
                             ? [
                                   {
                                       label: "",

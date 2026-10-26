@@ -192,7 +192,7 @@ public class PolicyDrivenScopeResolver {
         else
             log.info("PolicyDrivenScopeResolver: userName='{}' departments={} jurisdictions={} (policy-driven)",
                     u.getUserName(), deptList, jurisdictionList);
-        return new PgrSearchScope(tenantId, stateLevel, null, deptList, jurisdictionList);
+        return new PgrSearchScope(tenantId, stateLevel, null, deptList, jurisdictionList, u.getUuid());
     }
 
     /**

@@ -44,6 +44,8 @@ public class PGRQueryBuilder {
 
     private static final String RESOLVED_COMPLAINTS_QUERY = "select count(*) from {schema}.eg_pgr_service_v2 where applicationstatus='CLOSEDAFTERRESOLUTION' and tenantid=? and lastmodifiedtime>? ";
 
+    private static final String CREATED_BY_IDS_QUERY = "select servicerequestid from {schema}.eg_pgr_service_v2 where createdby=? and (tenantid=? or tenantid like ?)";
+
     private static final String AVERAGE_RESOLUTION_TIME_QUERY = "select round(avg(lastmodifiedtime-createdtime)/86400000) from {schema}.eg_pgr_service_v2 where applicationstatus='CLOSEDAFTERRESOLUTION' and tenantid=? ";
 
 
@@ -311,6 +313,16 @@ public class PGRQueryBuilder {
             preparedStmtList.add(scope.citizenUuid);
         }
 
+        // A complaint the caller created passes the department/jurisdiction axes:
+        // ( createdby = me OR ( 1 = 1 AND <department> AND <jurisdiction> ) ).
+        boolean creatorExempt = scope.creatorUuid != null
+                && (scope.departmentCodes != null || scope.jurisdictionCodes != null);
+        if (creatorExempt) {
+            addClauseIfRequired(preparedStmtList, builder);
+            builder.append(" ( ser.createdby = ? OR ( 1 = 1 ");
+            preparedStmtList.add(scope.creatorUuid);
+        }
+
         // null vs empty is deliberately NOT collapsed via CollectionUtils.isEmpty here: null means
         // "axis not restricted" (skip the clause, matching every other axis's null/no-restriction
         // semantic), but a non-null EMPTY list means "this axis IS restricted and resolved to zero
@@ -336,6 +348,10 @@ public class PGRQueryBuilder {
                 builder.append(" ads.locality IN (").append(createQuery(scope.jurisdictionCodes)).append(")");
                 addToPreparedStatement(preparedStmtList, scope.jurisdictionCodes);
             }
+        }
+
+        if (creatorExempt) {
+            builder.append(" ) ) ");
         }
     }
 
@@ -494,6 +510,13 @@ public class PGRQueryBuilder {
 		preparedStmtListAverageResolutionTime.add(tenantId);
 
 		return query.toString();
+	}
+
+	public String getCreatedByIds(String tenantId, String createdBy, List<Object> preparedStmtList) {
+		preparedStmtList.add(createdBy);
+		preparedStmtList.add(tenantId);
+		preparedStmtList.add(tenantId + ".%");
+		return CREATED_BY_IDS_QUERY;
 	}
 
 }

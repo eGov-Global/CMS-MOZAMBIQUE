@@ -688,6 +688,13 @@
         "serverSide": {
           "type": "boolean",
           "description": "Resolve visibility in pgr-services (/request/inbox/_search, reportee-aware Step-2 resolver) instead of composing it client-side. Requires PGR_VISIBILITY_ENABLED on the deployment. Default false."
+        },
+        "creatorRoles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Roles whose My Complaints tab lists the complaints they created as well as those assigned to them (server-side resolver)."
         }
       },
       "x-ref-schema": [],

@@ -280,6 +280,12 @@ public class AccessPolicyRegistry {
                         Map.of("==", List.of(Map.of("var", "user.type"), "CITIZEN")),
                         Map.of("==", List.of(Map.of("var", "resource.complaint.accountId"), Map.of("var", "user.uuid")))
                 )),
+                // An employee always sees the complaints they created (mirrors PgrSearchScope.creatorUuid in SQL).
+                Map.of("and", List.of(
+                        Map.of("==", List.of(Map.of("var", "user.type"), "EMPLOYEE")),
+                        Map.of("!", Map.of("!", Map.of("var", "user.uuid"))),
+                        Map.of("==", List.of(Map.of("var", "resource.complaint.createdBy"), Map.of("var", "user.uuid")))
+                )),
                 Map.of("and", employeeClauseParts)
         ));
 

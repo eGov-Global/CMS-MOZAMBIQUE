@@ -505,6 +505,46 @@ class AccessPolicyRegistryTest {
         assertFalse(evaluator.isAllowed(generated, wrongBoundaryData));
     }
 
+    // Mirrors PgrSearchScope.creatorUuid on the SQL side: an employee always sees the complaints
+    // they created, outside their department/jurisdiction — otherwise this re-check drops the rows
+    // the SQL scope let through.
+    @Test
+    void getConditionLetsAnEmployeeSeeTheComplaintsTheyCreated() {
+        Map<String, Object> scope = Map.of(
+                "axes", List.of("department", "jurisdiction"),
+                "default", Map.of("department", "OWN", "jurisdiction", "OWN"));
+        Map<String, Object> action = new LinkedHashMap<>();
+        action.put("id", 2008);
+        action.put("url", AccessPolicyRegistry.PGR_REQUEST_SEARCH_URL);
+        action.put("resource", Map.of("complaint", Map.of("scope", scope)));
+        RequestInfo requestInfo = requestInfo("EMPLOYEE");
+        when(mdmsUtils.fetchAccessControlActions(requestInfo, "pg.city", AccessPolicyRegistry.PGR_REQUEST_SEARCH_URL))
+                .thenReturn(List.of(action));
+
+        String generated = registry.getCondition(AccessPolicyRegistry.PGR_REQUEST_SEARCH_URL, requestInfo, "pg.city");
+        PolicyEvaluator evaluator = new PolicyEvaluator();
+        Map<String, Object> attributes = Map.of(
+                "tenantWide", false,
+                "departments", List.of("DEPT_1"),
+                "jurisdictions", List.of("WARD_001"));
+
+        Map<String, Object> ownComplaintElsewhere = Map.of(
+                "user", Map.of("uuid", "emp-1", "type", "EMPLOYEE", "attributes", attributes),
+                "resource", Map.of("complaint", Map.of("department", "NA", "boundary", "WARD_999", "createdBy", "emp-1")));
+        assertTrue(evaluator.isAllowed(generated, ownComplaintElsewhere));
+
+        Map<String, Object> someoneElsesComplaintElsewhere = Map.of(
+                "user", Map.of("uuid", "emp-1", "type", "EMPLOYEE", "attributes", attributes),
+                "resource", Map.of("complaint", Map.of("department", "NA", "boundary", "WARD_999", "createdBy", "emp-2")));
+        assertFalse(evaluator.isAllowed(generated, someoneElsesComplaintElsewhere));
+
+        // No uuid on the caller and no creator on the complaint: two missing values must not match.
+        Map<String, Object> noIdentity = Map.of(
+                "user", Map.of("type", "EMPLOYEE", "attributes", attributes),
+                "resource", Map.of("complaint", Map.of("department", "NA", "boundary", "WARD_999")));
+        assertFalse(evaluator.isAllowed(generated, noIdentity));
+    }
+
     @Test
     void getConditionFailsClosedOnAnUnsupportedAxisRatherThanSilentlyDroppingIt() {
         // An axis outside ScopePolicy.SUPPORTED_AXES must fail the WHOLE generated condition

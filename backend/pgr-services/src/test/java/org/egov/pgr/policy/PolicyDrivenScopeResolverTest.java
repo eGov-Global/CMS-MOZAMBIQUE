@@ -214,6 +214,43 @@ class PolicyDrivenScopeResolverTest {
     }
 
     @Test
+    void employeeScopeCarriesTheCallerAsCreator() {
+        ScopePolicy policy = ScopePolicy.of(List.of("department"), Map.of("department", ScopeLevel.OWN));
+        stubHrms(List.of(Map.of("department", "DEPT_1", "isCurrentAssignment", true)), List.of());
+
+        PgrSearchScope scope = resolver.resolve(requestInfo("emp1", "EMPLOYEE", "CMS_RECEPTION_OFFICER"), "pg.city", 2, policy);
+
+        assertEquals("emp1", scope.creatorUuid);
+    }
+
+    @Test
+    void citizenScopeHasNoCreatorException() {
+        ScopePolicy policy = ScopePolicy.of(List.of("department"), Map.of("department", ScopeLevel.OWN));
+        User user = new User();
+        user.setUuid("cit1");
+        user.setType("CITIZEN");
+        user.setTenantId("pg.city");
+        user.setRoles(List.of(Role.builder().code("CITIZEN").build()));
+        RequestInfo requestInfo = new RequestInfo();
+        requestInfo.setUserInfo(user);
+
+        PgrSearchScope scope = resolver.resolve(requestInfo, "pg.city", 2, policy);
+
+        assertEquals("cit1", scope.citizenUuid);
+        assertNull(scope.creatorUuid);
+    }
+
+    @Test
+    void deniedScopeHasNoCreatorException() {
+        ScopePolicy policy = ScopePolicy.of(List.of("department"), Map.of("department", ScopeLevel.OWN));
+
+        PgrSearchScope scope = resolver.resolve(requestInfo("emp1", "EMPLOYEE", "GRO", "other.city"), "pg.city", 2, policy);
+
+        assertEquals(List.of("__scope_denied__"), scope.departmentCodes);
+        assertNull(scope.creatorUuid);
+    }
+
+    @Test
     void roleConfiguredToSeeAllDepartmentsWithinBoundary() {
         // The concrete "higher role sees all complaints of a boundary across depts" use case:
         // SUPERVISOR's department level is ALL, jurisdiction stays OWN.
