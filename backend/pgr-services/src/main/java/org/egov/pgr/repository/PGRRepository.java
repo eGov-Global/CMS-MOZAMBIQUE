@@ -2,8 +2,10 @@ package org.egov.pgr.repository;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.egov.pgr.policy.PgrSearchScope;
@@ -199,6 +201,17 @@ public class PGRRepository {
         return count;
     }
 
+    public Set<String> getServiceRequestIdsCreatedBy(String tenantId, String createdBy) {
+        List<Object> preparedStmtList = new ArrayList<>();
+        String query = queryBuilder.getCreatedByIds(tenantId, createdBy, preparedStmtList);
+        try {
+            query = utils.replaceSchemaPlaceholder(query, tenantId);
+        } catch (Exception e) {
+            throw new CustomException("PGR_SEARCH_ERROR",
+                    "TenantId length is not sufficient to replace query schema in a multi state instance");
+        }
+        return new HashSet<>(jdbcTemplate.queryForList(query, String.class, preparedStmtList.toArray()));
+    }
 
 	public Map<String, Integer> fetchDynamicData(String tenantId) {
 		List<Object> preparedStmtListCompalintsResolved = new ArrayList<>();

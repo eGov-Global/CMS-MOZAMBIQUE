@@ -1647,7 +1647,7 @@ export const UICustomizations = {
       // `!== false` default would report "checked" no matter what the user did.
       const ownCreatedByUuid = receptionOnlyCreatedByUuid();
       const onlyMyComplaints = filterForm?.onlyMyComplaints !== false;
-      if (ownCreatedByUuid && onlyMyComplaints) params.createdBy = ownCreatedByUuid;
+      if (ownCreatedByUuid && onlyMyComplaints && !additionalDetails?.serverSide) params.createdBy = ownCreatedByUuid;
 
       // Search form fields
       if (searchForm.complaintNumber) {
@@ -1721,7 +1721,7 @@ export const UICustomizations = {
       const isComplaintLookup = Boolean(params.serviceRequestId);
       if (statuses.length > 0) {
         params.applicationStatus = statuses;
-      } else if (!isComplaintLookup) {
+      } else if (!isComplaintLookup && !(additionalDetails?.serverSide && activeTab === "MY" && ownCreatedByUuid)) {
         params.applicationStatus = allStates.length > 0 ? allStates : OPEN_STATES;
       }
 

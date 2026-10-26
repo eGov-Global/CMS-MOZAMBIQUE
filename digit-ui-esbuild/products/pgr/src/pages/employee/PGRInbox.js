@@ -117,7 +117,7 @@ const PGRSearchInbox = () => {
   // Fallback to static config if MDMS is not available. The static config
   // shape depends on the visibility flag: legacy mode restores the
   // assigned-to-me radio the tabs replaced.
-  let configs = mdmsData || PGRSearchInboxConfig(visibilityEnabled);
+  let configs = mdmsData || PGRSearchInboxConfig(visibilityEnabled, visibilityServerSide);
 
   // Inject mobile validation rules from MDMS into the search config
   if (configs && validationRules && configs.sections?.search?.uiConfig?.fields) {

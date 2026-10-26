@@ -54,6 +54,7 @@ public class PolicyInputBuilder {
         Map<String, Object> complaint = new LinkedHashMap<>();
         complaint.put("accountId", service.getAccountId());
         complaint.put("department", extractDepartment(service));
+        complaint.put("createdBy", service.getAuditDetails() != null ? service.getAuditDetails().getCreatedBy() : null);
         // Deliberately no "tenantId" here: AccessPolicyRegistry.AXIS_FIELDS has no axis mapped to
         // resource.complaint.tenantId, so a JsonLogic condition referencing it would silently
         // consult an undefined value (Tier-2 drift risk, since Tier-1's SQL scope has no matching

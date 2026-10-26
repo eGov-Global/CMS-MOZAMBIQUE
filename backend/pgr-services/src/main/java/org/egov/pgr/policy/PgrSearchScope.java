@@ -26,14 +26,21 @@ public final class PgrSearchScope {
     public final String citizenUuid;              // nullable: set => restrict to this account
     public final List<String> departmentCodes;    // nullable/empty => no department restriction
     public final List<String> jurisdictionCodes;  // nullable/empty => no jurisdiction restriction
+    public final String creatorUuid;              // nullable: set => complaints this user created pass the department/jurisdiction axes
 
     public PgrSearchScope(String tenantId, boolean tenantStateLevel, String citizenUuid,
                            List<String> departmentCodes, List<String> jurisdictionCodes) {
+        this(tenantId, tenantStateLevel, citizenUuid, departmentCodes, jurisdictionCodes, null);
+    }
+
+    public PgrSearchScope(String tenantId, boolean tenantStateLevel, String citizenUuid,
+                           List<String> departmentCodes, List<String> jurisdictionCodes, String creatorUuid) {
         this.tenantId = tenantId;
         this.tenantStateLevel = tenantStateLevel;
         this.citizenUuid = citizenUuid;
         this.departmentCodes = departmentCodes;
         this.jurisdictionCodes = jurisdictionCodes;
+        this.creatorUuid = creatorUuid;
     }
 
     /**

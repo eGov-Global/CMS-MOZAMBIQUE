@@ -174,4 +174,66 @@ class PGRQueryBuilderTest {
         assertTrue(query.contains("1 = 0"));
         assertFalse(query.contains("ads.locality IN"));
     }
+
+    // A complaint the caller created passes the department/jurisdiction axes, so a reception
+    // officer sees what they filed for another department (or before it is routed at all).
+    @Test
+    void creatorScopeLetsOwnComplaintsPassTheRestrictedAxes() {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").build();
+        List<Object> preparedStmtList = new ArrayList<>();
+        PgrSearchScope scope = new PgrSearchScope("pg.city", false, null, List.of("SANITATION"), List.of("WARD_5"), "emp-1");
+
+        String query = queryBuilder.getPGRSearchQuery(criteria, preparedStmtList, null, scope);
+
+        assertTrue(query.contains("( ser.createdby = ? OR ( 1 = 1  AND ser.additionaldetails->>'department' IN"));
+        assertTrue(query.contains("ads.locality IN"));
+        assertTrue(query.contains(" ) ) "));
+        assertTrue(preparedStmtList.indexOf("emp-1") < preparedStmtList.indexOf("SANITATION"));
+        assertTrue(preparedStmtList.indexOf("SANITATION") < preparedStmtList.indexOf("WARD_5"));
+    }
+
+    @Test
+    void creatorScopeKeepsTheTenantPredicateOutsideTheException() {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").build();
+        List<Object> preparedStmtList = new ArrayList<>();
+        PgrSearchScope scope = new PgrSearchScope("pg.city", false, null, List.of("SANITATION"), null, "emp-1");
+
+        String query = queryBuilder.getPGRSearchQuery(criteria, preparedStmtList, null, scope);
+
+        assertTrue(query.indexOf("ser.tenantId = ?") < query.indexOf("ser.createdby = ?"));
+    }
+
+    @Test
+    void creatorWithoutRestrictedAxesAddsNoCreatorPredicate() {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").build();
+        List<Object> preparedStmtList = new ArrayList<>();
+        PgrSearchScope scope = new PgrSearchScope("pg.city", false, null, null, null, "emp-1");
+
+        String query = queryBuilder.getPGRSearchQuery(criteria, preparedStmtList, null, scope);
+
+        assertFalse(query.contains("ser.createdby = ?"));
+        assertFalse(preparedStmtList.contains("emp-1"));
+    }
+
+    @Test
+    void countQueryAppliesTheCreatorException() {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").build();
+        List<Object> preparedStmtList = new ArrayList<>();
+        PgrSearchScope scope = new PgrSearchScope("pg.city", false, null, List.of("SANITATION"), null, "emp-1");
+
+        String query = queryBuilder.getCountQuery(criteria, preparedStmtList, null, scope);
+
+        assertTrue(query.contains("ser.createdby = ?"));
+        assertEquals(1, preparedStmtList.stream().filter("emp-1"::equals).count());
+    }
+
+    @Test
+    void createdByIdsQueryMatchesTheTenantAndItsCities() {
+        List<Object> preparedStmtList = new ArrayList<>();
+
+        String query = queryBuilder.getCreatedByIds("mz", "emp-1", preparedStmtList);
+
+        assertTrue(query.contains("createdby=?"));
+        assertEquals(List.of("emp-1", "mz", "mz.%"), preparedStmtList);
+    }
 }
