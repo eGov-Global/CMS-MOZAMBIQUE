@@ -6,6 +6,7 @@
 const { assign } = require('xstate');
 const dialog = require('../util/dialog');
 const State = require('./flow-state');
+const { listPickerMessage } = require('./list-picker.js');
 
 // A bare function is shorthand for { set: fn }; a step may have neither.
 function normalizeOutcome(state, options) {
@@ -64,6 +65,7 @@ class WalkState extends State {
   get pathSlot() { return this.key + 'Path'; }
   get stepSlot() { return this.key + 'Step'; }
   get grammerSlot() { return this.key + 'Grammer'; }
+  get pickerSlot() { return this.key + 'Picker'; }
 
   getPath(context) {
     return context[this.pathSlot] || [];
@@ -118,8 +120,11 @@ class WalkState extends State {
               const list = dialog.constructListPromptAndGrammer(options || [], messageBundle || {}, context.user.locale, false, goback);
               context[this.grammerSlot] = list.grammer;
               context.lastPrompt = this.renderPreamble(context) + list.prompt;
+              // the level name heads the picker; the text stays the resume prompt
+              const { levelLabel } = context[this.stepSlot] || {};
+              context[this.pickerSlot] = listPickerMessage(context, levelLabel, list.labels);
             }),
-            (context) => dialog.sendMessage(context, context.lastPrompt)
+            (context) => dialog.sendMessage(context, context[this.pickerSlot] || context.lastPrompt)
           ],
 
           on: { USER_MESSAGE: 'process' }

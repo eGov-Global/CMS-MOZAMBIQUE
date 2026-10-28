@@ -156,6 +156,8 @@ module.exports = {
       category: { en_IN: 'Category', pt_PT: 'Categoria' },
       subject: { en_IN: 'Subject', pt_PT: 'Assunto' },
       location: { en_IN: 'Location', pt_PT: 'Local' },
+      district: { en_IN: 'District', pt_PT: 'Distrito' },
+      municipality: { en_IN: 'Municipality', pt_PT: 'Município' },
       institution: { en_IN: 'Institution', pt_PT: 'Instituição' },
       description: { en_IN: 'Description', pt_PT: 'Descrição' },
       confidentiality: { en_IN: 'Confidentiality', pt_PT: 'Confidencialidade' },
