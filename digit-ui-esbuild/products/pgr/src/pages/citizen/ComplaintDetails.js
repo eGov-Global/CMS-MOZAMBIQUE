@@ -127,6 +127,7 @@ function WorkflowComponent({ complaintDetails, id }) {
       // Who the complainant IS — the actor/complainant split matches on this
       // uuid, not on the CITIZEN role (officers can hold it too).
       complainantUuid={complaintDetails?.service?.citizen?.uuid || complaintDetails?.service?.accountId}
+      complainant={complaintDetails?.service?.citizen}
     />
   );
 }
