@@ -55,7 +55,7 @@ const isCitizenActor = (person) =>
 // role, and classifying them as "citizen" leaked internal comments and
 // employee identities onto the citizen timeline. Role check is only the
 // fallback when no uuid is available.
-const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPrefix = "", currentStateChildren = null, maskConfidential = false, maskEmployeeContacts = false, hideEmployeeContacts = false, hideInternalNotes = false, complainantUuid = null }) => {
+const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPrefix = "", currentStateChildren = null, maskConfidential = false, maskEmployeeContacts = false, hideEmployeeContacts = false, hideInternalNotes = false, complainantUuid = null, complainant = null }) => {
     const { t } = useTranslation();
 
     const tenantId = Digit.ULBService.getCurrentTenantId();
@@ -263,11 +263,20 @@ const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPre
             // Map API response to timeline steps
             const steps = workflowData.ProcessInstances.map((instance, index) => {
                 const assignee = instance?.assignes?.[0];
-                const personRecord = isAssigningAction(instance?.action) ? assignee : instance?.assigner;
                 // Complainant match by uuid when we have it (role fallback
                 // otherwise) — see the prop doc above for why role alone lies.
                 const isComplainant = (person) =>
                   complainantUuid && person?.uuid ? person.uuid === complainantUuid : isCitizenActor(person);
+                // The chatbot files with its service account, so the workflow records
+                // that account as the APPLY actor (upstream CCRS#2503). When the APPLY
+                // actor is not the complainant, the row shows the complainant instead,
+                // carrying their uuid so the masking and hiding rules below treat it
+                // as the complainant.
+                const filer =
+                  instance?.action === "APPLY" && complainantUuid && instance?.assigner?.uuid && !isComplainant(instance.assigner)
+                    ? { ...complainant, name: complainant?.name || (t("ACCESSCONTROL_ROLES_ROLES_CITIZEN") === "ACCESSCONTROL_ROLES_ROLES_CITIZEN" ? "Citizen" : t("ACCESSCONTROL_ROLES_ROLES_CITIZEN")), uuid: complainantUuid }
+                    : null;
+                const personRecord = filer || (isAssigningAction(instance?.action) ? assignee : instance?.assigner);
                 const isEmployeeActor = personRecord && !isComplainant(personRecord);
                 // On the citizen's timeline, only the closing entry (and the
                 // complainant's own actions) keep their comment and attachments.
@@ -290,7 +299,7 @@ const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPre
                 // server-side) is hidden the same way — otherwise
                 // formatPerson(undefined) would print a stray CS_NA caption.
                 const hideThis = hideEmployeeContacts && (isEmployeeActor || !personRecord);
-                const mobile = isAssigningAction(instance?.action) ? assignee?.mobileNumber : instance?.assigner?.mobileNumber;
+                const mobile = filer ? filer.mobileNumber : isAssigningAction(instance?.action) ? assignee?.mobileNumber : instance?.assigner?.mobileNumber;
                 // The backend already masks the mobile per viewer privilege
                 // ("Contact Details: *****0104"). Mirror that decision onto the
                 // NAME: a viewer the backend won't show the number to shouldn't
@@ -330,7 +339,7 @@ const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPre
             });
             setTimelineSteps(steps);
         }
-    }, [workflowData]);
+    }, [workflowData, complainant, complainantUuid]);
 
     return (
         isWorkFlowLoading ? <Loader /> :
