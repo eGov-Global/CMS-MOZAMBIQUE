@@ -66,6 +66,7 @@ function normalizeUtterance(text) {
 function constructListPromptAndGrammer(keys, message_bundle, locale, more = false, goback = false) {
   var prompt = '';
   var grammer = [];
+  var labels = [];
   if (more) {
     keys = keys.concat([INTENTION_MORE])
     message_bundle = Object.assign({}, message_bundle, {[INTENTION_MORE]: global_messages.more})
@@ -94,8 +95,9 @@ function constructListPromptAndGrammer(keys, message_bundle, locale, more = fals
     // Only add the label when it cannot be confused with another option's number.
     if (label && !/^\d+$/.test(label)) recognize.push(label);
     grammer.push({intention: element, recognize});
+    labels.push(value);
   });
-  return {prompt, grammer};
+  return {prompt, grammer, labels};
 }
 
 

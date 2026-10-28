@@ -161,6 +161,26 @@ const envVariables = {
         // Defaults ON: the webhook is public by necessity, so the signature is the
         // only thing separating a citizen from anyone who guessed the URL.
         verifyWebhookSignature: (process.env.TWILIO_VERIFY_WEBHOOK_SIGNATURE || 'true') !== 'false',
+        // master switch for quick replies and list pickers; false sends every prompt as text
+        templatesEnabled: (process.env.TWILIO_TEMPLATES_ENABLED || 'true') !== 'false',
+        // templates go only to citizens on this locale; everyone else gets text
+        templateLocale: process.env.TWILIO_TEMPLATE_LOCALE || 'pt_PT',
+        // Quick-reply ContentSids, keyed by question. An empty SID keeps the
+        // plain-text prompt.
+        templates: {
+            menu: process.env.TWILIO_TEMPLATE_MENU || '',
+            consent: process.env.TWILIO_TEMPLATE_CONSENT || '',
+            confidentiality: process.env.TWILIO_TEMPLATE_CONFIDENTIALITY || '',
+            confirmSubmission: process.env.TWILIO_TEMPLATE_CONFIRM_SUBMISSION || '',
+        },
+        // list-picker ContentSids by option count, "2:HX…,3:HX…". A list whose
+        // count has no SID here keeps the plain-text numbered prompt.
+        listPickers: Object.fromEntries(
+            String(process.env.TWILIO_LIST_PICKERS || '')
+                .split(',')
+                .map((pair) => pair.split(':').map((part) => part.trim()))
+                .filter(([count, sid]) => count && sid)
+        ),
     },
 
     // Providers with no signing scheme of their own (ValueFirst, Kaleyra) verify
