@@ -76,7 +76,9 @@ const PGRSearchInbox = () => {
   // assigned-to-me radio restored, OPEN_STATES default — and skips the
   // workflow/_count requests entirely.
   const { enabled: visibilityEnabled, serverSide: visibilityServerSide, isLoading: visLoading } = useInboxVisibility();
-  // QA #18: default scope is "everyone's complaints" — in tabs mode too.
+  // Opens on My Complaints (issue #207): the workflow checks only the role for
+  // Resolve/Reject, so opening on All let a case manager act on a colleague's
+  // complaint. Supersedes QA #18's "everyone's complaints" default (e017f16c7).
   const [activeTab, setActiveTab] = useState("MY");
   // Both tabs share the same status scope (all open/actionable states); they
   // differ on the assignee axis — My = assigned to me, All = everyone's
