@@ -69,7 +69,7 @@ class DispatchPipelineDirectModeTest {
         when(directDeliveryService.sendEmail(anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(NovuClient.NovuResponse.builder().statusCode(200).response(Map.of()).build());
 
-        service = new DispatchPipelineService(envelopeValidator, preferenceServiceClient, novuClient,
+        service = new DispatchPipelineService(envelopeValidator, preferenceServiceClient, novuClient, null,
                 dispatchLogRepository, config, mdmsServiceClient, directDeliveryService);
     }
 

@@ -18,7 +18,10 @@ import { selectServiceDefsFromComplaintHierarchy } from "../../utils";
 import useReopenWindow from "../../hooks/pgr/useReopenWindow";
 import { findLatestAssigneeUuidByRole } from "../../utils/workflowAssignee";
 import { returnToHandlerRole } from "../../utils/returnToHandler";
-import { EV, trackE } from "../../utils/analytics";
+import { EV, trackE, trackEvent } from "../../utils/analytics";
+import { hasUsableGeoLocation } from "../../utils/geoLocation";
+import { currentAssigneesInOccupancy, isCurrentAssignee } from "./escalationVisibility";
+import { formDataForAction } from "./workflowUpdate";
 
 // CCSD-2167 (employee side) — route-back / terminal actions derive their
 // assignee from the complaint's OWN workflow history, exactly like the citizen
@@ -74,7 +77,10 @@ const buildActionFormConfig = ({ action, fromState, assigneeRoles = [], isTermin
   // QA #22 (sheet v4 decision): AWAITINGINFORMATION is a state update — the
   // complaint waits on the CITIZEN, so picking a "next level user" makes no
   // sense and mis-assigned it to another case manager. No assignee here either.
-  const NO_ASSIGNEE_ACTIONS = ["REJECT", "AWAITINGINFORMATION"];
+  // ESCALATE (#2048/#2129): the backend resolves the target from the current
+  // assignee's HRMS reportingTo — the caller never picks it. Lateral
+  // assignment remains REASSIGN.
+  const NO_ASSIGNEE_ACTIONS = ["REJECT", "AWAITINGINFORMATION", "ESCALATE"];
   // FC-0002: recording the citizen's answer (INFOFROMCITIZEN -> INVESTIGATION)
   // returns the case to the case manager who asked — no picker; the assignee is
   // derived from history on submit (see returnToHandler.js). Comment and
@@ -139,9 +145,10 @@ const PGRDetails = () => {
   const [boundaryRows, setBoundaryRows] = useState([]);
   const userInfo = Digit.UserService.getUser();
 
-  // Persist session data for complaint update
-  const UpdateComplaintSession = Digit.Hooks.useSessionStorage("COMPLAINT_UPDATE", {});
-  const [sessionFormData, setSessionFormData, clearSessionFormData] = UpdateComplaintSession;
+  // Only used to decide whether Escalate can succeed: the service moves the complaint to
+  // the assignee's HRMS reportingTo, so an employee at the top of their chain has nowhere
+  // to escalate to. See canEscalate below for why this is not a hard gate.
+  const { data: workingContext } = Digit.Hooks.pgr.useEmployeeWorkingContext(tenantId);
 
   // Service definitions (leaf complaint types) adapted from the single
   // RAINMAKER-PGR.ComplaintHierarchy master — drives department + category
@@ -294,7 +301,9 @@ const PGRDetails = () => {
   // Fetch workflow details
   const { isLoading: isWorkflowLoading, data: workflowData, revalidate: workFlowRevalidate } = Digit.Hooks.useCustomAPIHook({
     url: "/egov-workflow-v2/egov-wf/process/_search",
-    params: { tenantId: complaintTenantId, history: true, businessIds: id },
+    // The holder may be named several self-loop transitions ago. Match the backend's
+    // explicit bound instead of accepting workflow-v2's default 10-row truncation.
+    params: { tenantId: complaintTenantId, history: true, limit: 200, businessIds: id },
     config: { enabled: !!pgrData },
     changeQueryName: id,
   });
@@ -334,6 +343,9 @@ const PGRDetails = () => {
   const handleActionSubmit = async (_data) => {
     // Build the same generic form config the modal renders, so mandatory-field validation stays in sync.
     const actionConfig = { formConfig: buildActionFormConfig({ ...selectedAction, assigneeMandatory: isAssigneeMandatory(selectedAction) }) };
+    // Only this action's own fields, whatever else the form state holds (#1967):
+    // a value picked in another action's form must never ride along.
+    const fields = formDataForAction(actionConfig, _data);
 
     const missingFields = [];
 
@@ -341,7 +353,7 @@ const PGRDetails = () => {
       section.body.forEach((field) => {
         if (field.isMandatory) {
           const fieldKey = field.key;
-          const fieldValue = _data?.[fieldKey];
+          const fieldValue = fields[fieldKey];
 
           // For dropdowns or components, also check if selected value is valid object or string
           const isEmpty =
@@ -371,11 +383,11 @@ const PGRDetails = () => {
     // MDMS lookup) but it was never plumbed into the update payload —
     // operators only saw whatever free-text comment they typed.
     const reasonCode =
-      _data?.SelectedReason?.code ||
-      _data?.SelectedReason?.name ||
-      _data?.SelectedReason ||
+      fields.SelectedReason?.code ||
+      fields.SelectedReason?.name ||
+      fields.SelectedReason ||
       "";
-    const freeComment = _data?.SelectedComments || "";
+    const freeComment = fields.SelectedComments || "";
     const isReject = selectedAction.action === "REJECT";
     const composedComment = isReject && reasonCode
       ? (freeComment ? `[${reasonCode}] ${freeComment}` : `[${reasonCode}]`)
@@ -387,12 +399,12 @@ const PGRDetails = () => {
     // carried over from filing time. Only applied when an assignee with a
     // department is picked (REJECT/RESOLVE etc. leave additionalDetail untouched).
     const baseService = pgrData?.ServiceWrappers[0].service;
-    const assigneeDept = _data?.SelectedAssignee?.department;
+    const assigneeDept = fields.SelectedAssignee?.department;
 
     // CCSD-2167 (employee side): for the route-back / terminal actions, resolve
     // the assignee from the complaint's workflow history by role — the person
     // who previously handled it — unless the officer explicitly picked someone.
-    const pickedUuid = _data?.SelectedAssignee?.uuid || null;
+    const pickedUuid = fields.SelectedAssignee?.uuid || null;
     // FC-0002: on the return from INFOFROMCITIZEN there is no picker at all, so
     // the case manager who asked the question is always derived from history.
     const derivedRole =
@@ -406,6 +418,13 @@ const PGRDetails = () => {
       const wfTenant = baseService?.tenantId || Digit.ULBService.getStateId();
       const businessId = baseService?.serviceRequestId;
       assigneeUuid = await findLatestAssigneeUuidByRole(wfTenant, businessId, derivedRole);
+    }
+    // isMandatory renders the required marker but FormComposer does not enforce it for a
+    // custom component, so the rule is enforced here too (#2132 / CCSD-2124). Without it
+    // the request went through with assignes: null and the complaint was owned by nobody.
+    if (isAssigneeMandatory(selectedAction) && !assigneeUuid) {
+      setToast({ show: true, label: t("CS_PGR_ASSIGNEE_REQUIRED"), type: "error" });
+      return;
     }
     // Parse (object OR stringified) so stamping never discards existing keys
     // like supervisorName / serviceName that older flows stored as a string.
@@ -421,8 +440,8 @@ const PGRDetails = () => {
         comments: composedComment,
         // Verification documents captured when the target state is docUploadRequired
         // (VerificationDocsComponent already shapes them as {documentType,fileStoreId,…}).
-        ...(Array.isArray(_data?.SelectedDocuments) && _data.SelectedDocuments.length > 0
-          ? { verificationDocuments: _data.SelectedDocuments }
+        ...(Array.isArray(fields.SelectedDocuments) && fields.SelectedDocuments.length > 0
+          ? { verificationDocuments: fields.SelectedDocuments }
           : {}),
       },
     };
@@ -455,7 +474,6 @@ const PGRDetails = () => {
           trackE(EV.WORKFLOW_COMPLETED, actionCode);
           setToast({ show: true, label: t(`${msg}_SUCCESSFULLY`), type: "success" });
           await refreshData();
-          clearSessionFormData();
         }
       },
     });
@@ -539,14 +557,28 @@ const PGRDetails = () => {
     return [...set].filter((r) => !NON_ASSIGNEE_ROLES.has(r));
   };
 
+  // Escalate is offered only to the employee holding the complaint (#2129), and only while
+  // a rung above them exists. Deliberately fails OPEN on an unknown working context: the
+  // flag is only trusted when it says false, and the service re-checks the chain anyway.
+  const canEscalate = (currentAssignees) =>
+    isCurrentAssignee(currentAssignees, userInfo?.info?.uuid)
+    && workingContext?.hasReportingTo !== false;
+
   // Get list of valid actions for current user and state
   const getNextActionOptions = (workflowData, businessServiceResponse) => {
     const currentState = workflowData?.ProcessInstances?.[0]?.state;
     const matchingState = businessServiceResponse?.states?.find((state) => state.uuid === currentState?.uuid);
     if (!matchingState) return [];
     const userRoles = userInfo?.info?.roles?.map((role) => role.code) || [];
+    const currentAssignees = currentAssigneesInOccupancy(workflowData?.ProcessInstances);
     return matchingState.actions
       ? matchingState.actions.filter((action) => action.roles.some((role) => userRoles.includes(role)))
+        // ESCALATE moves the work up the CURRENT assignee's own reportingTo chain, and
+        // the server picks the target — the caller never chooses it. The transition is
+        // role-gated, so without this every holder of the role was offered Escalate on
+        // complaints that had already moved past them, and clicking it advanced somebody
+        // else's ladder (#2129). Offer it only to the person actually holding it.
+        .filter((action) => action.action !== "ESCALATE" || canEscalate(currentAssignees))
         .map((action) => {
           // Look up the target state so the modal can adapt generically (terminal → no assignee,
           // docUploadRequired → future doc capture) with no per-action code.
@@ -807,8 +839,7 @@ const PGRDetails = () => {
                 : []
               ),
               // Conditionally include location section only if coordinates exist
-              ...(pgrData?.ServiceWrappers[0]?.service?.address?.geoLocation?.latitude &&
-                pgrData?.ServiceWrappers[0]?.service?.address?.geoLocation?.longitude
+              ...(hasUsableGeoLocation(pgrData?.ServiceWrappers[0]?.service?.address?.geoLocation)
                 ? [{
                   cardType: "primary",
                   fieldPairs: [
@@ -891,10 +922,17 @@ const PGRDetails = () => {
               isDisabled={getNextActionOptions(workflowData, businessServiceData?.BusinessServices?.[0]).length === 0}
               key="action-button"
               label={t("ES_COMMON_TAKE_ACTION")}
+              // Analytics (CCRS#2007): opening the action menu. The action then picked
+              // is emitted from onOptionSelect (WORKFLOW_OPENED), which a click
+              // listener cannot see inside the menu.
+              data-analytics-event="pgr.complaint.take-action"
               onOptionSelect={(selected) => {
                 if (selected.action === "REOPEN") {
                   const lastModifiedTime = pgrData?.ServiceWrappers?.[0]?.service?.auditDetails?.lastModifiedTime;
                   if (reopenWindowMs && lastModifiedTime && Date.now() - lastModifiedTime > reopenWindowMs) {
+                    // A refusal is a drop-off worth seeing: it tells us the reopen
+                    // window is set too tight, which no click event would reveal.
+                    trackEvent("pgr.complaint.reopen-blocked", { category: "pgr" });
                     setToast({
                       show: true,
                       type: "error",
@@ -926,10 +964,9 @@ const PGRDetails = () => {
       {/* Workflow Modal for Actions */}
       {openModal && selectedAction && (
         <PGRWorkflowModal
+          // A new action starts from an empty form (#1967).
+          key={selectedAction.action}
           selectedAction={selectedAction}
-          sessionFormData={sessionFormData}
-          setSessionFormData={setSessionFormData}
-          clearSessionFormData={clearSessionFormData}
           config={getUpdatedConfig(selectedAction, workflowData, null, serviceDefs, pgrData)}
           closeModal={() => setOpenModal(false)}
           onSubmit={handleActionSubmit}

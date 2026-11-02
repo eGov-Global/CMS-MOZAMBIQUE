@@ -17,7 +17,7 @@ initContainers:
     schemaTable: "pgr_services_schema"
     image:
       repository: "pgr-services-db"
-      tag: "develop-70916ea"
+      tag: "2.12.1-7a38661"
     env: |
         {{- if index .Values "pgr-ismultischema-enabled" }}        
         - name: SCHEMA_NAME
@@ -47,13 +47,11 @@ initContainers:
                 key: flyway-locations
 
 # Container Configs
-# Repinned to develop-70916ea (matches local-setup/docker-compose.egov-digit.yaml) to
-# keep k8s and Compose on the same build. This tag is built from a commit well after
-# #1100 (fix/pgr-search-citizen-scoping — PrincipalScopeResolver.java, EnrichmentService.java,
-# the citizen-scoping / search-IDOR fix) landed on develop, so the fix is included.
+# Same build as local-setup/docker-compose.egov-digit.yaml, so k8s and Compose
+# stay in step. The -db initContainer above uses the same tag.
 image:
   repository: "pgr-services"
-  tag: "develop-70916ea"
+  tag: "2.12.1-7a38661"
 replicas: "1"
 healthChecks:
   enabled: true
@@ -188,11 +186,6 @@ env: |
     value: "RATE"
   - name: EGOV_USR_EVENTS_REOPEN_CODE
     value: "REOPEN" 
-  - name: PGR_STATELEVEL_TENANTID
-    valueFrom:
-      configMapKeyRef:
-        name: egov-config
-        key: egov-state-level-tenant-id
   - name: SPRING_DATASOURCE_URL
     valueFrom:
       configMapKeyRef:

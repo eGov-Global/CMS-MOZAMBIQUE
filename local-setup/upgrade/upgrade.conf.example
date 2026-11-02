@@ -1,0 +1,86 @@
+# Tenant upgrade settings. Copy to upgrade.conf.<tenant> and edit.
+#
+#   cp upgrade.conf.example upgrade.conf.ige
+#   ./upgrade.sh --config upgrade.conf.ige
+#
+# A value set here wins over the environment; leave a key commented out to set
+# it from the environment for a one-off run. Anything left unset falls back to the
+# default shown in the comment, so a minimal config is just TENANT.
+
+# ── Required ─────────────────────────────────────────────────────────────────
+TENANT=ige
+
+# ── Identity ─────────────────────────────────────────────────────────────────
+# STATE_TENANT is the MDMS state-level tenant. On a single-state deployment it
+# is usually the country/state code rather than the ansible tenant name: the
+# ige box deploys tenant "ige" but all its MDMS data lives under "mz".
+STATE_TENANT=mz
+
+# ── Paths ────────────────────────────────────────────────────────────────────
+# REPO defaults to the checkout this script lives in, which is correct when you
+# run it from a clone on the server. Set it only if the stack is deployed from
+# a different checkout than the one holding this script.
+#REPO=/home/admin1/Downloads/CMS-MOZAMBIQUE
+
+#DIGIT_DIR=/opt/digit
+#HOST_VARS=$REPO/local-setup/ansible/inventory/host_vars/$TENANT.yml
+#DUMP=$REPO/local-setup/db/full-dump.sql
+#BACKUP_ROOT=$HOME
+
+# ── Containers ───────────────────────────────────────────────────────────────
+#PG_CONTAINER=docker-postgres
+#DB_USER=egov
+#DB_NAME=egov
+#KAFKA_CONTAINER=digit-redpanda
+#ACCESSCONTROL_CONTAINER=egov-accesscontrol
+#KONG_CONTAINER=kong-gateway
+
+# ── Endpoints (loopback: these bind to 127.0.0.1 from v2.12.1 on) ────────────
+#KONG_URL=http://127.0.0.1:18000
+#MDMS_URL=http://127.0.0.1:18094
+# Public base used only by the step 6c smoke tests.
+#PUBLIC_URL=http://localhost
+# Host header for the smoke tests when nginx routes by server_name and
+# PUBLIC_URL is localhost/an IP (on ige: the upgraded site is the domain).
+#PUBLIC_HOST=falacidadao.gov.mz
+
+# ── Credentials ──────────────────────────────────────────────────────────────
+# The deploy must be able to log in as this user BEFORE bootstrap_password is
+# set in host_vars, so this is still the pre-rotation password at upgrade time.
+# Leave ADMIN_PASSWORD unset here and export it, or put it in a 0600 file and
+# point ADMIN_PASSWORD_FILE at it, rather than committing it.
+#ADMIN_USER=ADMIN
+#ADMIN_PASSWORD_FILE=/root/.digit-admin-password
+
+# ── Stack ────────────────────────────────────────────────────────────────────
+#COMPOSE_PROFILES=mcp,notifications
+# Space-separated, relative to DIGIT_DIR, in the order compose should see them.
+#COMPOSE_FILES="docker-compose.egov-digit.yaml docker-compose.fast-path.yml docker-compose.migrations.yml docker-compose.monitoring.yml"
+# Extra overlay started with --no-deps after the main stack (only if set), e.g.
+# the hand-enabled file-scan test the ige box ran before v2.12.1:
+#START_EXTRA_FILES="docker-compose.file-scan.yml"
+#START_EXTRA_PROFILES=file-scan
+#START_EXTRA_SERVICES="clamav filestore-scan-proxy"
+# Containers that lose the startup race with MDMS and are restarted once the
+# rest is healthy; then readiness is proven with a real admin login.
+#RESTART_AFTER_START="digit-egov-user-1 egov-hrms digit-egov-workflow-v2-1"
+#READY_TIMEOUT=900
+#OPENBAO_CONTAINER=openbao
+
+# ── Access control ───────────────────────────────────────────────────────────
+# Role the deploy grants to ADMIN; the ADMIN re-provision step fails without it.
+#BOOTSTRAP_ROLE=ACCOUNT_ADMIN
+#BOOTSTRAP_ROLE_NAME=Account Admin
+# Roles NOT copied from the source tenant (they are a per-deployment decision).
+#EXCLUDE_ROLES=PGR_ADMIN,PGR_SUPERVISOR
+#SOURCE_TENANT=pg
+
+# ── Expectations checked after the deploy ────────────────────────────────────
+# Leave EXPECT_SCHEMA_VERSION empty to skip the pgr_services_schema assertion.
+#EXPECT_SCHEMA_VERSION=20260915000000
+
+# ── Tenant access fixes (step 5, after the release sync) ────────────────────
+# Register tenant-only endpoints the new Kong would refuse, and move the
+# dashboard to v2.12.1 built-in tiers. Run lib/fix_access.py --migrate-dashboard
+# once without --tier to list the role sets that need a tier. Example:
+#FIX_ACCESS_ARGS="--grant /pgr-services/v2/request/_admin/_search=SUPERUSER --migrate-dashboard --base-roles EMPLOYEE --tier ROLE_A+ROLE_B=officer"

@@ -1,4 +1,16 @@
 import * as React from "react";
+
+/** The list's preferred height, capped by whatever room the viewport leaves. */
+const MAX_LIST_HEIGHT = 256;
+/** Below this a list is more annoying than useful, so flip instead. */
+const MIN_LIST_HEIGHT = 120;
+/**
+ * The hard floor on the rendered height: one option row. Not a target, just
+ * the point below which the list stops being a control at all.
+ */
+const ONE_OPTION_HEIGHT = 36;
+/** Breathing room so the popover never sits flush against the edge. */
+const VIEWPORT_MARGIN = 12;
 import { cn } from "../../lib/cn";
 import { Check, ChevronDown, Search } from "lucide-react";
 
@@ -56,11 +68,38 @@ export function Select<TValue extends string = string>({
 }: SelectProps<TValue>) {
   const [open, setOpen] = React.useState(false);
   const [activeIndex, setActiveIndex] = React.useState(-1);
+  /**
+   * Whether the next highlight change should scroll its option into view: yes
+   * for the keyboard, type-ahead, opening and filtering, no for the pointer.
+   * Scrolling to a hovered option that sat half below the list's edge moved the
+   * next option under the still pointer, which highlighted that one and
+   * scrolled again, running the list to its bottom on a plain hover (#2038).
+   */
+  const scrollToActive = React.useRef(false);
+  const highlight = (index: number, scroll = true) => {
+    scrollToActive.current = scroll;
+    setActiveIndex(index);
+  };
   const [query, setQuery] = React.useState("");
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const listRef = React.useRef<HTMLUListElement | null>(null);
+  const popoverRef = React.useRef<HTMLDivElement | null>(null);
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const searchRef = React.useRef<HTMLInputElement | null>(null);
+  /**
+   * The popover is absolutely positioned under the trigger with a fixed list
+   * height, so on a short viewport, or with the trigger low on the page, its
+   * last options fall below the fold. That is what made the city list on the
+   * login screen scroll the page the moment the pointer neared the bottom
+   * option: the page had somewhere to scroll to and the browser obliged.
+   *
+   * Measure the room the popover actually has and cap it, flipping above the
+   * trigger when there is meaningfully more space up there.
+   */
+  const [placement, setPlacement] = React.useState<{ above: boolean; maxListHeight: number }>({
+    above: false,
+    maxListHeight: MAX_LIST_HEIGHT,
+  });
 
   const enableSearch =
     searchable === true || (searchable !== false && options.length > SEARCH_THRESHOLD);
@@ -86,6 +125,63 @@ export function Select<TValue extends string = string>({
 
   // Click-outside.
   React.useEffect(() => {
+    if (!open) return undefined;
+    const measure = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const below = window.innerHeight - rect.bottom - VIEWPORT_MARGIN;
+      const above = rect.top - VIEWPORT_MARGIN;
+      // Only flip when below is genuinely too small AND above is better, so a
+      // list that fits keeps the expected downward placement.
+      const flip = below < MIN_LIST_HEIGHT && above > below;
+      const room = flip ? above : below;
+      // The cap belongs to the list, but the popover also carries a search box
+      // and borders. Subtract whatever is not the list, or the popover still
+      // overruns the fold by exactly that much.
+      const popover = popoverRef.current;
+      const list = listRef.current;
+      const chrome =
+        popover && list
+          ? Math.max(0, popover.getBoundingClientRect().height - list.getBoundingClientRect().height)
+          : 0;
+      // On a viewport where neither direction has 120px plus chrome (a landscape
+      // phone, a short embedded frame) the old Math.max floor pushed the popover
+      // past the edge again, and when flipped that overrun goes off the TOP,
+      // which cannot be scrolled to at all.
+      // MIN_LIST_HEIGHT stays the flip threshold above, but it must not be a
+      // floor on the height: clamping up to it is what let the popover back
+      // over the fold. Take what actually fits and let the list scroll inside.
+      //
+      // One row is still a floor, though. Removing the bound entirely let
+      // `available` reach 0 where neither direction clears the popover chrome,
+      // and the list rendered at `maxHeight: 0px`: a search box with no options
+      // under it and nothing to scroll. That state is stable, not transient,
+      // because the next measure sees the same chrome. Better to overflow by a
+      // row than to show a control that cannot be used.
+      const available = Math.max(ONE_OPTION_HEIGHT, room - chrome);
+      const next = Math.min(MAX_LIST_HEIGHT, available);
+      // Bail when nothing moved: this runs on capture-phase scroll, so it also
+      // fires while scrolling the list itself, and a fresh object every time
+      // re-rendered the Select on every scroll event.
+      setPlacement((prev) =>
+        prev.above === flip && prev.maxListHeight === next ? prev : { above: flip, maxListHeight: next }
+      );
+    };
+    measure();
+    // Again on the next frame: the first pass runs before the popover has laid
+    // out, so its chrome is still unknown.
+    const raf = requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+    };
+  }, [open]);
+
+  React.useEffect(() => {
     if (!open) return;
     function onMouseDown(e: MouseEvent) {
       const target = e.target as Node;
@@ -101,7 +197,7 @@ export function Select<TValue extends string = string>({
   // starts from the full list.
   React.useEffect(() => {
     if (open) {
-      setActiveIndex(visibleSelectedIndex >= 0 ? visibleSelectedIndex : 0);
+      highlight(visibleSelectedIndex >= 0 ? visibleSelectedIndex : 0);
       if (enableSearch) {
         // Focus the search box on open so the user can type immediately.
         // rAF so it runs after the popover paints.
@@ -116,13 +212,13 @@ export function Select<TValue extends string = string>({
 
   // Typing in the search box re-filters; keep the highlight on the first match.
   React.useEffect(() => {
-    if (open) setActiveIndex(0);
+    if (open) highlight(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
-  // Scroll active option into view.
+  // Scroll the active option into view, unless the pointer put it there.
   React.useEffect(() => {
-    if (!open || activeIndex < 0 || !listRef.current) return;
+    if (!open || activeIndex < 0 || !listRef.current || !scrollToActive.current) return;
     const list = listRef.current;
     const item = list.children[activeIndex] as HTMLElement | undefined;
     if (item) {
@@ -155,7 +251,7 @@ export function Select<TValue extends string = string>({
       if (!visibleOptions[next]?.disabled) break;
       next += delta > 0 ? 1 : -1;
     }
-    setActiveIndex(next);
+    highlight(next);
   }
 
   // Shared list-navigation keys, used by both the trigger (no search box) and
@@ -172,11 +268,11 @@ export function Select<TValue extends string = string>({
         return true;
       case "Home":
         e.preventDefault();
-        setActiveIndex(0);
+        highlight(0);
         return true;
       case "End":
         e.preventDefault();
-        setActiveIndex(visibleOptions.length - 1);
+        highlight(visibleOptions.length - 1);
         return true;
       case "Enter":
         e.preventDefault();
@@ -220,7 +316,7 @@ export function Select<TValue extends string = string>({
         const idx = (start + i) % visibleOptions.length;
         const o = visibleOptions[idx];
         if (!o.disabled && o.label.toLowerCase().startsWith(ch)) {
-          setActiveIndex(idx);
+          highlight(idx);
           break;
         }
       }
@@ -285,10 +381,12 @@ export function Select<TValue extends string = string>({
             position: "absolute",
             left: 0,
             width: "100%",
+            ...(placement.above ? { bottom: "100%" } : { top: "100%" }),
             backgroundColor: "var(--v2-surface-color, var(--color-surface, #ffffff))",
             zIndex: 9999,
           }}
-          className={cn("mt-1 rounded-md border border-border shadow-lg animate-fade-in")}
+          ref={popoverRef}
+          className={cn(placement.above ? "mb-1" : "mt-1", "rounded-md border border-border shadow-lg animate-fade-in")}
         >
           {enableSearch ? (
             <div
@@ -318,6 +416,11 @@ export function Select<TValue extends string = string>({
                 aria-label={searchPlaceholder ?? "Search"}
                 style={{
                   flex: 1,
+                  // A flex item won't shrink below its content width by default,
+                  // and an input's is its built-in ~20-character size. In a
+                  // narrow list (the inbox filter column) the box overflowed it
+                  // and scrolled the card sideways while it had focus.
+                  minWidth: 0,
                   border: "none",
                   outline: "none",
                   background: "transparent",
@@ -338,7 +441,7 @@ export function Select<TValue extends string = string>({
             // before every option. List markers are also hidden so the row
             // contains only the tick + label.
             style={{
-              maxHeight: "16rem",
+              maxHeight: `${placement.maxListHeight}px`,
               overflowY: "auto",
               margin: 0,
               padding: "0.25rem 0",
@@ -354,7 +457,9 @@ export function Select<TValue extends string = string>({
                   role="option"
                   aria-selected={isSelected}
                   aria-disabled={opt.disabled || undefined}
-                  onMouseEnter={() => !opt.disabled && setActiveIndex(i)}
+                  // Move, not enter: an option scrolled under a still pointer
+                  // (the keyboard moving the list) must not take the highlight.
+                  onMouseMove={() => !opt.disabled && i !== activeIndex && highlight(i, false)}
                   onMouseDown={(e) => {
                     // Prevent the trigger blur/scroll dance — commit selection
                     // before the click fires.

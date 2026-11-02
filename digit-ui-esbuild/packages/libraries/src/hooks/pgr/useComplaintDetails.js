@@ -64,7 +64,7 @@ const getDetailsRow = ({ id, service, complaintType, boundaryAncestors }) => ({
   CS_ADDCOMPLAINT_COMPLAINT_TYPE: complaintType === "" ? `CS_COMPLAINT_TYPE_OTHERS` : `COMPLAINT_HIERARCHY.${complaintType}`,
   CS_ADDCOMPLAINT_COMPLAINT_SUB_TYPE: `COMPLAINT_HIERARCHY.${service.serviceCode.toUpperCase()}`,
   CS_COMPLAINT_ADDTIONAL_DETAILS: service.description,
-  CS_COMPLAINT_FILED_DATE: Digit.DateUtils.ConvertTimestampToDate(service.auditDetails.createdTime),
+  CS_COMPLAINT_FILED_DATE: Digit.DateUtils.ConvertTimestampToDate(service.auditDetails.createdTime, "dd/MM/yyyy"),
   // Landmark is its OWN row (employee-page parity, P-2026-000019 feedback):
   // it used to be folded into the Address line, which read as one run-on
   // "TEST ADDRESS, TEST LANDMARK" value.

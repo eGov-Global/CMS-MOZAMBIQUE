@@ -53,7 +53,7 @@ class EnvelopePipelineNegativesTest {
         config.setChannelsEnabled(List.of("SMS", "EMAIL"));
         mdmsServiceClient = mock(MdmsServiceClient.class);
         directDeliveryService = mock(DirectDeliveryService.class);
-        service = new DispatchPipelineService(envelopeValidator, preferenceServiceClient, novuClient,
+        service = new DispatchPipelineService(envelopeValidator, preferenceServiceClient, novuClient, null,
                 dispatchLogRepository, config, mdmsServiceClient, directDeliveryService);
     }
 

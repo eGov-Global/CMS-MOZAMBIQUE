@@ -1,3 +1,5 @@
+import { isPublicDashboardRuntime } from "../services/dashboardRuntime";
+
 /**
  * Default brand palette — override per tenant via globalConfigs (see keys below).
  * Defaults mirror the canonical palette tokens (--primary / --chrome /
@@ -21,12 +23,24 @@ export function getTenantId() {
   );
 }
 
+/**
+ * Only what the deployment has explicitly configured. Absent keys are returned
+ * as undefined rather than filled with DEFAULT_BRAND_THEME, so the caller can
+ * leave those variables unset and let the stylesheet resolve them from the
+ * tenant's own theme (see `.dashboard-root` in styles/input.css).
+ *
+ * Deliberately NOT reading the tenant's `--color-*` values here. They are
+ * published by applyTheme from an MDMS record that arrives over the network,
+ * so any JS that samples them races the fetch and silently captures the DIGIT
+ * defaults instead. A `var()` chain in CSS has no such race: it resolves
+ * whenever the value lands.
+ */
 export function getBrandTheme() {
   const get = window.globalConfigs?.getConfig?.bind(window.globalConfigs);
   return {
-    teal: get?.("DASHBOARD_BRAND_PRIMARY") || DEFAULT_BRAND_THEME.teal,
-    dark: get?.("DASHBOARD_BRAND_DARK") || DEFAULT_BRAND_THEME.dark,
-    slate: get?.("DASHBOARD_BRAND_SLATE") || DEFAULT_BRAND_THEME.slate,
+    teal: get?.("DASHBOARD_BRAND_PRIMARY") || undefined,
+    dark: get?.("DASHBOARD_BRAND_DARK") || undefined,
+    slate: get?.("DASHBOARD_BRAND_SLATE") || undefined,
   };
 }
 
@@ -51,14 +65,19 @@ export function getSystemTitle() {
   return `${getStateLabel()} — ${getProductLabel()} System`;
 }
 
+// The anonymous public page persists under its own `-public` suffix (#1797):
+// a visitor's filter selection must survive a reload, but may never read or
+// overwrite the employee slot a logged-in user on the same browser relies on.
+const publicSuffix = () => (isPublicDashboardRuntime() ? "-public" : "");
+
 export function getLayoutStorageKey() {
-  return `${getTenantId()}-supervisor-dashboard-layout-v31`;
+  return `${getTenantId()}-supervisor-dashboard-layout-v31${publicSuffix()}`;
 }
 
 export function getSubMetricStorageKey() {
-  return `${getTenantId()}-supervisor-dashboard-submetrics-v1`;
+  return `${getTenantId()}-supervisor-dashboard-submetrics-v1${publicSuffix()}`;
 }
 
 export function getFiltersStorageKey() {
-  return `${getTenantId()}-supervisor-dashboard-filters-v4`;
+  return `${getTenantId()}-supervisor-dashboard-filters-v4${publicSuffix()}`;
 }

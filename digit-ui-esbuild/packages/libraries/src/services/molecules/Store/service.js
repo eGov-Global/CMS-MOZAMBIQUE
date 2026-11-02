@@ -144,6 +144,7 @@ export const StoreService = {
             ?.filter((module) => enabledModules?.includes(module?.code))
             ?.sort((x, y) => x?.order - y?.order) || [],
         uiHomePage: uiHomePage,
+        sidebarFooterLogo: themeConfig?.sidebarFooterLogo,
       };
     };
     const initData = tenantConfigFetch
@@ -165,6 +166,9 @@ export const StoreService = {
               ?.filter((module) => enabledModules?.includes(module?.code))
               ?.sort((x, y) => x?.order - y?.order) || [],
           uiHomePage: uiHomePage,
+          // ThemeConfig is applied above but not kept; the shell's footer logo
+          // switch is the one key the sidebar needs to read back.
+          sidebarFooterLogo: themeConfig?.sidebarFooterLogo,
         };
     // CCSD-2161: on a fresh session (no stored "locale") fall back to the
     // CONFIGURED default locale, NOT languages[0]. i18next's active language

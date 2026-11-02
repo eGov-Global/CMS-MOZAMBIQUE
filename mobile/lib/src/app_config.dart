@@ -33,14 +33,14 @@ class AppConfig {
     final raw = await rootBundle.loadString('assets/config/app_config.json');
     final json = jsonDecode(raw) as Map<String, dynamic>;
     return AppConfig(
-      appName: json['appName'] as String? ?? 'CMS Mozambique',
+      appName: json['appName'] as String? ?? 'Fala Cidadão',
       url: json['url'] as String? ??
-          'http://digit.mctd.gov.mz/digit-ui/employee/user/login',
+          'https://falacidadao.gov.mz/digit-ui/employee/user/login',
       citizenUrl: json['citizenUrl'] as String? ??
-          'http://digit.mctd.gov.mz/digit-ui/citizen/login',
+          'https://falacidadao.gov.mz/digit-ui/citizen/login',
       logoAsset: json['logoAsset'] as String? ?? 'assets/icons/app_icon.png',
-      primaryColor: _parseHex(json['primaryColorHex'] as String? ?? '#0B4F6C'),
-      allowMixedContent: json['allowMixedContent'] as bool? ?? true,
+      primaryColor: _parseHex(json['primaryColorHex'] as String? ?? '#204F37'),
+      allowMixedContent: json['allowMixedContent'] as bool? ?? false,
       javascriptEnabled: json['javascriptEnabled'] as bool? ?? true,
       showAppBar: json['showAppBar'] as bool? ?? false,
       pullToRefresh: json['pullToRefresh'] as bool? ?? true,

@@ -1,14 +1,14 @@
 import { BackLink, CitizenHomeCard, CitizenInfoLabel } from "@egovernments/digit-ui-components";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Link, Redirect, Route, Switch, useHistory, useRouteMatch } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
+import { Redirect, Route, Switch, useHistory, useRouteMatch } from "react-router-dom";
 import ErrorBoundary from "../../components/ErrorBoundaries";
 import ErrorComponent from "../../components/ErrorComponent";
-import { AppHome, processLinkData } from "../../components/Home";
+import { AppHome, moduleIcon, processLinkData } from "../../components/Home";
 import TopBarSideBar from "../../components/TopBarSideBar";
 import StaticCitizenSideBar from "../../components/TopBarSideBar/SideBar/StaticCitizenSideBar";
-import { CitizenSidebar as CitizenSidebarV2, Card as V2Card } from "@egovernments/digit-ui-components-v2";
+import { Card as V2Card, CitizenServiceCard } from "@egovernments/digit-ui-components-v2";
+import { BackButton } from "@egovernments/digit-ui-react-components";
 import FAQsSection from "./FAQs/FAQs";
 import CitizenHome from "./Home";
 import LanguageSelection from "./Home/LanguageSelection";
@@ -19,206 +19,45 @@ import Login from "./Login";
 import Search from "./SearchApp";
 import StaticDynamicCard from "./StaticDynamicComponent/StaticDynamicCard";
 import ImageComponent from "../../components/ImageComponent";
-import { DIGIT_FOOTER_FALLBACK } from "../../components/digitFooterFallback";
 
 /**
- * v2 module-home page (rendered for /citizen/<module>-home routes, e.g.
- * /pgr-home). Mirrors the all-services & complaints surfaces:
- *
- *   - flex column constrained to the available height between topbar
- *     and page footer (so internal content scrolls, never the page),
- *   - brand-tinted page header + back affordance,
- *   - banner image as a soft-cornered card,
- *   - module link list as a v2 Card with chevron rows that take the
- *     theme yellow tint on hover,
- *   - StaticDynamicCard preserved at the bottom for FAQs / How-it-works.
+ * A module's landing page (/citizen/<module>-home, e.g. /pgr-home): the
+ * module's All Services card on its own, under the Back row the module's
+ * other pages open with. No page heading: the card's title is the module's
+ * name, so a heading above it only said the same thing twice (CCRS#557).
  *
  * Data layer (linkData → processLinkData, bannerImage from the modules
  * config) is unchanged.
  */
-function V2ModuleHomePage({ code, bannerImage, mdmsDataObj, stateInfoBannerUrl, t, history }) {
-  const linkRows = (mdmsDataObj?.links ?? [])
-    .filter((l) => !!l?.link)
-    .sort((a, b) => (a?.orderNumber ?? 0) - (b?.orderNumber ?? 0));
+function V2ModuleHomePage({ code, bannerImage, mdmsDataObj, stateInfoBannerUrl, t }) {
   const moduleLabelKey = `MODULE_${code?.toUpperCase()}`;
   const moduleTitle = (() => {
     const v = t(moduleLabelKey);
     return v === moduleLabelKey ? code : v;
   })();
   const banner = bannerImage || stateInfoBannerUrl;
+  // ImageComponent renders nothing for a dead URL (CCRS#881), which left its
+  // card behind as an empty 2px bar above the module card; drop both.
+  const [failedBanner, setFailedBanner] = React.useState(null);
   return (
-    <div
-      className="v2-scope"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height:
-          "calc(100vh - var(--v2-topbar-height, 82px) - var(--v2-page-footer-height, 38px))",
-        minHeight: 0,
-        width: "100%",
-      }}
-    >
-      {/* Page header dropped per CCRS#557 — the module title was
-          redundant with the banner image + the link card's own header
-          and stole vertical space on a 1366×647 display. The banner
-          + card content now leads. */}
-      <div
-        style={{
-          flex: "1 1 auto",
-          minHeight: 0,
-          overflowY: "auto",
-          padding: "0.5rem 1.5rem 1.5rem 1.5rem",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
-        }}
-      >
-        {banner ? (
-          <V2Card
-            style={{
-              padding: 0,
-              overflow: "hidden",
-              display: "block",
-            }}
-          >
-            <ImageComponent
-              src={banner}
-              alt={moduleTitle}
-              style={{
-                display: "block",
-                width: "100%",
-                // Design review iterations (CCSD-1959): cover@260 cropped the
-                // emblem/title; contain letterboxed; natural aspect was ~610px
-                // tall and dominated the page. Final: full width with a
-                // responsive height cap, cover-cropped toward the UPPER band
-                // (30%) where banner assets carry their emblem + title, so the
-                // key content always stays in frame at a sane strip height.
-                // Trimmed after review on mctd: the banner is sized to line up
-                // with the sidebar's profile divider, so both columns start
-                // their content on the same line.
-                //
-                // The sidebar publishes its measured height as
-                // --v2-citizen-profile-height (see citizen-sidebar Profile).
-                // It has to be measured, not assumed: the block grows a line
-                // per optional field, so a citizen WITH an email is ~20px
-                // taller than one without — a constant aligned for one and
-                // visibly missed the other.
-                // Both start at the topbar; this card sits 11px lower, hence
-                // the offset. Fallback covers the no-sidebar cases (mobile
-                // drawer, logged out), where nothing is there to align to.
-                height: "calc(var(--v2-citizen-profile-height, 176px) - 11px)",
-                objectFit: "cover",
-                objectPosition: "center 30%",
-              }}
-            />
-          </V2Card>
-        ) : null}
-        {mdmsDataObj && linkRows.length > 0 ? (
-          <V2Card style={{ padding: "20px 20px 12px 20px", display: "flex", flexDirection: "column", gap: "12px" }}>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "1rem",
-                fontWeight: 600,
-                color: "var(--color-primary-1, var(--color-primary-main, #c84c0e))",
-              }}
-            >
-              {t(mdmsDataObj?.header)}
-            </h2>
-            {code === "OBPS" ? (
-              <div
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  backgroundColor: "var(--color-primary-selected-bg, #FFF4D7)",
-                  color: "var(--color-text-heading, #363636)",
-                  fontSize: "0.8125rem",
-                  lineHeight: 1.5,
-                }}
-              >
-                <strong>{t("CS_FILE_APPLICATION_INFO_LABEL")}</strong>{" "}
-                {t("BPA_CITIZEN_HOME_STAKEHOLDER_INCLUDES_INFO_LABEL")}
-              </div>
-            ) : null}
-            <ul
-              role="list"
-              style={{
-                listStyle: "none",
-                padding: 0,
-                margin: 0,
-                display: "flex",
-                flexDirection: "column",
-                gap: "2px",
-              }}
-            >
-              {linkRows.map((link, i) => {
-                const href = link.link ?? "#";
-                const label = link.i18nKey ? link.i18nKey : (link.name ? t(link.name) : href);
-                const isExternal = /^https?:\/\//i.test(href);
-                const inner = (
-                  <span
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "12px",
-                      padding: "10px 8px",
-                      borderRadius: "6px",
-                      fontSize: "0.875rem",
-                      color: "var(--color-text-heading, #363636)",
-                      transition: "background-color 0.15s ease-out, color 0.15s ease-out",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor =
-                        "var(--color-primary-selected-bg, #FFF4D7)";
-                      e.currentTarget.style.color =
-                        "var(--color-primary-1, var(--color-primary-main, #c84c0e))";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "transparent";
-                      e.currentTarget.style.color =
-                        "var(--color-text-heading, #363636)";
-                    }}
-                  >
-                    <span style={{ flex: 1 }}>{label}</span>
-                    <ChevronRight
-                      aria-hidden
-                      style={{
-                        height: "1rem",
-                        width: "1rem",
-                        flexShrink: 0,
-                        color: "var(--color-text-secondary, #6B7280)",
-                      }}
-                    />
-                  </span>
-                );
-                return (
-                  <li key={`${href}-${i}`}>
-                    {isExternal ? (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ display: "block", textDecoration: "none", color: "inherit" }}
-                      >
-                        {inner}
-                      </a>
-                    ) : (
-                      <Link
-                        to={{ pathname: href, state: link.state }}
-                        style={{ display: "block", textDecoration: "none", color: "inherit" }}
-                      >
-                        {inner}
-                      </Link>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </V2Card>
-        ) : null}
-        <StaticDynamicCard moduleCode={code?.toUpperCase()} />
-      </div>
+    <div className="v2-scope citizen-module-home">
+      <BackButton>{t("CS_COMMON_BACK")}</BackButton>
+      {banner && failedBanner !== banner ? (
+        <V2Card style={{ padding: 0, overflow: "hidden", display: "block" }}>
+          <ImageComponent
+            src={banner}
+            alt={moduleTitle}
+            onError={() => setFailedBanner(banner)}
+            style={{ display: "block", width: "100%", height: "auto", maxHeight: "260px", objectFit: "cover" }}
+          />
+        </V2Card>
+      ) : null}
+      {mdmsDataObj ? (
+        <div className="citizen-module-home__cards">
+          <CitizenServiceCard code={code} data={mdmsDataObj} renderIcon={moduleIcon} t={t} />
+        </div>
+      ) : null}
+      <StaticDynamicCard moduleCode={code?.toUpperCase()} />
     </div>
   );
 }
@@ -288,7 +127,10 @@ const Home = ({
     return url;
   }, [linkData]);
 
-  const classname = Digit.Hooks.useRouteSubscription(pathname);
+  // Always `.citizen`. useRouteSubscription swaps in `.employee` for any path
+  // with a "user", "search" or "inbox" segment, a DSO leftover that laid the
+  // citizen's own Edit Profile page out with the employee app's rules.
+  const classname = "citizen";
   const { t } = useTranslation();
   const { path } = useRouteMatch();
   const history = useHistory();
@@ -297,6 +139,12 @@ const Home = ({
   };
 
   const hideSidebar = sidebarHiddenFor.some((e) => window.location.href.includes(e));
+  // The sign-in steps sit on the navy ground the employee sign-in uses, where
+  // only the white wordmark reads; the colour one is the fallback for a
+  // deployment that configures just that.
+  const onSignIn = /\/citizen\/(login|register)(\/|$)/.test(window.location.pathname);
+  const footerMark =
+    (onSignIn && window?.globalConfigs?.getConfig?.("DIGIT_FOOTER_BW")) || window?.globalConfigs?.getConfig?.("DIGIT_FOOTER");
   const appRoutes = modules.map(({ code, tenants }, index) => {
     const Module = Digit.ComponentRegistryService.getComponent(`${code}Module`);
     return Module ? (
@@ -324,7 +172,6 @@ const Home = ({
             mdmsDataObj={mdmsDataObj}
             stateInfoBannerUrl={stateInfo?.bannerUrl}
             t={t}
-            history={history}
           />
         </Route>
         <Route key={"faq" + index} path={`${path}/${code.toLowerCase()}-faq`}>
@@ -350,14 +197,12 @@ const Home = ({
         logoUrl={logoUrl}
         logoUrlWhite={stateInfo?.logoUrlWhite}
         showSidebar={CITIZEN ? true : false}
+        showRail={!hideSidebar}
         linkData={linkData}
         islinkDataLoading={islinkDataLoading}
       />
 
       <div className={`main center-container citizen-home-container mb-25`}>
-        {hideSidebar ? null : (
-          <CitizenSidebarV2 linkData={linkData} isLoading={islinkDataLoading} />
-        )}
 
         <Switch>
           <Route exact path={path}>
@@ -446,8 +291,7 @@ const Home = ({
         <ImageComponent
           alt="Powered by DIGIT"
           style={{ height: "1.2em", cursor: "pointer" }}
-          src={window?.globalConfigs?.getConfig?.("DIGIT_FOOTER")}
-          fallbackSrc={DIGIT_FOOTER_FALLBACK}
+          src={footerMark}
           onClick={() => {
             window.open(window?.globalConfigs?.getConfig?.("DIGIT_HOME_URL"), "_blank").focus();
           }}

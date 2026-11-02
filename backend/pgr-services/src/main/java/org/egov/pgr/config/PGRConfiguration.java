@@ -127,12 +127,46 @@ public class PGRConfiguration {
     @Value("${egov.mdms.search.endpoint}")
     private String mdmsEndPoint;
 
+    //Accesscontrol — Tier-2 PDP condition lookup, see org.egov.pgr.policy
+    @Value("${egov.accesscontrol.host}")
+    private String accessControlHost;
+
+    @Value("${egov.accesscontrol.actions.mdms.get.path}")
+    private String accessControlActionsMdmsGetPath;
+
+    // Explicit rollout gate for org.egov.pgr.policy.AccessPolicyRegistry#getCondition: false (the
+    // default) preserves today's backward-compatible behavior — a missing/invisible
+    // ACCESSCONTROL-ACTIONS-TEST entry for an action allows, same as before ABAC existed. A tenant
+    // only gets the ABAC-strict "missing action fails closed" behavior once it explicitly opts in
+    // here, after its policies are fully authored — never as a silent default that could brick an
+    // existing deployment's PGR search on the next redeploy.
+    @Value("${pgr.abac.strict-mode:false}")
+    private boolean abacStrictMode;
+
     //HRMS
     @Value("${egov.hrms.host}")
     private String hrmsHost;
 
     @Value("${egov.hrms.search.endpoint}")
     private String hrmsEndPoint;
+
+    // Display-only employee working-context classification. Deployments can map their own
+    // functional role codes to the three product-level contexts without a service code change.
+    //
+    // GRO is not a resolver. It routes a complaint and can reject it; once assigned, the
+    // complaint belongs to PGR_LME, which is the only role the canonical workflow authorizes
+    // on PENDINGATLME. Listing GRO here made the working-context header label a grievance
+    // officer "Resolver" (#2125), because the context wins over the role's own name.
+    // No inline fallback: application.properties is always on the classpath, so a default
+    // here could never take effect and would only be a second place to keep in sync.
+    @Value("#{'${pgr.employee.context.resolver-role-codes}'.split(',')}")
+    private List<String> employeeContextResolverRoleCodes;
+
+    @Value("#{'${pgr.employee.context.citizen-role-codes:CITIZEN}'.split(',')}")
+    private List<String> employeeContextCitizenRoleCodes;
+
+    @Value("#{'${pgr.employee.context.admin-role-codes:PGR_ADMIN,SUPERUSER,MDMS_ADMIN,HRMS_ADMIN,STADMIN,SUPERVISOR,PGR_SUPERVISOR}'.split(',')}")
+    private List<String> employeeContextAdminRoleCodes;
 
     //Notification
     @Value("${egov.user.event.notification.enabled}")
@@ -348,6 +382,15 @@ public class PGRConfiguration {
 
     @Value("${pgr.escalation.max.depth}")
     private Integer escalationMaxDepth;
+
+    @Value("${pgr.escalation.lock.pool.size:4}")
+    private Integer escalationLockPoolSize;
+
+    @Value("${pgr.escalation.lock.connection.timeout.ms:30000}")
+    private Long escalationLockConnectionTimeoutMs;
+
+    @Value("#{'${pgr.escalation.eligible.statuses:PENDINGATLME}'.split(',')}")
+    private java.util.List<String> escalationEligibleStatuses;
 
     @Value("${pgr.escalation.kafka.topic}")
     private String escalationKafkaTopic;

@@ -4,6 +4,8 @@ import DashboardBreadcrumb from "./DashboardBreadcrumb";
 import DashboardHeader from "./DashboardHeader";
 import DashboardFilters from "./DashboardFilters";
 import Sidebar from "./Sidebar";
+import DashboardFooter from "./DashboardFooter";
+import PublicTopBar from "./PublicTopBar";
 
 const DashboardLayout = ({
   children,
@@ -32,13 +34,18 @@ const DashboardLayout = ({
   readOnly = false,
   publicMode = false,
 }) => {
+  // Only the explicitly-configured overrides become inline variables. Writing
+  // the others as empty strings would still count as declarations and would
+  // shadow the stylesheet's tenant-theme fallback chain.
   const brandStyle = useMemo(() => {
     const theme = getBrandTheme();
-    return {
-      "--brand-teal": theme.teal,
-      "--brand-dark": theme.dark,
-      "--brand-slate": theme.slate,
-    };
+    return Object.fromEntries(
+      Object.entries({
+        "--brand-teal": theme.teal,
+        "--brand-dark": theme.dark,
+        "--brand-slate": theme.slate,
+      }).filter(([, value]) => Boolean(value))
+    );
   }, []);
 
   return (
@@ -51,11 +58,15 @@ const DashboardLayout = ({
       className={`dashboard-root${embedded ? " dashboard-embedded" : ""}${publicMode ? " dashboard-public" : ""} tw-flex tw-h-screen tw-overflow-hidden tw-bg-background tw-font-sans tw-text-foreground`}
       style={brandStyle}
     >
+      {/* The employee nav sidebar stays off the public page; its filter bar,
+          Add KPI / Reset and language switcher render through the header and
+          main column like every other mode (#1797). */}
       {!embedded && !publicMode && <Sidebar onSignOut={onSignOut} />}
       <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-overflow-hidden">
         {/* Embedded only: standalone renders its own dark Sidebar, which
             already carries the navigation this trail substitutes for. */}
         {embedded && <DashboardBreadcrumb />}
+        {publicMode && <PublicTopBar />}
         <DashboardHeader
           visibleLayoutIds={visibleLayoutIds}
           catalogItems={catalogItems}
@@ -74,6 +85,8 @@ const DashboardLayout = ({
           scope={scope}
           readOnly={readOnly}
           publicMode={publicMode}
+          // The public page's top bar carries the switcher instead.
+          showLanguageMenu={!embedded && !publicMode}
         />
         <main
           className={
@@ -94,6 +107,12 @@ const DashboardLayout = ({
           )}
           {children}
         </main>
+        {/* Sibling of <main>, not a child: the shell is tw-h-screen with an
+            overflow-hidden column, so the footer must sit outside the scroll
+            container to stay pinned at the bottom. In embedded mode the
+            employee shell renders its own attribution above us, so skip ours
+            rather than stacking two. */}
+        {!embedded && <DashboardFooter />}
       </div>
     </div>
   );
