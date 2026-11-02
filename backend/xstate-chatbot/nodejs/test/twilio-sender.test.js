@@ -68,3 +68,62 @@ test("REGRESSION: replies go to the address the citizen wrote from, not a re-pre
   await provider.sendMessageToUser({ mobileNumber: "712345678" }, ["hello"], { tenantId: "ke" });
   assert.deepEqual(sent, ["whatsapp:+254712345678"]);
 });
+
+// -- quick replies and list pickers ------------------------------------------
+
+const citizen = { mobileNumber: "841234567", whatsAppAddress: "whatsapp:+258841234567" };
+const TEMPLATE_SID = "HX00000000000000000000000000000001";
+const prompt = "Confirme os dados:\n\n*Descrição:* o meu vizinho...\n\n*1.* Submeter.\n*2.* Cancelar.";
+const template = { type: "template", output: TEMPLATE_SID, params: ["Saúde", "-"], fallbackText: prompt };
+
+/** Records every request, answering template sends with `templateResponse`. */
+function recordSends(provider, templateResponse) {
+  const sent = [];
+  provider.sendTwilioRequest = async (params) => {
+    sent.push(Object.fromEntries(params));
+    return params.get("ContentSid") ? templateResponse : { sid: "SM-text" };
+  };
+  return sent;
+}
+
+test("a template Twilio accepts goes out alone, with its variables numbered", async () => {
+  const provider = loadProvider("whatsapp:+14155238886");
+  const sent = recordSends(provider, { sid: "SM-template", status: "queued", error_code: null });
+
+  await provider.sendMessageToUser(citizen, [template], { tenantId: "mz" });
+
+  assert.equal(sent.length, 1, "no text fallback");
+  assert.equal(sent[0].ContentSid, TEMPLATE_SID);
+  assert.deepEqual(JSON.parse(sent[0].ContentVariables), { 1: "Saúde", 2: "-" });
+});
+
+test("a template Twilio refuses is followed by its prompt as text, so the citizen is never left waiting", async (t) => {
+  const errors = [];
+  t.mock.method(console, "error", (...args) => errors.push(args.join(" ")));
+
+  // sendTwilioRequest answers undefined for a non-2xx and for a request that threw;
+  // a 2xx carrying an error code is a refusal too.
+  for (const refusal of [undefined, { sid: "SM-x", error_code: 63016 }]) {
+    const provider = loadProvider("whatsapp:+14155238886");
+    const sent = recordSends(provider, refusal);
+    errors.length = 0;
+
+    await provider.sendMessageToUser(citizen, [template], { tenantId: "mz" });
+
+    assert.equal(sent.length, 2, `template, then text (${JSON.stringify(refusal)})`);
+    assert.equal(sent[1].Body, prompt, "the same prompt the flow stored as lastPrompt");
+    assert.equal(sent[1].To, "whatsapp:+258841234567");
+    assert.ok(errors.some((line) => line.includes(TEMPLATE_SID)), "the failure names the template");
+    assert.ok(!errors.some((line) => line.includes("vizinho")), "never the citizen's words");
+  }
+});
+
+test("a refused template without a text prompt sends nothing more", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const provider = loadProvider("whatsapp:+14155238886");
+  const sent = recordSends(provider, undefined);
+
+  await provider.sendMessageToUser(citizen, [{ ...template, fallbackText: undefined }], { tenantId: "mz" });
+
+  assert.equal(sent.length, 1);
+});

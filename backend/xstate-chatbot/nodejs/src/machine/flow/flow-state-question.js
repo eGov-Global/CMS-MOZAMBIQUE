@@ -109,9 +109,10 @@ class QuestionState extends State {
               const fill = { options: () => this.renderOptionsList(context[this.optionsSlot] || []) };
               const template = this.templateMessage(context);
               if (!template) return this.enter(context, fill, event);
-              // the citizen gets the buttons; the rendered text stays the resume prompt
+              // the citizen gets the buttons; the rendered text stays the resume prompt,
+              // and is what the channel sends instead if Twilio refuses the template
               context.lastPrompt = this.renderText(this.prompt, { ...this.fill, ...fill }, context, event);
-              dialog.sendMessage(context, template);
+              dialog.sendMessage(context, { ...template, fallbackText: context.lastPrompt });
             }
           ],
           on: { USER_MESSAGE: 'process' }

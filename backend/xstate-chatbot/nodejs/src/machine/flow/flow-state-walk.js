@@ -124,7 +124,9 @@ class WalkState extends State {
               const { levelLabel } = context[this.stepSlot] || {};
               context[this.pickerSlot] = listPickerMessage(context, levelLabel, list.labels);
             }),
-            (context) => dialog.sendMessage(context, context[this.pickerSlot] || context.lastPrompt)
+            (context) => dialog.sendMessage(context, context[this.pickerSlot]
+              ? { ...context[this.pickerSlot], fallbackText: context.lastPrompt }
+              : context.lastPrompt)
           ],
 
           on: { USER_MESSAGE: 'process' }
