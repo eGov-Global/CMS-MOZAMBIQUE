@@ -159,10 +159,11 @@ const PGRSearchInboxConfig = (visibilityEnabled = true, visibilityServerSide = f
                     ],
                     enableGlobalSearch: false,
                     enableColumnSort: true,
-                    // Must match PGRInboxConfig.preProcess's own fallback
-                    // (UICustomizations.js) — lets the table seed its sort
-                    // header icon correctly on first load, before the
-                    // operator has clicked anything.
+                    // Must match inboxDefaultSort (utils/inboxVisibility.js),
+                    // the fallback PGRInboxConfig.preProcess sends — lets the
+                    // table seed its sort header icon correctly on first load,
+                    // before the operator has clicked anything. PGRInbox
+                    // overrides both on a creator's My tab.
                     defaultSortBy: "sla",
                     defaultSortOrder: "ASC",
                     resultsJsonPath: "items",
