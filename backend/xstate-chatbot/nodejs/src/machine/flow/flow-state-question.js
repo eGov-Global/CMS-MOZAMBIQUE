@@ -9,6 +9,7 @@ const { assign } = require('xstate');
 const dialog = require('../util/dialog');
 const State = require('./flow-state');
 const config = require('../../env-variables');
+const { templateParams } = require('./template-params');
 
 class QuestionState extends State {
   // stores the choices this state offers: a static array (plain strings or
@@ -47,10 +48,7 @@ class QuestionState extends State {
     if (config.whatsAppProvider !== 'Twilio') return null;
     if (!config.twilio.templatesEnabled) return null;
     if (context.user.locale !== config.twilio.templateLocale) return null;
-    // Twilio rejects a template whose variable is empty
-    const params = this.template.params
-      ? this.template.params(context).map((value) => String(value || '-'))
-      : [];
+    const params = this.template.params ? templateParams(this.template.params(context)) : [];
     return { type: 'template', output: sid, params };
   }
 
