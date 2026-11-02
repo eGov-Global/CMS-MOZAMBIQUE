@@ -113,3 +113,24 @@ stood before the flag, and this migration brings existing schemas level with
 
 Guarded and idempotent: a definition that already has `VOICE_INPUT` is skipped,
 so a fresh box and a re-run are no-ops.
+
+## V20261026000000__inbox_visibility_creator_roles
+
+Adds the optional `creatorRoles` string array to every tenant's
+`RAINMAKER-PGR.InboxVisibilityConfig` schema. pgr-services reads it from the
+state-root record: an employee holding one of these roles (e.g.
+`CMS_RECEPTION_OFFICER`, who files on a citizen's behalf) gets My Complaints as
+filed by them OR assigned to them, and keeps seeing the complaints they filed
+outside their own department/jurisdiction while their HRMS assignment resolves
+(no record, an HRMS error or no current assignment removes that too). The schema
+is `additionalProperties: false`, so without this a tenant whose schema predates
+the field would reject the save with a 400.
+
+It only adds the property; no data row changes. A record without `creatorRoles`
+keeps My Complaints as "assigned to me" and grants no one the filed-by
+exemption — to turn it on, add the roles to the tenant's record (Configurator or
+MDMS `_update`). **The embedded property must stay identical to** `creatorRoles`
+in `RAINMAKER-PGR.json`.
+
+Guarded and idempotent: a definition that already has `creatorRoles` is skipped,
+so a fresh box and a re-run are no-ops.
