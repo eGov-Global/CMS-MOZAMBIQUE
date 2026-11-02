@@ -144,6 +144,9 @@ export const CreateComplaintConfig = {
                 name: "SelectComplaintType",
                 optionsKey: "menuPathName",
                 error: "CORE_COMMON_REQUIRED_ERRMSG",
+                // Type-to-filter, as the hierarchy picker that replaces these
+                // on tenants with a complaint hierarchy (CCRS#941).
+                isSearchable: true,
               },
             },
             {
@@ -159,6 +162,7 @@ export const CreateComplaintConfig = {
                 name: "SelectSubComplaintType",
                 optionsKey: "i18nKey",
                 error: "CORE_COMMON_REQUIRED_ERRMSG",
+                isSearchable: true,
               },
             },
 

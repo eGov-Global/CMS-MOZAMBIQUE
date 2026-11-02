@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { runBatchQueries } from "../services/analyticsService";
+import { runBatchQueries, fetchPublicFilterOptions, getTenantId } from "../services/analyticsService";
 import {
   buildComplaintTypeIndex,
   fetchComplaintHierarchyRecords,
@@ -98,7 +98,12 @@ function toComplaintTypeDecorator(hierarchyIndex) {
   };
 }
 
-export function useFilterOptions({ enabled = true } = {}) {
+/**
+ * `publicMode` swaps the inline distinct batch for the anonymous
+ * /public/_options endpoint (#1797) — same envelope, server-owned queries,
+ * counts stripped — so everything below the fetch is shared.
+ */
+export function useFilterOptions({ enabled = true, publicMode = false } = {}) {
   // Raw fetch payload and derived labels are split so a language switch
   // re-labels from the cached rows without re-querying the backend.
   const [raw, setRaw] = useState({ results: null, hierarchyRecords: null, loading: true });
@@ -111,7 +116,7 @@ export function useFilterOptions({ enabled = true } = {}) {
     }
     let cancelled = false;
     Promise.all([
-      runBatchQueries(OPTION_QUERIES),
+      publicMode ? fetchPublicFilterOptions(getTenantId()) : runBatchQueries(OPTION_QUERIES),
       // Resolves null on any failure (never rejects) — labels then fall back
       // to the humanizer and the list stays flat, exactly the old behavior.
       fetchComplaintHierarchyRecords(),
@@ -127,7 +132,7 @@ export function useFilterOptions({ enabled = true } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [enabled]);
+  }, [enabled, publicMode]);
 
   return useMemo(() => {
     if (!raw.results) return { options: null, loading: raw.loading };
@@ -142,12 +147,11 @@ export function useFilterOptions({ enabled = true } = {}) {
       "complaintType",
       toComplaintTypeDecorator(hierarchyIndex?.size ? hierarchyIndex : null)
     );
-    const geography = toOptionList(
-      raw.results.districts?.rows,
-      "zone_code",
-      GEOGRAPHY_OPTIONS,
-      "boundary"
-    );
+    // /public/_options still serves ward codes (no zone on the public
+    // allow-list), so the public bar stays on wards.
+    const geography = publicMode
+      ? toOptionList(raw.results.wards?.rows, "ward_code", GEOGRAPHY_OPTIONS, "boundary")
+      : toOptionList(raw.results.districts?.rows, "zone_code", GEOGRAPHY_OPTIONS, "boundary");
     // Tree-traversal complaint-type filter: the MDMS tree intersected with the
     // ABAC-scoped DISTINCT service_code list above (pruneComplaintTree). Both
     // inputs must exist — no scoped distincts (query failed / zero rows) or no
@@ -171,5 +175,5 @@ export function useFilterOptions({ enabled = true } = {}) {
     // `languageChanged` can fire before the new message bundle is installed.
     // i18nTick also advances on the later store `added` event, so cached rows
     // are re-labelled once the selected locale is actually available (#1108).
-  }, [raw, language, i18nTick]);
+  }, [raw, language, i18nTick, publicMode]);
 }

@@ -6,7 +6,7 @@ import { useResourceContext, useInput, required } from 'ra-core';
 import { getResourceConfig } from '@/providers/bridge';
 import { useResourceLabel } from '@/providers/useResourceLabel';
 import { useSchemaDefinition } from '@/hooks/useSchemaDefinition';
-import { useCanWriteResource } from '@/hooks/useCanWriteResource';
+import { useMastersCapability } from '@/hooks/useMastersCapability';
 import { orderFields, formatFieldLabel } from './schemaUtils';
 import { Label } from '@/components/ui/label';
 import { getDescriptor } from './schemaDescriptors';
@@ -107,20 +107,26 @@ export function MdmsResourceCreate() {
   const label = useResourceLabel()(resource);
   const { definition } = useSchemaDefinition(config?.schema);
   const descriptor = getDescriptor(config?.schema);
-  // Role gate (CCSD-1998): called before any early return to keep hook order
+  // Role gate: same role-action check that hides the Create/Edit buttons
+  // (useMastersCapability). Called before any early return to keep hook order
   // stable. Also blocks deep links straight to /manage/<resource>/create.
-  const canWrite = useCanWriteResource(resource);
+  // Permissions resolve asynchronously and read as "no roles" until they do;
+  // render nothing meanwhile rather than flashing the restricted notice.
+  const { roles, canEditResource } = useMastersCapability();
+  const permissionsLoaded = roles.length > 0;
+  const canWrite = canEditResource(resource);
 
   const defaults = useMemo(() => {
     if (!definition) return undefined;
     return buildDefaults(definition);
   }, [definition]);
 
+  if (!permissionsLoaded) return null;
   if (!canWrite) {
     return (
       <div className="p-6">
         <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
-          Creating {label} is restricted to: {(config?.writeRoles ?? []).join(', ')}.
+          Creating {label} is not permitted for your role.
         </div>
       </div>
     );

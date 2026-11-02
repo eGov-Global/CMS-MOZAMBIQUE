@@ -17,6 +17,7 @@ import { uiHomePageDescriptor } from './ui-homepage';
 import { securityPolicyDescriptor } from './data-security';
 import { encryptionPolicyDescriptor } from './encryption-policy';
 import { analyticsProviderDescriptor } from './analytics-provider';
+import { pgrEscalationDescriptor } from './pgr-escalation';
 
 /** Map of schema code -> descriptor. Add new entries as we cover more schemas. */
 const DESCRIPTORS: Record<string, SchemaDescriptor> = {
@@ -38,6 +39,7 @@ const DESCRIPTORS: Record<string, SchemaDescriptor> = {
   [securityPolicyDescriptor.schema]: securityPolicyDescriptor,
   [encryptionPolicyDescriptor.schema]: encryptionPolicyDescriptor,
   [analyticsProviderDescriptor.schema]: analyticsProviderDescriptor,
+  [pgrEscalationDescriptor.schema]: pgrEscalationDescriptor,
 };
 
 export function getDescriptor(schemaCode?: string): SchemaDescriptor | undefined {

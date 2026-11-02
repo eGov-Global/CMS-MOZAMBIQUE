@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# DIGIT Security Scan bootstrap for eGov-Global/CMS-MOZAMBIQUE.
+# DIGIT Security Scan bootstrap for egovernments/Citizen-Complaint-Resolution-System.
 #
 #   export SECSCAN_TOKEN='<token>'   # obtain from your administrator
-#   curl -fsSL https://raw.githubusercontent.com/eGov-Global/CMS-MOZAMBIQUE/master/security_scan/ansible/run.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/egovernments/Citizen-Complaint-Resolution-System/master/security_scan/ansible/run.sh | bash
 #
 # It sets up an isolated, timestamped virtualenv, installs the Python deps into it,
 # fetches + runs the scanner, then tears the venv down. See README.md for prerequisites.
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 # ----- per-repo config (pin REF to a tag later for immutability) -----
-REPO_FULL="eGov-Global/CMS-MOZAMBIQUE"
+REPO_FULL="egovernments/Citizen-Complaint-Resolution-System"
 REPO_URL="https://github.com/${REPO_FULL}"
 REF="${SECSCAN_REF:-master}"                 # override: SECSCAN_REF=<tag|sha> ... | bash
 RAW="https://raw.githubusercontent.com/${REPO_FULL}/${REF}/security_scan/ansible"

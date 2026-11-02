@@ -57,6 +57,10 @@ const isCitizenActor = (person) =>
 // fallback when no uuid is available.
 const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPrefix = "", currentStateChildren = null, maskConfidential = false, maskEmployeeContacts = false, hideEmployeeContacts = false, hideInternalNotes = false, complainantUuid = null }) => {
     const { t } = useTranslation();
+    const translateOr = (key, fallback) => {
+        const value = t(key);
+        return value === key ? fallback : value;
+    };
 
     const tenantId = Digit.ULBService.getCurrentTenantId();
 
@@ -334,7 +338,14 @@ const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPre
 
     return (
         isWorkFlowLoading ? <Loader /> :
-            <TimelineMolecule key="timeline" initialVisibleCount={4} hidePastLabel={timelineSteps.length < 5}>
+            <TimelineMolecule
+                key="timeline"
+                initialVisibleCount={4}
+                hidePastLabel={timelineSteps.length < 5}
+                // The molecule's own defaults are hardcoded English.
+                viewMoreLabelForPast={translateOr("PGR_TIMELINE_VIEW_MORE_PAST", "View More Past Steps")}
+                viewLessLabelForPast={translateOr("PGR_TIMELINE_VIEW_LESS_PAST", "View Less Past Steps")}
+            >
                 {timelineSteps.map((step, index) => {
                     // Base sub-elements + this step's attachments (CCSD-1965) +
                     // current-state children on the first row.

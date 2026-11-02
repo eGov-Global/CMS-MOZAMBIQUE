@@ -105,6 +105,65 @@ function normalizeRecord(raw: Record<string, unknown>, config: ResourceConfig): 
   return { ...raw, id: extractId(raw, config) } as RaRecord;
 }
 
+/**
+ * Collapse records that share a react-admin `id`, keeping the first occurrence.
+ *
+ * react-admin's contract is one record per id: its query cache, Datagrid row
+ * keys and every `<SelectItem value={id}>` built from a list all key on it. Two
+ * records with the same id therefore render as N visually identical rows/options
+ * that ALL resolve to the same record — and in a Radix `Select`, N items sharing
+ * a `value` all show as checked while `<SelectValue>` concatenates every one of
+ * their labels ("ADMINADMINADMIN…"). That is CCRS #1923.
+ *
+ * Duplicates are not hypothetical: the aggregating fetchers below concatenate
+ * results across the state tenant and its city tenants, and DIGIT does NOT
+ * enforce uniqueness of a `hierarchyType` or a boundary `code` across tenants.
+ * On bomet (`ke`) that yields 7 hierarchies called ADMIN, 3 called KE-ADMIN, and
+ * `CITY_001`/`WARD_001` defined under two different city tenants.
+ *
+ * Keep-first is deliberate: every aggregating fetcher lists the SESSION tenant's
+ * records before the sub-tenants', so the survivor is the definition the
+ * operator is actually working in.
+ *
+ * Blank ids are a different failure and get a different remedy. A record whose
+ * `idField` was missing normalizes to `id: ''`, and N such records are exactly
+ * as broken as N sharing a real id. Dropping all but the first would hide rows
+ * that are genuinely distinct — they collide only because id extraction failed,
+ * not because they are the same record. So each repeat is given its own
+ * synthetic id instead, which satisfies react-admin's one-record-per-id
+ * contract without losing anything. This mirrors what the custom-rows fetcher
+ * already does when two Novu integrations synthesize the same id.
+ */
+function dedupeById(records: RaRecord[]): RaRecord[] {
+  const seen = new Set<string>();
+  const out: RaRecord[] = [];
+  // Every id in the input, checked up front so a synthetic id can never collide
+  // with a real one that appears LATER in the list — which would otherwise make
+  // that real record look like a duplicate and drop it.
+  const taken = new Set(records.map((record) => String(record.id ?? '')));
+  let blanks = 0;
+  for (const record of records) {
+    const id = String(record.id ?? '');
+    if (!seen.has(id)) {
+      seen.add(id);
+      out.push(record);
+      continue;
+    }
+    // A repeated real id is a genuine cross-tenant duplicate: keep the first.
+    if (id !== '') continue;
+    // A repeated blank id is a distinct record that lost its id — keep it, under
+    // an id nothing else is using.
+    let synthetic: string;
+    do {
+      blanks += 1;
+      synthetic = `#blank-${blanks}`;
+    } while (taken.has(synthetic) || seen.has(synthetic));
+    seen.add(synthetic);
+    out.push({ ...record, id: synthetic } as RaRecord);
+  }
+  return out;
+}
+
 function normalizeMdmsRecord(mdms: MdmsRecord, config: ResourceConfig): RaRecord {
   let data = mdms.data || {};
   // Legacy ThemeConfig records (v1 nested / v2 semantic shapes) don't carry the
@@ -128,6 +187,74 @@ function normalizeMdmsRecord(mdms: MdmsRecord, config: ResourceConfig): RaRecord
     _schemaCode: mdms.schemaCode,
     _mdmsId: mdms.id,
   } as RaRecord;
+}
+
+interface BoundaryTreeNode extends Record<string, unknown> {
+  code?: string;
+  boundaryType?: string;
+  parent?: string | null;
+  children?: BoundaryTreeNode[];
+}
+
+interface FoundBoundaryRelationship {
+  node: BoundaryTreeNode;
+  parentCode: string | null;
+}
+
+function findBoundaryRelationship(
+  trees: Record<string, unknown>[],
+  code: string,
+): FoundBoundaryRelationship | undefined {
+  const visit = (
+    nodes: BoundaryTreeNode[],
+    inheritedParent: string | null,
+  ): FoundBoundaryRelationship | undefined => {
+    for (const node of nodes) {
+      const parentCode =
+        typeof node.parent === 'string' && node.parent.trim()
+          ? node.parent.trim()
+          : inheritedParent;
+      if (node.code === code) return { node, parentCode };
+      const found = visit(Array.isArray(node.children) ? node.children : [], node.code ?? null);
+      if (found) return found;
+    }
+    return undefined;
+  };
+
+  for (const tree of trees) {
+    const raw = tree.boundary;
+    const roots = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? [raw] : [];
+    const found = visit(roots as BoundaryTreeNode[], null);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function isDuplicateError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return normalized.includes('duplicate') || normalized.includes('already exists');
+}
+
+/** PGR owns its escalation policy in RAINMAKER-PGR.EscalationConfig.
+ *  Do not let the generic workflow masters create a second live PGR policy.
+ *  Existing legacy rows remain deletable so operators can complete migration. */
+function rejectLegacyPgrEscalationWrite(
+  config: ResourceConfig,
+  data: Record<string, unknown>,
+): void {
+  if (
+    config.schema !== 'Workflow.AutoEscalation' &&
+    config.schema !== 'Workflow.AutoEscalationStatesToIgnore'
+  ) return;
+
+  const businessService = String(data.businessService ?? '').trim().toUpperCase();
+  const module = String(data.module ?? '').trim().toUpperCase();
+  if (businessService === 'PGR' || module === 'PGR') {
+    throw new Error(
+      'PGR escalation is configured only through RAINMAKER-PGR.EscalationConfig',
+    );
+  }
 }
 
 // --- Complaint-hierarchy leaf adapter -------------------------------------
@@ -171,13 +298,65 @@ function mapLeafToServiceDef(
   };
 }
 
+// Used only when a tenant has no ComplaintHierarchyDefinition yet — a fresh
+// tenant bootstrapping its first leaf row before ever visiting "Complaint
+// Hierarchies" to declare one. Every real tenant's definition overrides these.
+const FALLBACK_HIERARCHY_TYPE = 'PGR';
+const FALLBACK_LEAF_LEVEL_CODE = 'SUB_TYPE';
+
+interface HierarchyDefinitionLevel {
+  levelCode?: string;
+  isLeafServiceCode?: boolean;
+}
+
+/** Resolve {hierarchyType, levelCode} for a NEW leaf row from the tenant's
+ *  actual RAINMAKER-PGR.ComplaintHierarchyDefinition, rather than a hardcoded
+ *  literal — both are tenant-configurable (levelCode especially: a tenant can
+ *  name its leaf level anything, not always "SUB_TYPE"; see review on
+ *  CCRS#1719). Picks the first active definition and the level it marks
+ *  isLeafServiceCode. Falls back to the FALLBACK_* constants only when no
+ *  definition exists at all, or the lookup fails. */
+async function resolveNewLeafDefaults(
+  client: DigitApiClient,
+  tenantId: string,
+): Promise<{ hierarchyType: string; levelCode: string }> {
+  try {
+    const definitions = await client.mdmsSearch(tenantId, 'RAINMAKER-PGR.ComplaintHierarchyDefinition', { isActive: true });
+    const def = definitions.find((d) => d.isActive);
+    const data = def?.data as { hierarchyType?: unknown; levels?: unknown } | undefined;
+    const hierarchyType = typeof data?.hierarchyType === 'string' ? data.hierarchyType : undefined;
+    const levels = Array.isArray(data?.levels) ? (data.levels as HierarchyDefinitionLevel[]) : [];
+    const leafLevel = levels.find((l) => l.isLeafServiceCode);
+    if (hierarchyType && leafLevel?.levelCode) {
+      return { hierarchyType, levelCode: leafLevel.levelCode };
+    }
+  } catch {
+    // fall through to the bootstrap default below
+  }
+  return { hierarchyType: FALLBACK_HIERARCHY_TYPE, levelCode: FALLBACK_LEAF_LEVEL_CODE };
+}
+
 /** Translate an inbound complaint-type form payload (legacy ServiceDefs
  *  vocabulary) into a ComplaintHierarchy LEAF row for writing. `serviceCode`
  *  becomes the row `code`; the adapter-only synthetic fields (menuPath /
  *  menuPathName / serviceCode) are dropped — grouping derives from parentCode.
- *  The metadata strip (id / `_*`) is left to the caller. */
-function serviceDefToLeafWrite(data: Record<string, unknown>): Record<string, unknown> {
+ *  The metadata strip (id / `_*`) is left to the caller.
+ *
+ *  `newLeafDefaults`, when passed, stamps hierarchyType/levelCode for a brand
+ *  new row that doesn't have them yet (CREATE — see resolveNewLeafDefaults).
+ *  Omit it on UPDATE: dataProvider.update() merges this output onto the
+ *  freshly-fetched existing record, so an edit that never touches these
+ *  fields correctly keeps whatever the record already has, rather than this
+ *  function silently overwriting them with a default (CCRS#1719 review). */
+function serviceDefToLeafWrite(
+  data: Record<string, unknown>,
+  newLeafDefaults?: { hierarchyType: string; levelCode: string },
+): Record<string, unknown> {
   const out: Record<string, unknown> = { ...data };
+  if (newLeafDefaults) {
+    if (!out.hierarchyType) out.hierarchyType = newLeafDefaults.hierarchyType;
+    if (!out.levelCode) out.levelCode = newLeafDefaults.levelCode;
+  }
   // serviceCode -> code (the leaf's code IS the serviceCode stored on a
   // complaint). Populate `code` from a filled Service Code whenever `code` is
   // absent OR blank — the create form carries `code: ""` (empty string, not
@@ -253,7 +432,17 @@ function clientFilter(records: RaRecord[], filter: Record<string, unknown>): RaR
       // choose which locales to pivot; they are not record fields, so they must
       // not participate in record-level filtering (else every pivoted row, which
       // has msg__<locale> fields but no `locales`/`locale` field, gets dropped).
+      // `locales.0` etc. appear when an array filter is objectified by ra-core
+      // / flattenFilterSources; those must be skipped too.
       if (key === 'locale' || key === 'locale2' || key === 'locales') return true;
+      if (key.startsWith('locale.') || key.startsWith('locale2.') || key.startsWith('locales.')) return true;
+      // Sentinel from LocalizationList's "All modules" Select — never a real module.
+      if (key === 'module' && (value === '__all__' || value === '')) return true;
+      // Arrays/objects are fetcher control data (e.g. locales: ['en_IN', …]).
+      // Matching them against a missing record field stringifies to
+      // "en_in,hi_in,…" / "[object Object]" and drops every row — that's how
+      // /manage/localization showed 0 against a dashboard count of thousands.
+      if (value !== null && typeof value === 'object') return true;
       if (key === 'q' && typeof value === 'string') {
         const q = value.toLowerCase();
         return JSON.stringify(record).toLowerCase().includes(q);
@@ -271,9 +460,75 @@ function clientPaginate(records: RaRecord[], page: number, perPage: number): RaR
 
 // --- Service-specific fetchers ---
 
+// Internal paging batch size for mdmsSearchAll — NOT a result cap. A tenant with more rows
+// than this just costs more round trips; nothing is ever truncated at this number.
+const DEFAULT_MDMS_SEARCH_ALL_BATCH_SIZE = 1000;
+// Safety ceiling in case mdms-v2 ever returns pages forever (bad offset handling, a
+// criterion mdms-v2 silently ignores, etc.) — far beyond any real DIGIT master data today.
+const DEFAULT_MDMS_SEARCH_ALL_MAX_BATCHES = 200;
+let mdmsSearchAllBatchSize = DEFAULT_MDMS_SEARCH_ALL_BATCH_SIZE;
+let mdmsSearchAllMaxBatches = DEFAULT_MDMS_SEARCH_ALL_MAX_BATCHES;
+
+/**
+ * Test-only hook so unit tests can exercise mdmsSearchAll's multi-batch and
+ * safety-ceiling logic with small fixtures instead of hundreds of thousands of
+ * allocated records. Never called from a production code path.
+ */
+export function __setMdmsSearchAllLimitsForTesting(batchSize = DEFAULT_MDMS_SEARCH_ALL_BATCH_SIZE, maxBatches = DEFAULT_MDMS_SEARCH_ALL_MAX_BATCHES): void {
+  mdmsSearchAllBatchSize = batchSize;
+  mdmsSearchAllMaxBatches = maxBatches;
+}
+
+/**
+ * Fetches every record for a schema, paging through mdms-v2 (which has no way to return
+ * "everything" in one call) instead of truncating at a single hardcoded limit. Issue #953:
+ * a tenant with 630 ComplaintHierarchy rows was silently capped at the old `{ limit: 500 }`
+ * single-shot fetch, before the leaf-adapter even got a chance to filter them.
+ *
+ * Bounded by `mdmsCount` (same criteria) rather than "did the last page come back short":
+ * a short/empty page is not a trustworthy end-of-data signal on its own — an environment
+ * that enforces a server-side max-limit below our batch size would return a short page
+ * while rows remain, silently reintroducing #953. `criteria` (e.g. isActive) is passed to
+ * both calls so the count and the fetched rows agree on what's being counted/paged, and
+ * `offset` advances by the page's actual length (not the requested batch size) with a
+ * uniqueIdentifier dedupe, so a server that ever returns more or fewer rows than asked
+ * can't produce gaps or duplicates.
+ */
+async function mdmsSearchAll(client: DigitApiClient, tenant: string, schema: string, criteria?: { isActive?: boolean }): Promise<MdmsRecord[]> {
+  const expectedTotal = await client.mdmsCount(tenant, schema, criteria);
+  const all: MdmsRecord[] = [];
+  const seen = new Set<string>();
+  let offset = 0;
+  let batches = 0;
+  while (all.length < expectedTotal && batches < mdmsSearchAllMaxBatches) {
+    batches += 1;
+    const page = await client.mdmsSearch(tenant, schema, { limit: mdmsSearchAllBatchSize, offset, ...criteria });
+    if (page.length === 0) break;
+    for (const record of page) {
+      if (seen.has(record.uniqueIdentifier)) continue;
+      seen.add(record.uniqueIdentifier);
+      all.push(record);
+    }
+    offset += page.length;
+  }
+  if (all.length < expectedTotal) {
+    // Either the safety ceiling was hit while mdms-v2 kept returning rows, or paging
+    // stopped short of mdmsCount's own total — returning `all` here would silently hand
+    // getList/getOne/getMany fewer records than mdms-v2 itself says exist. Fail loudly.
+    throw new Error(
+      `mdmsSearchAll: schema "${schema}" on tenant "${tenant}" retrieved ${all.length} of ` +
+        `${expectedTotal} records reported by mdmsCount; refusing to return a partial result.`,
+    );
+  }
+  return all;
+}
+
 async function mdmsGetList(client: DigitApiClient, config: ResourceConfig, tenantId: string, filter?: Record<string, unknown>): Promise<RaRecord[]> {
   const tenant = pickTenant(tenantId, filter);
-  const records = await client.mdmsSearch(tenant, config.schema!, { limit: 500 });
+  // No isActive push-down here: the leaf-adapter (adaptHierarchyLeaves) needs inactive
+  // rows too, to resolve a leaf's parent name even when that parent has since been
+  // deactivated. Non-leaf-adapter callers filter isActive themselves below.
+  const records = await mdmsSearchAll(client, tenant, config.schema!);
   if (config.leafServiceDefAdapter) return adaptHierarchyLeaves(records, config);
   return records.filter((r) => r.isActive).map((r) => normalizeMdmsRecord(r, config));
 }
@@ -389,11 +644,16 @@ async function boundaryGetList(client: DigitApiClient, config: ResourceConfig, t
   // tree and left the Boundary picker blank). Falls back to "ADMIN" when no
   // hierarchy definitions are found.
   async function flatForTenant(t: string): Promise<RaRecord[]> {
+    // Playwright onboarding specs leave hundreds of PW_* hierarchy stubs on
+    // live tenants (bomet ke has 214 types, 212 of them PW_*).
+    // DigitApiClient.boundaryHierarchySearch paginates every page (not the
+    // first 100); we still skip PW_* so we do not issue 200 empty tree
+    // queries. Always include ADMIN.
     const hierarchies = await client.boundaryHierarchySearch(t).catch(() => []);
-    const hierarchyTypes = (hierarchies as Record<string, unknown>[])
+    const discovered = (hierarchies as Record<string, unknown>[])
       .map((h) => (typeof h.hierarchyType === 'string' ? h.hierarchyType : ''))
-      .filter(Boolean);
-    const types = hierarchyTypes.length > 0 ? hierarchyTypes : ['ADMIN'];
+      .filter((ht) => ht && !/^PW_/i.test(ht));
+    const types = Array.from(new Set(['ADMIN', ...discovered]));
     const treeLists = await Promise.all(
       types.map((ht) => client.boundaryRelationshipSearch(t, ht).catch(() => [])),
     );
@@ -536,22 +796,31 @@ async function pgrGetList(client: DigitApiClient, config: ResourceConfig, tenant
   });
 }
 
+/** Parse the localization list's `locales` control value into locale codes. */
+function parseLocalesFilter(raw: unknown): string[] {
+  if (raw == null || raw === '') return [];
+  if (Array.isArray(raw)) return raw.map((l) => String(l).trim()).filter(Boolean);
+  // ra-core / flattenFilterSources may objectify an array into {0: 'en_IN', …}.
+  if (typeof raw === 'object') {
+    return Object.values(raw as Record<string, unknown>).map((l) => String(l).trim()).filter(Boolean);
+  }
+  return String(raw).split(',').map((l) => l.trim()).filter(Boolean);
+}
+
 async function localizationGetList(client: DigitApiClient, config: ResourceConfig, tenantId: string, filter?: Record<string, unknown>): Promise<RaRecord[]> {
   // Side-by-side pivot of two locales. The list view picks the locales via
   // dropdowns and passes them as `locale` (left column) and `locale2` (right
   // column). localeB is empty until the user explicitly picks a second locale
   // so the right column starts as all-missing rather than defaulting to a
   // hardcoded locale that may not exist on the tenant.
-  const module = filter?.module ? String(filter.module) : undefined;
+  const module = filter?.module && filter.module !== '__all__' ? String(filter.module) : undefined;
   // Multi-locale pivot: when the caller passes `locales` (array or CSV) the
   // grid wants one editable column per locale (msg__<locale>) instead of the
   // 2-way message/message2 compare — so every language can be edited side by
   // side. Rows are keyed by code+module; a code present in one locale but not
   // another still appears (its missing columns stay empty).
-  const localesRaw = filter?.locales;
-  if (localesRaw) {
-    const locales = (Array.isArray(localesRaw) ? localesRaw : String(localesRaw).split(','))
-      .map((l) => String(l).trim()).filter(Boolean);
+  const locales = parseLocalesFilter(filter?.locales);
+  if (locales.length > 0) {
     const perLocale = await Promise.all(locales.map((l) => client.localizationSearch(tenantId, l, module)));
     const pivotN = new Map<string, Record<string, unknown>>();
     locales.forEach((loc, i) => {
@@ -791,7 +1060,14 @@ export function createDigitDataProvider(client: DigitApiClient, tenantId: string
     return config;
   }
 
+  // Every list-shaped read funnels through here (getList's generic path,
+  // getMany, getManyReference), so this is the one place that can guarantee the
+  // "unique id per record" invariant react-admin depends on — see dedupeById.
   async function fetchAll(resource: string, filter?: Record<string, unknown>): Promise<RaRecord[]> {
+    return dedupeById(await fetchAllRaw(resource, filter));
+  }
+
+  async function fetchAllRaw(resource: string, filter?: Record<string, unknown>): Promise<RaRecord[]> {
     const config = resolveConfig(resource);
     switch (config.type) {
       case 'mdms': return mdmsGetList(client, config, tenantId, filter);
@@ -926,25 +1202,35 @@ export function createDigitDataProvider(client: DigitApiClient, tenantId: string
       }
 
       // MDMS resources without the leaf-adapter (all schemas except
-      // complaint-hierarchy): push limit/offset to the server when no
-      // client-side filter is active so the API is called with the actual
-      // page size instead of a fixed 500. MDMS v2 does not return a total
-      // count, so we use a heuristic: a full page means "there may be more"
-      // (next button enabled), a partial page means "last page".
+      // complaint-hierarchy), with no client-side filter active. mdms-v2's
+      // MdmsCriteria has no sort parameter, so a single server-paginated page
+      // can't represent the globally-sorted order — sorting just that page
+      // (as a single `{ limit: perPage, offset }` fetch used to) reshuffles
+      // each page independently instead of the full set. Page through every
+      // active record (mdmsSearchAll, with isActive pushed to the server so
+      // we don't also pay for every soft-deleted row), sort in memory, then
+      // slice the requested page. mdmsSearchAll bounds itself on mdmsCount
+      // with the SAME isActive criteria, so the total it hands back always
+      // agrees with what was actually paged through.
       if (config.type === 'mdms' && !config.leafServiceDefAdapter) {
         const filter = filterValues;
         const hasClientFilter = Object.keys(filter).some((k) => k !== TENANT_OVERRIDE_KEY);
         if (!hasClientFilter) {
           const tenant = pickTenant(tenantId, filter);
-          const offset = (page - 1) * perPage;
-          // isActive:true so the server paginates over active rows only. The
-          // client-side .filter below stays as a defensive fallback for any MDMS
-          // that ignores the criterion (degrades to old behavior, never worse).
-          const raw = await client.mdmsSearch(tenant, config.schema!, { limit: perPage, offset, isActive: true });
-          const data = raw.filter((r) => r.isActive).map((r) => normalizeMdmsRecord(r, config));
-          const sorted = clientSort(data, field, order);
-          const total = raw.length >= perPage ? offset + perPage + 1 : offset + data.length;
-          return { data: sorted, total };
+          const all = await mdmsSearchAll(client, tenant, config.schema!, { isActive: true });
+          // Defensive fallback for any MDMS build that ignores the isActive criterion —
+          // degrades to filtering client-side, never worse than the pre-push-down behavior.
+          // dedupeById mirrors what fetchAll does for the filtered path below, so
+          // both routes into an MDMS list obey the same one-record-per-id rule.
+          // A no-op for records carrying an MDMS uniqueIdentifier (always unique);
+          // it only bites on legacy rows that fall back to data[idField], which
+          // normalizeMdmsRecord already notes collapse onto one record anyway.
+          const active = dedupeById(
+            all.filter((r) => r.isActive).map((r) => normalizeMdmsRecord(r, config)),
+          );
+          const sorted = clientSort(active, field, order);
+          const data = clientPaginate(sorted, page, perPage);
+          return { data, total: active.length };
         }
       }
 
@@ -1078,8 +1364,12 @@ export function createDigitDataProvider(client: DigitApiClient, tenantId: string
       const config = resolveConfig(resource);
       if (config.type === 'mdms') {
         const incoming = config.leafServiceDefAdapter
-          ? serviceDefToLeafWrite(params.data as Record<string, unknown>)
+          ? serviceDefToLeafWrite(
+              params.data as Record<string, unknown>,
+              await resolveNewLeafDefaults(client, tenantId),
+            )
           : (params.data as Record<string, unknown>);
+        rejectLegacyPgrEscalationWrite(config, incoming);
         // Same metadata-strip the update path applies (PR #40). The
         // create path didn't have it, so any defaultRecord that included
         // `id` (some forms set id == code on create) or any normalised
@@ -1164,12 +1454,78 @@ export function createDigitDataProvider(client: DigitApiClient, tenantId: string
       }
       if (config.type === 'boundary') {
         const data = params.data as Record<string, unknown>;
-        const code = String(data.code);
-        const boundaryType = String(data.boundaryType || 'Locality');
-        const hierarchyType = String(data.hierarchyType || 'ADMIN');
-        const parent = data.parent ? String(data.parent) : null;
+        // Tenant ownership is deliberately taken only from the authenticated
+        // data-provider context. BoundaryCreate does not render a tenant field,
+        // and a caller-supplied data.tenantId must never retarget the write.
+        const code = String(data.code ?? '').trim();
+        const boundaryType = String(data.boundaryType ?? '').trim();
+        const hierarchyType = String(data.hierarchyType ?? '').trim();
+        const parent = typeof data.parent === 'string' && data.parent.trim()
+          ? data.parent.trim()
+          : null;
+
+        if (!code) throw new Error('Boundary code is required');
+        if (!hierarchyType) throw new Error('Boundary hierarchy is required');
+        if (!boundaryType) throw new Error('Boundary type is required');
+
+        // Resolve and validate the relationship before creating the entity.
+        // Without this preflight, a deterministic HIERARCHY_ERROR arrives only
+        // after boundary/_create has already published an orphan entity.
+        const hierarchyDefinitions = await client.boundaryHierarchySearch(tenantId, hierarchyType);
+        const hierarchy = hierarchyDefinitions.find(
+          (item) => String(item.hierarchyType ?? '') === hierarchyType,
+        );
+        if (!hierarchy) {
+          throw new Error(`Boundary hierarchy ${hierarchyType} is not defined for tenant ${tenantId}`);
+        }
+        const levels = Array.isArray(hierarchy.boundaryHierarchy)
+          ? (hierarchy.boundaryHierarchy as Record<string, unknown>[]).filter((level) => level.active !== false)
+          : [];
+        const selectedLevel = levels.find(
+          (level) => String(level.boundaryType ?? '') === boundaryType,
+        );
+        if (!selectedLevel) {
+          throw new Error(
+            `Boundary type ${boundaryType} is not part of hierarchy ${hierarchyType} for tenant ${tenantId}`,
+          );
+        }
+        const expectedParentType =
+          typeof selectedLevel.parentBoundaryType === 'string' && selectedLevel.parentBoundaryType.trim()
+            ? selectedLevel.parentBoundaryType.trim()
+            : null;
+
+        if (expectedParentType && !parent) {
+          throw new Error(`Parent boundary of type ${expectedParentType} is required for ${boundaryType}`);
+        }
+        if (!expectedParentType && parent) {
+          throw new Error(`Root boundary type ${boundaryType} must not define a parent`);
+        }
+
+        if (parent && expectedParentType) {
+          const trees = await client.boundaryRelationshipSearch(tenantId, hierarchyType);
+          const parentRelationship = findBoundaryRelationship(trees, parent);
+          if (!parentRelationship) {
+            throw new Error(
+              `Parent boundary ${parent} does not exist in hierarchy ${hierarchyType} for tenant ${tenantId}`,
+            );
+          }
+          if (String(parentRelationship.node.boundaryType ?? '') !== expectedParentType) {
+            throw new Error(
+              `Parent boundary ${parent} must have boundary type ${expectedParentType}`,
+            );
+          }
+        }
+
         // Create the boundary entity (publishes to Kafka for async persistence)
-        await client.boundaryCreate(tenantId, [{ code }]);
+        // and tolerate a verified pre-existing entity so a previous partial
+        // create can be resumed by attaching its missing relationship.
+        try {
+          await client.boundaryCreate(tenantId, [{ code }]);
+        } catch (error) {
+          if (!isDuplicateError(error)) throw error;
+          const existing = await client.boundarySearch(tenantId, [code]);
+          if (!existing.some((item) => String(item.code ?? '') === code)) throw error;
+        }
         // Retry relationship create — entity may not be persisted yet (Kafka async)
         let lastErr: Error | null = null;
         for (let attempt = 0; attempt < 5; attempt++) {
@@ -1179,7 +1535,16 @@ export function createDigitDataProvider(client: DigitApiClient, tenantId: string
             break;
           } catch (err) {
             lastErr = err as Error;
-            if (lastErr.message?.includes('does not exist') && attempt < 4) {
+            if (isDuplicateError(lastErr)) {
+              const trees = await client.boundaryRelationshipSearch(tenantId, hierarchyType);
+              const existing = findBoundaryRelationship(trees, code);
+              const existingType = String(existing?.node.boundaryType ?? '');
+              if (existing && existingType === boundaryType && existing.parentCode === parent) {
+                lastErr = null;
+                break;
+              }
+            }
+            if (lastErr.message?.toLowerCase().includes('does not exist') && attempt < 4) {
               await new Promise((r) => setTimeout(r, 500));
               continue;
             }
@@ -1251,6 +1616,10 @@ export function createDigitDataProvider(client: DigitApiClient, tenantId: string
           sanitized[key] = value;
         }
         existing.data = { ...existing.data, ...sanitized };
+        // React-admin may send only dirty fields. Validate the authoritative
+        // merged record so partial updates, updateMany, and reactivation cannot
+        // revive a competing PGR Workflow.AutoEscalation policy.
+        rejectLegacyPgrEscalationWrite(config, existing.data);
         const updated = await client.mdmsUpdate(existing, true);
         if (config.leafServiceDefAdapter) {
           const all = await mdmsGetList(client, config, tenantId);

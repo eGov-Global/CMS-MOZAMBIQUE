@@ -1,0 +1,167 @@
+# Per-tenant compose overlay for ige (state tenant `mz`).
+#
+# deploy.sh copies this to /opt/digit/docker-compose.ige.yml and layers it LAST
+# on every compose call, so these values survive every redeploy. Put tenant-only
+# settings here — never edit /opt/digit/docker-compose.egov-digit.yaml by hand.
+# Secrets do NOT belong here: they go in host_vars -> .env (see digit.env.j2).
+services:
+  pgr-services:
+    environment:
+      # Mozambique intake channels (docs/mozambique-customizations.md).
+      ALLOWED_SOURCE: "whatsapp,web,mobile,RB Bot,email,inperson,letter,linhaverde"
+      # Department/jurisdiction scoping moved to the v2.12.1 policy on the /pgr-services/v2/request/_search
+      # action (resource.complaint.scope) — see local-setup/upgrade/tenant/mz/search-scope.json.
+      # The playbook only rewrites the map KEY (pg -> state_root); the URL must be set here.
+      EGOV_UI_APP_HOST_MAP: "{mz:'https://falacidadao.gov.mz/'}"
+      # Keep OFF until v2.12.1 migration guide step 6a (escalation migration) is done,
+      # then flip to "true" here and redeploy (guide step 6b). Was "true" on v2.12.
+      PGR_ESCALATION_ENABLED: "false"
+
+  egov-user:
+    environment:
+      CITIZEN_REGISTRATION_WITHLOGIN_ENABLED: "true"
+      OTP_VALIDATION_REGISTER_MANDATORY: "false"
+
+  user-otp:
+    environment:
+      # OTP valid for 10 minutes (upstream default 300000 = 5 minutes).
+      EXPIRY_TIME_FOR_OTP: 600000
+
+  egov-filestore:
+    environment:
+      # Upstream map + .docx (application/vnd.openxmlformats-officedocument.wordprocessingml.document).
+      ALLOWED_FORMATS_MAP: "{mp4:{'video/mp4'},mov:{'video/quicktime'},avi:{'video/x-msvideo'},mkv:{'video/x-matroska'},webm:{'video/webm'},pptx:{'application/vnd.openxmlformats-officedocument.presentationml.presentation','application/vnd.ms-powerpoint','application/x-tika-ooxml','application/zip','application/octet-stream'},jpg:{'image/jpg','image/jpeg'},jpeg:{'image/jpeg','image/jpg'},png:{'image/png'},pdf:{'application/pdf'},odt:{'application/vnd.oasis.opendocument.text'},ods:{'application/vnd.oasis.opendocument.spreadsheet'},docx:{'application/x-tika-msoffice','application/x-tika-ooxml','application/vnd.oasis.opendocument.text','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document'},doc:{'application/x-tika-msoffice','application/x-tika-ooxml','application/vnd.oasis.opendocument.text','application/msword'},dxf:{'text/plain','application/dxf','application/octet-stream','image/vnd.dxf','image/vnd.dxf; format=ascii','image/vnd.dxf; format=binary','image/vnd.dxb'},csv:{'text/plain'},txt:{'text/plain'},xlsx:{'application/x-tika-ooxml','application/x-tika-msoffice','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/zip'},xls:{'application/x-tika-ooxml','application/x-tika-msoffice','application/vnd.ms-excel','multipart/form-data'},zip:{'application/zip','application/octet-stream'},geojson:{'application/json','text/plain','application/geo+json','multipart/form-data'},json:{'application/json','text/plain'}}"
+
+  novu-bridge:
+    environment:
+      # SMS goes straight to the Ozeki gateway (OZEKI_* come from .env / host_vars).
+      NOVU_BRIDGE_DIRECT_CHANNELS: "SMS"
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
+
+  # Slow-starting services on this box: wait longer before marking unhealthy.
+  egov-mdms-service:
+    healthcheck:
+      retries: 30
+  egov-user-proxy:
+    healthcheck:
+      retries: 30
+  egov-workflow-proxy:
+    healthcheck:
+      retries: 30
+
+  # ===========================================================================
+  # WhatsApp chatbot (xstate-chatbot), code from feat/whatsapp-inbound-mz.
+  # Off unless host_vars has `enable_chatbot: true` (compose profile "chatbot").
+  # Mirrors the hand-run UAT container (docker run, 2026-10-15) with these fixes:
+  #   - no host port: Twilio reaches it through nginx -> Kong /xstate-chatbot
+  #     (UAT published 0.0.0.0:8082, which skipped nginx/Kong entirely);
+  #   - Kafka at redpanda:9092 (UAT had localhost:9092, so telemetry was lost);
+  #   - its DB tables come from xstate-chatbot-db (Flyway) instead of by hand.
+  # Secrets (Twilio, service-account password) come from .env / host_vars only.
+  # ===========================================================================
+  xstate-chatbot-db:
+    image: ${XSTATE_CHATBOT_DB_IMAGE:-egovio/xstate-chatbot-db:whatsapp-inbound-mz-e593cb7}
+    container_name: xstate-chatbot-db
+    profiles: ["chatbot"]
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres-db:5432/egov
+      # Same history table UAT already has (V20260505000000 applied); the newer
+      # V20260918000000 (resume_pending_at) uses IF NOT EXISTS, so it is safe
+      # where the column was added by hand.
+      SCHEMA_TABLE: xstate_chatbot_schema
+      FLYWAY_USER: egov
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD:-egov123}
+      # The db Dockerfile copies migration/main to /flyway/sql (root, not /main).
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    networks:
+      - egov-network
+
+  xstate-chatbot:
+    image: ${XSTATE_CHATBOT_IMAGE:-egovio/xstate-chatbot:whatsapp-inbound-mz-e593cb7}
+    container_name: xstate-chatbot
+    restart: unless-stopped
+    profiles: ["chatbot"]
+    depends_on:
+      xstate-chatbot-db:
+        condition: service_completed_successfully
+      pgbouncer:
+        condition: service_healthy
+      kong:
+        condition: service_started
+    environment:
+      NAME: xstate-chatbot
+      SERVICE_PORT: "8082"            # kong.yml: http://xstate-chatbot:8082
+      CONTEXT_PATH: /xstate-chatbot
+      # -- Channel (Twilio) --
+      WHATSAPP_PROVIDER: Twilio
+      SERVICE_PROVIDER: eGov
+      WHATSAPP_BUSINESS_NUMBER: ${CHATBOT_WHATSAPP_BUSINESS_NUMBER:-}
+      TWILIO_WHATSAPP_NUMBER: ${CHATBOT_TWILIO_WHATSAPP_NUMBER:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_BASE_URL: ""
+      # Public origin Twilio calls; the signature check is computed against it.
+      TWILIO_WEBHOOK_BASE_URL: ${CHATBOT_WEBHOOK_BASE_URL:-}
+      TWILIO_VERIFY_WEBHOOK_SIGNATURE: "true"
+      REMINDER_AUTH_TOKEN: ${CHATBOT_REMINDER_TOKEN:-}
+      DEV_PROXY_ENABLED: "false"
+      # -- Who the bot acts as (employee CHATBOT on UAT) --
+      USER_SERVICE_ACCOUNT_USERNAME: ${CHATBOT_SERVICE_ACCOUNT_USERNAME:-CHATBOT}
+      USER_SERVICE_ACCOUNT_PASSWORD: ${CHATBOT_SERVICE_ACCOUNT_PASSWORD:-}
+      USER_SERVICE_ACCOUNT_TENANT: mz
+      ROOT_TENANTID: mz
+      ALLOWED_MOBILE_NUMBERS: ${CHATBOT_ALLOWED_MOBILE_NUMBERS:-}
+      # -- Mozambique numbers, language, conversation (as UAT) --
+      DEFAULT_COUNTRY_CODE: "+258"
+      DEFAULT_MOBILE_REGEX: "^8[0-9]{8}$$"
+      MOBILE_NUMBER_LENGTH: "9"
+      SUPPORTED_LOCALES: pt_PT,en_IN
+      DATEFORMAT: DD/MM/YYYY
+      TIMEZONE: Africa/Maputo
+      CANCEL_WORDS: cancel,cancelar,cancele,stop
+      RESET_WORDS: reset,reiniciar,reinicie,restart,começar,comece,ola,oi,hello,reclamar
+      DESCRIPTION_MIN_LENGTH: "20"
+      INSTITUTE_NAME_MAX_LENGTH: "300"
+      CASE_RELATED_TO: IGE
+      BOUNDARY_HIERARCHY_TYPE: divisao_administrativa
+      CITIZEN_PLACEHOLDER_NAME: Cidadão
+      COMPLAINT_SEARCH_LIMIT: "3"
+      MAX_MEDIA_SIZE_MB: "5"
+      AVG_SESSION_TIME: "10"
+      REPLY_COOLDOWN_MS: "3000"
+      DISPATCH_SETTLE_TIMEOUT_MS: "30000"
+      MEDIA_PROCESSING_TIMEOUT_MS: "20000"
+      # -- DIGIT services, all through Kong --
+      EGOV_SERVICES_HOST: http://kong:8000/
+      EXTERNAL_HOST: http://kong:8000/
+      EGOV_SEARCHER_HOST: http://kong:8000/
+      USER_SERVICE_HOST: http://kong:8000/
+      LOCALIZATION_SERVICE_HOST: http://kong:8000/
+      PGR_VERSION: v2
+      # -- Sessions in Postgres (survive restarts); keep ONE replica --
+      REPO_PROVIDER: Postgres
+      DB_HOST: pgbouncer
+      DB_PORT: "5432"
+      DB_NAME: egov
+      DB_USER: egov
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-egov123}
+      DB_SSL: "false"
+      # -- Telemetry only; Novu sends the outbound status messages --
+      KAFKA_BOOTSTRAP_SERVER: redpanda:9092
+      KAFKA_CONSUMER_ENABLED: "false"
+      ENABLE_SANDBOX_MODE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/xstate-chatbot/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    networks:
+      - egov-network

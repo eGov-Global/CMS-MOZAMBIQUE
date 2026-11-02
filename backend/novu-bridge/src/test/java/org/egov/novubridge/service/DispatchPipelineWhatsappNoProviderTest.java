@@ -71,7 +71,7 @@ class DispatchPipelineWhatsappNoProviderTest {
         when(novuClient.identifyThenTrigger(anyString(), any(), anyString(), anyString(), any(), anyString(), any(), any(), any()))
                 .thenReturn(NovuClient.NovuResponse.builder().statusCode(201).response(Map.of("acknowledged", true)).build());
 
-        service = new DispatchPipelineService(envelopeValidator, preferenceServiceClient, novuClient,
+        service = new DispatchPipelineService(envelopeValidator, preferenceServiceClient, novuClient, null,
                 dispatchLogRepository, config, mdmsServiceClient, directDeliveryService);
     }
 

@@ -39,6 +39,7 @@ public class DispatchPipelineService {
     private final EnvelopeValidator envelopeValidator;
     private final PreferenceServiceClient preferenceServiceClient;
     private final NovuClient novuClient;
+    private final SmsCountryClient smsCountryClient;
     private final DispatchLogRepository dispatchLogRepository;
     private final NovuBridgeConfiguration config;
     private final MdmsServiceClient mdmsServiceClient;
@@ -47,6 +48,7 @@ public class DispatchPipelineService {
     public DispatchPipelineService(EnvelopeValidator envelopeValidator,
                                    PreferenceServiceClient preferenceServiceClient,
                                    NovuClient novuClient,
+                                   SmsCountryClient smsCountryClient,
                                    DispatchLogRepository dispatchLogRepository,
                                    NovuBridgeConfiguration config,
                                    MdmsServiceClient mdmsServiceClient,
@@ -54,6 +56,7 @@ public class DispatchPipelineService {
         this.envelopeValidator = envelopeValidator;
         this.preferenceServiceClient = preferenceServiceClient;
         this.novuClient = novuClient;
+        this.smsCountryClient = smsCountryClient;
         this.dispatchLogRepository = dispatchLogRepository;
         this.config = config;
         this.mdmsServiceClient = mdmsServiceClient;
@@ -195,6 +198,10 @@ public class DispatchPipelineService {
         // (and their dispatch-log error code/message) agree on which gateway was actually used.
         boolean viaDirect = ("SMS".equalsIgnoreCase(channel) || "EMAIL".equalsIgnoreCase(channel))
                 && config.isDirectChannel(channel);
+        // SMSCountry's legacy API is form-encoded with a plain-text reply, which Novu's
+        // generic-sms provider cannot express, so that gateway is driven directly too —
+        // only when the channel isn't already routed through direct delivery above.
+        boolean viaSmsCountry = !viaDirect && "SMS".equalsIgnoreCase(channel) && config.isSmsCountryDirect();
 
         NovuClient.NovuResponse response;
         try {
@@ -202,6 +209,10 @@ public class DispatchPipelineService {
                 response = directDeliveryService.sendSms(contact.getPhone(), context.getRenderedBody(), context.getTransactionId());
             } else if ("EMAIL".equalsIgnoreCase(channel) && viaDirect) {
                 response = directDeliveryService.sendEmail(contact.getEmail(), context.getRenderedSubject(),
+                        context.getRenderedBody(), context.getTransactionId());
+            } else if (viaSmsCountry) {
+                response = smsCountryClient.send(
+                        contact != null ? contact.getPhone() : null,
                         context.getRenderedBody(), context.getTransactionId());
             } else {
                 // WHATSAPP always lands here, regardless of novu.bridge.direct.channels —
@@ -224,8 +235,8 @@ public class DispatchPipelineService {
         Integer sc = response != null ? response.getStatusCode() : null;
         boolean delivered = sc != null && sc >= 200 && sc < 300;
         if (!delivered) {
-            persist(event, context, "FAILED", viaDirect ? "NB_DIRECT_DELIVERY_FAILED" : "NB_NOVU_TRIGGER_FAILED",
-                    (viaDirect ? "Direct delivery returned status " : "Novu returned status ") + sc,
+            persist(event, context, "FAILED", (viaDirect || viaSmsCountry) ? "NB_DIRECT_DELIVERY_FAILED" : "NB_NOVU_TRIGGER_FAILED",
+                    ((viaDirect || viaSmsCountry) ? "Direct delivery returned status " : "Novu returned status ") + sc,
                     response != null ? response.getResponse() : null, 1);
             return DispatchResult.builder()
                     .valid(true).preferenceAllowed(true).derivedContext(context)

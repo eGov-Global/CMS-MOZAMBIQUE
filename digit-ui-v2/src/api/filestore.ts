@@ -26,7 +26,12 @@ export async function uploadFile(
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: fd,
   });
-  if (!res.ok) throw new Error(`Filestore upload failed: HTTP ${res.status}`);
+  if (!res.ok) {
+    // filestore-scan-proxy (and filestore itself) return DIGIT-style Errors[];
+    // surface the message so a virus-scan rejection isn't just "HTTP 400".
+    const body = (await res.json().catch(() => ({}))) as { Errors?: Array<{ message?: string }> };
+    throw new Error(body.Errors?.[0]?.message ?? `Filestore upload failed: HTTP ${res.status}`);
+  }
   const data = (await res.json()) as { files?: Array<{ fileStoreId: string }> };
   const id = data.files?.[0]?.fileStoreId;
   if (!id) throw new Error('Filestore upload returned no fileStoreId.');

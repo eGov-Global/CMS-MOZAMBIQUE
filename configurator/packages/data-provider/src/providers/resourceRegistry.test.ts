@@ -121,6 +121,7 @@ describe('resourceRegistry', () => {
       'auto-escalation-ignore': 'Workflow.AutoEscalationStatesToIgnore',
       'workflow-bs-master': 'Workflow.BusinessServiceMasterConfig',
       'pgr-ui-constants': 'RAINMAKER-PGR.UIConstants',
+      'pgr-escalation': 'RAINMAKER-PGR.EscalationConfig',
     };
     for (const [resource, schema] of Object.entries(expected)) {
       const cfg = getResourceConfig(resource);
@@ -130,6 +131,18 @@ describe('resourceRegistry', () => {
     // Old aliases must be gone — a single canonical key avoids confusion
     assert.strictEqual(getResourceConfig('user-validation'), undefined, 'user-validation alias must be removed');
     assert.strictEqual(getResourceConfig('mobile-validation'), undefined, 'mobile-validation alias must be removed');
+  });
+
+  it('never keys a master on a value operators edit (#1252)', () => {
+    // pgr-ui-constants used to declare idField: 'REOPENSLA' — the record's only
+    // value doubling as its key. mdms-v2 rejects updates that change an x-unique
+    // field, so Save on the reopen window always returned 400
+    // UNIQUE_KEY_UPDATE_ERR and the window could not be changed by any route.
+    const uiConstants = getResourceConfig('pgr-ui-constants');
+    assert.ok(uiConstants);
+    assert.strictEqual(uiConstants.idField, 'code');
+    // Same defect, same fix, one master earlier — keep both honest.
+    assert.strictEqual(getResourceConfig('map-config')?.idField, 'code');
   });
 
   it('does not register schemas that do not exist on ke (phantom cleanup)', () => {

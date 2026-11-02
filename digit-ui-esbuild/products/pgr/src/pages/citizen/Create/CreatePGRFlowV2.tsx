@@ -21,6 +21,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { complaintLabel } from "../../../utils/complaintLabel";
+import { serializeGeoLocation } from "../../../utils/geoLocation";
 import { isVisibleOnEntrance } from "../../../utils/testingTenant";
 import { EV, trackE, failureName } from "../../../utils/analytics";
 import PGRDatePicker from "../../../components/PGRDatePicker";
@@ -317,17 +318,6 @@ function isDescriptionValid(v: unknown): boolean {
   return s.length >= DESC_MIN && descriptionLetters(s) >= 3;
 }
 
-function validateGeoLocation(v: { latitude?: number | null; longitude?: number | null }) {
-  if (
-    v &&
-    typeof v.latitude === "number" &&
-    typeof v.longitude === "number"
-  ) {
-    return { latitude: v.latitude, longitude: v.longitude };
-  }
-  return {};
-}
-
 function getEffectiveServiceCode(
   mainType: ServiceDef | null | undefined,
   subType: ServiceDef | null | undefined
@@ -406,10 +396,9 @@ function mapFormDataToRequest(formData: FormData, tenantId: string, user: any, d
             formData?.GeoLocationsPoint?.ward?.code ||
             "",
         },
-        geoLocation: validateGeoLocation({
-          latitude: geoLocation.lat ?? null,
-          longitude: geoLocation.lng ?? null,
-        }),
+        // {} when there is no usable pin — (0,0) and out-of-range points included —
+        // the same object shape the employee flow sends.
+        geoLocation: serializeGeoLocation(geoLocation),
       },
       // Top-level service.extendedAttributes (doc jsonPath $.service.extendedAttributes).
       // Attached only when a category resolved; legacy/no-category flow is unchanged.
@@ -687,6 +676,10 @@ function ComplaintHierarchyPicker({
               value={sel[i] ?? undefined}
               disabled={disabled}
               onValueChange={(value: string) => handleChange(i, value)}
+              // Every filing list searches, whatever its length, as the
+              // employee form's do (CCRS#941).
+              searchable
+              searchPlaceholder={tr(t, "CS_COMMON_SEARCH", "Search")}
               placeholder={
                 disabled
                   ? tr(t, "CS_COMPLAINT_PICK_PARENT_FIRST", "Select the level above first")
@@ -817,6 +810,8 @@ function Step0Type({ data, patch, serviceDefs, hierarchyDef, nodes, t }: StepBod
               const picked = types.find((tp) => tp.menuPath === value);
               patch({ SelectComplaintType: picked, SelectSubComplaintType: null });
             }}
+            searchable
+            searchPlaceholder={tr(t, "CS_COMMON_SEARCH", "Search")}
             placeholder={tr(t, "CS_COMPLAINT_PICK_TYPE", "Select a complaint type")}
             options={types.map((tp) => ({
               value: tp.menuPath,
@@ -837,6 +832,8 @@ function Step0Type({ data, patch, serviceDefs, hierarchyDef, nodes, t }: StepBod
                 const picked = subTypes.find((s) => s.serviceCode === value);
                 patch({ SelectSubComplaintType: picked });
               }}
+              searchable
+              searchPlaceholder={tr(t, "CS_COMMON_SEARCH", "Search")}
               placeholder={tr(t, "CS_COMPLAINT_PICK_SUBTYPE", "Select a subtype")}
               options={subTypes.map((s) => ({
                 value: s.serviceCode,
@@ -1857,7 +1854,7 @@ const CreatePGRFlowV2: React.FC = () => {
         // it (auto-cascade) but NOT mandatory — clearing the pin (the map's ✕)
         // and picking the cascade manually is a supported flow, and requiring
         // the pin left NEXT disabled with every dropdown filled. Payload-safe:
-        // validateGeoLocation falls back to {} exactly like the employee flow.
+        // serializeGeoLocation falls back to {} exactly like the employee flow.
         return isFieldValid(formData, "SelectedBoundary") ? null : "LocationRequired";
       case "details": {
         if (!isFieldValid(formData, "description")) return "DescriptionRequired";
@@ -1954,6 +1951,33 @@ const CreatePGRFlowV2: React.FC = () => {
       trackE(EV.COMPLAINT_SUBMITTED);
       const user = Digit.UserService.getUser();
       const payload = mapFormDataToRequest(formData, resolvedTenant, user?.info ?? user, evidenceDocType);
+      // What the confirmation screen summarises, handed over in the route's
+      // state: the create response carries only codes, and the names are known
+      // here. Route state survives the response page remounting.
+      const boundary: any = formData.SelectedBoundary;
+      const boundaryLevels: any[] = Array.isArray(boundary?.levels) ? boundary.levels : [];
+      const nodeLabel = (n: any) => (n?.code && t(n.code) !== n.code ? t(n.code) : n?.name || n?.code || "");
+      const filedSummary = {
+        category: [
+          // menuPathName is the hierarchy node CODE (e.g. Complaint_PublicIntegrity),
+          // so it goes through the same COMPLAINT_HIERARCHY.* lookup as the subtype.
+          formData.SelectComplaintType?.menuPath
+            ? complaintLabel(t, formData.SelectComplaintType.menuPath, formData.SelectComplaintType.menuPathName)
+            : "",
+          formData.SelectSubComplaintType
+            ? complaintLabel(t, formData.SelectSubComplaintType.serviceCode, formData.SelectSubComplaintType.name)
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        // Leaf first, as an address reads ("Bairro, Distrito, Província").
+        location: (boundaryLevels.length ? [...boundaryLevels].reverse() : boundary ? [boundary] : [])
+          .map(nodeLabel)
+          .filter(Boolean)
+          .join(", "),
+        photos: Array.isArray(formData.ComplaintImagesPoint) ? formData.ComplaintImagesPoint.length : 0,
+        filedAt: Date.now(),
+      };
       createMutation(payload, {
         onError: (err: any) => {
           dispatch({ type: "CREATE_COMPLAINT", payload: { responseInfo: { status: "failed" } } });
@@ -1971,7 +1995,7 @@ const CreatePGRFlowV2: React.FC = () => {
           trackE(EV.COMPLAINT_CREATED, formData.SelectComplaintType?.name || formData.SelectComplaintType?.serviceCode || "");
           await client.refetchQueries(["complaintsList"]);
           setSubmitting(false);
-          history.push(`/${window?.contextPath || "digit-ui"}/citizen/pgr/response`);
+          history.push(`/${window?.contextPath || "digit-ui"}/citizen/pgr/response`, { filedSummary });
         },
       });
       return;
@@ -2053,7 +2077,12 @@ const CreatePGRFlowV2: React.FC = () => {
         ) : null}
       </div>
       <FormFooter>
-        <Button variant="outline" onClick={handleBack} type="button">
+        <Button
+          variant="outline"
+          onClick={handleBack}
+          type="button"
+          data-analytics-event={stepIndex === 0 ? "pgr.file-complaint.cancel" : "pgr.file-complaint.back"}
+        >
           {stepIndex === 0 ? (
             tr(t, "CS_COMMON_CANCEL", "Cancel")
           ) : (
@@ -2080,6 +2109,7 @@ const CreatePGRFlowV2: React.FC = () => {
           <Button
             variant="primary"
             onClick={handleContinue}
+            data-analytics-event={isLast ? "pgr.file-complaint.submit" : `pgr.file-complaint.${curId || "unknown"}`}
             loading={submitting}
             // Also disabled while the create is in flight: a second tap on a
             // slow connection would file a duplicate complaint.

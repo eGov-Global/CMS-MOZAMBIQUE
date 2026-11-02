@@ -22,6 +22,16 @@ const MAX_BYTES = 5 * 1024 * 1024; // 5 MB per file
 const DEFAULT_ACCEPT =
   "image/*,.pdf,.doc,.docx,.xls,.xlsx,.mp4,.mov,.avi,.mkv,.webm";
 
+// Error codes returned by filestore-scan-proxy → [localisation key, fallback].
+const SCAN_ERRORS = {
+  VIRUS_DETECTED: ["CS_FILE_VIRUS_DETECTED", "This file failed a security scan. Please upload a different file."],
+  FILE_NOT_SCANNABLE: [
+    "CS_FILE_NOT_SCANNABLE",
+    "This file could not be checked. Remove any password protection and try again.",
+  ],
+  SCAN_UNAVAILABLE: ["CS_FILE_SCAN_UNAVAILABLE", "File upload is temporarily unavailable. Please try again later."],
+};
+
 function tr(t, key, fallback) {
   const v = typeof t === "function" ? t(key) : key;
   return v === key ? fallback : v;
@@ -286,12 +296,20 @@ const PgrFileUpload = ({ t, tenantId, value, onSelect, fieldKey, accept = DEFAUL
           trackE(EV.ATTACHMENT_ADDED, `${previewKind}:${sizeBucket(file.size)}`);
         }
       } catch (err) {
+        // filestore-scan-proxy rejections carry a stable code; show a
+        // localised message for those rather than the raw API text.
+        const code = err?.response?.data?.Errors?.[0]?.code;
+        const scanMessage = SCAN_ERRORS[code];
         const apiMessage =
           err?.response?.data?.Errors?.[0]?.message ||
           err?.response?.data?.message ||
           err?.message;
-        setError(apiMessage || tr(t, "CS_FILE_UPLOAD_FAILED", "File upload failed."));
-        trackE(EV.ATTACHMENT_FAILED, failureName(err));
+        setError(
+          scanMessage
+            ? tr(t, scanMessage[0], scanMessage[1])
+            : apiMessage || tr(t, "CS_FILE_UPLOAD_FAILED", "File upload failed."),
+        );
+        trackE(EV.ATTACHMENT_FAILED, scanMessage ? code : failureName(err));
       }
     }
     setBusy(false);
