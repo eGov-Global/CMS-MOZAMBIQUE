@@ -895,6 +895,7 @@ const PGRDetails = () => {
                         maskConfidential={!!pgrData?.ServiceWrappers?.[0]?.service?.extendedAttributes?.isConfidential}
                         complainantUuid={pgrData?.ServiceWrappers?.[0]?.service?.citizen?.uuid || pgrData?.ServiceWrappers?.[0]?.service?.accountId}
                         complainant={pgrData?.ServiceWrappers?.[0]?.service?.citizen}
+                        complaintSource={pgrData?.ServiceWrappers?.[0]?.service?.source}
                       />
                     ),
                   },

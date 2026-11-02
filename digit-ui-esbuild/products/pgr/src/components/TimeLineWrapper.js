@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { PopUp, Timeline, TimelineMolecule, Loader } from '@egovernments/digit-ui-components';
 import { convertEpochFormateToDate } from '../utils';
 import { parseFilestoreEntry } from '../utils/attachmentKind';
+import { chatbotFiler } from '../utils/chatbotFiler';
 
 // NOTE: no useMyContext() here — the citizen route tree has no MyContext
 // provider, and this wrapper renders on BOTH citizen and employee details.
@@ -55,7 +56,9 @@ const isCitizenActor = (person) =>
 // role, and classifying them as "citizen" leaked internal comments and
 // employee identities onto the citizen timeline. Role check is only the
 // fallback when no uuid is available.
-const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPrefix = "", currentStateChildren = null, maskConfidential = false, maskEmployeeContacts = false, hideEmployeeContacts = false, hideInternalNotes = false, complainantUuid = null, complainant = null }) => {
+// complaintSource — the complaint's service.source; the APPLY row shows the
+// complainant instead of its recorded actor only on a chatbot filing.
+const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPrefix = "", currentStateChildren = null, maskConfidential = false, maskEmployeeContacts = false, hideEmployeeContacts = false, hideInternalNotes = false, complainantUuid = null, complainant = null, complaintSource = null }) => {
     const { t } = useTranslation();
     const translateOr = (key, fallback) => {
         const value = t(key);
@@ -264,6 +267,8 @@ const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPre
                 return `${t('CS_COMMON_EMPLOYEE_COMMENTS')} : "${raw}"`;
             };
 
+            const citizenLabel = translateOr("ACCESSCONTROL_ROLES_ROLES_CITIZEN", t("CS_NA"));
+
             // Map API response to timeline steps
             const steps = workflowData.ProcessInstances.map((instance, index) => {
                 const assignee = instance?.assignes?.[0];
@@ -271,15 +276,7 @@ const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPre
                 // otherwise) — see the prop doc above for why role alone lies.
                 const isComplainant = (person) =>
                   complainantUuid && person?.uuid ? person.uuid === complainantUuid : isCitizenActor(person);
-                // The chatbot files with its service account, so the workflow records
-                // that account as the APPLY actor (upstream CCRS#2503). When the APPLY
-                // actor is not the complainant, the row shows the complainant instead,
-                // carrying their uuid so the masking and hiding rules below treat it
-                // as the complainant.
-                const filer =
-                  instance?.action === "APPLY" && complainantUuid && instance?.assigner?.uuid && !isComplainant(instance.assigner)
-                    ? { ...complainant, name: complainant?.name || (t("ACCESSCONTROL_ROLES_ROLES_CITIZEN") === "ACCESSCONTROL_ROLES_ROLES_CITIZEN" ? "Citizen" : t("ACCESSCONTROL_ROLES_ROLES_CITIZEN")), uuid: complainantUuid }
-                    : null;
+                const filer = chatbotFiler(instance, { complaintSource, complainant, complainantUuid, isComplainant, citizenLabel });
                 const personRecord = filer || (isAssigningAction(instance?.action) ? assignee : instance?.assigner);
                 const isEmployeeActor = personRecord && !isComplainant(personRecord);
                 // On the citizen's timeline, only the closing entry (and the
@@ -343,7 +340,7 @@ const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPre
             });
             setTimelineSteps(steps);
         }
-    }, [workflowData, complainant, complainantUuid]);
+    }, [workflowData, complainant, complainantUuid, complaintSource]);
 
     return (
         isWorkFlowLoading ? <Loader /> :

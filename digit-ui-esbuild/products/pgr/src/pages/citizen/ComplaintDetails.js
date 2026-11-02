@@ -128,6 +128,7 @@ function WorkflowComponent({ complaintDetails, id }) {
       // uuid, not on the CITIZEN role (officers can hold it too).
       complainantUuid={complaintDetails?.service?.citizen?.uuid || complaintDetails?.service?.accountId}
       complainant={complaintDetails?.service?.citizen}
+      complaintSource={complaintDetails?.service?.source}
     />
   );
 }
