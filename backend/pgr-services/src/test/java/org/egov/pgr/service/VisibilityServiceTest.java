@@ -7,6 +7,7 @@ import org.egov.pgr.config.PGRConfiguration;
 import org.egov.pgr.repository.HrmsProjectionRepository;
 import org.egov.pgr.repository.PGRRepository;
 import org.egov.pgr.repository.ServiceRequestRepository;
+import org.egov.pgr.util.CreatorRoles;
 import org.egov.pgr.util.MDMSUtils;
 import org.egov.pgr.web.models.RequestSearchCriteria;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,7 +58,7 @@ class VisibilityServiceTest {
         when(config.getVisibilityEnabled()).thenReturn(true);
         when(mdmsUtils.getMdmsSearchUrl()).thenReturn(new StringBuilder("http://mdms/_search"));
         visibilityService = new VisibilityService(config, projectionRepository, workflowService,
-                serviceRequestRepository, mdmsUtils, pgrRepository);
+                serviceRequestRepository, mdmsUtils, pgrRepository, new CreatorRoles(serviceRequestRepository, mdmsUtils));
     }
 
     @Test

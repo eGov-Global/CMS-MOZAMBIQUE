@@ -46,6 +46,10 @@ public class PolicyInputBuilder {
         Map<String, Object> userDoc = new LinkedHashMap<>();
         userDoc.put("uuid", user != null ? user.getUuid() : null);
         userDoc.put("type", user != null ? user.getType() : null);
+        // Read off the resolved scope rather than asked again (CreatorRoles already decided it for the
+        // SQL side): a second lookup could answer differently within the same request, and the two
+        // tiers must agree on every row.
+        userDoc.put("creatorExempt", user != null && scope.creatorUuid != null && scope.creatorUuid.equals(user.getUuid()));
         userDoc.put("attributes", attributes);
         return userDoc;
     }

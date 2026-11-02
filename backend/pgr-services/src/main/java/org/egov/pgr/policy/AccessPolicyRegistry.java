@@ -280,9 +280,11 @@ public class AccessPolicyRegistry {
                         Map.of("==", List.of(Map.of("var", "user.type"), "CITIZEN")),
                         Map.of("==", List.of(Map.of("var", "resource.complaint.accountId"), Map.of("var", "user.uuid")))
                 )),
-                // An employee always sees the complaints they created (mirrors PgrSearchScope.creatorUuid in SQL).
+                // A creator-role employee sees the complaints they created — only when the resolved
+                // scope carries the exemption (PgrSearchScope.creatorUuid, the SQL side of this branch).
                 Map.of("and", List.of(
                         Map.of("==", List.of(Map.of("var", "user.type"), "EMPLOYEE")),
+                        Map.of("==", List.of(Map.of("var", "user.creatorExempt"), true)),
                         Map.of("!", Map.of("!", Map.of("var", "user.uuid"))),
                         Map.of("==", List.of(Map.of("var", "resource.complaint.createdBy"), Map.of("var", "user.uuid")))
                 )),

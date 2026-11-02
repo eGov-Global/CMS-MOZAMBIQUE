@@ -11,6 +11,7 @@ import org.egov.pgr.config.PGRConfiguration;
 import org.egov.pgr.repository.HrmsProjectionRepository;
 import org.egov.pgr.repository.PGRRepository;
 import org.egov.pgr.repository.ServiceRequestRepository;
+import org.egov.pgr.util.CreatorRoles;
 import org.egov.pgr.web.models.RequestSearchCriteria;
 import org.egov.tracer.model.CustomException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,17 +66,20 @@ public class VisibilityService {
     private final ServiceRequestRepository serviceRequestRepository;
     private final org.egov.pgr.util.MDMSUtils mdmsUtils;
     private final PGRRepository pgrRepository;
+    private final CreatorRoles creatorRoles;
 
     @Autowired
     public VisibilityService(PGRConfiguration config, HrmsProjectionRepository projectionRepository,
                              WorkflowService workflowService, ServiceRequestRepository serviceRequestRepository,
-                             org.egov.pgr.util.MDMSUtils mdmsUtils, PGRRepository pgrRepository) {
+                             org.egov.pgr.util.MDMSUtils mdmsUtils, PGRRepository pgrRepository,
+                             CreatorRoles creatorRoles) {
         this.config = config;
         this.projectionRepository = projectionRepository;
         this.workflowService = workflowService;
         this.serviceRequestRepository = serviceRequestRepository;
         this.mdmsUtils = mdmsUtils;
         this.pgrRepository = pgrRepository;
+        this.creatorRoles = creatorRoles;
     }
 
     /** Mutates the criteria with the requested visibility scope. */
@@ -99,7 +103,7 @@ public class VisibilityService {
         }
 
         if (SCOPE_MINE.equalsIgnoreCase(scope)) {
-            if (!holdsCreatorRole(requestInfo, mdmsConfig)) {
+            if (!creatorRoles.holdsCreatorRole(requestInfo.getUserInfo(), mdmsConfig)) {
                 criteria.setAssignee(me);
                 return;
             }
@@ -182,12 +186,5 @@ public class VisibilityService {
             if (d >= 1) return d;
         }
         return config.getVisibilityReporteeDepthDefault();
-    }
-
-    private boolean holdsCreatorRole(RequestInfo requestInfo, Map<String, Object> mdmsConfig) {
-        Object creatorRoles = mdmsConfig.get("creatorRoles");
-        if (!(creatorRoles instanceof List) || requestInfo.getUserInfo().getRoles() == null) return false;
-        return requestInfo.getUserInfo().getRoles().stream()
-                .anyMatch(role -> ((List<?>) creatorRoles).contains(role.getCode()));
     }
 }
