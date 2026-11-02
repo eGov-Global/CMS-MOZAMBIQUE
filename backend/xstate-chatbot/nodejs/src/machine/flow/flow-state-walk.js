@@ -66,9 +66,32 @@ class WalkState extends State {
   get stepSlot() { return this.key + 'Step'; }
   get grammerSlot() { return this.key + 'Grammer'; }
   get pickerSlot() { return this.key + 'Picker'; }
+  get levelsSlot() { return this.key + 'Levels'; }
 
   getPath(context) {
     return context[this.pathSlot] || [];
+  }
+
+  // the name of the level each walked code was picked at, index-aligned with the path
+  getLevels(context) {
+    return context[this.levelsSlot] || [];
+  }
+
+  // records `code` as picked at the current level, along with that level's name.
+  // Re-aligned on every step, so a session walked partly before levels were
+  // recorded leaves blanks rather than shifting every later name.
+  descend(context, code) {
+    const path = this.getPath(context);
+    const levels = this.getLevels(context);
+    const { levelLabel } = context[this.stepSlot] || {};
+    context[this.levelsSlot] = [...path.map((_, i) => levels[i] || ''), levelLabel || ''];
+    context[this.pathSlot] = [...path, code];
+  }
+
+  ascend(context) {
+    const path = this.getPath(context);
+    context[this.pathSlot] = path.slice(0, -1);
+    context[this.levelsSlot] = this.getLevels(context).slice(0, path.length - 1);
   }
 
   // the walked path as labels ("Saúde › Hospitais") when setTrail(true), else ''
@@ -146,7 +169,7 @@ class WalkState extends State {
             {
               target: 'fetch',
               cond: (context) => context.intention === dialog.INTENTION_GOBACK,
-              actions: assign((context) => { context[this.pathSlot] = this.getPath(context).slice(0, -1); })
+              actions: assign((context) => { this.ascend(context); })
             },
             {
               target: '#' + this.onLeaf.state.key,
@@ -159,14 +182,14 @@ class WalkState extends State {
               },
               actions: assign((context) => {
                 if (this.onLeaf.slot) context.slots.pgr[this.onLeaf.slot] = context.intention;
-                context[this.pathSlot] = [...this.getPath(context), context.intention];
+                this.descend(context, context.intention);
                 if (this.onLeaf.set) this.onLeaf.set(context);
               })
             },
             {
               target: 'fetch',
               cond: (context) => context.intention !== dialog.INTENTION_UNKOWN,
-              actions: assign((context) => { context[this.pathSlot] = [...this.getPath(context), context.intention]; })
+              actions: assign((context) => { this.descend(context, context.intention); })
             },
             { target: 'retry' }
           ]

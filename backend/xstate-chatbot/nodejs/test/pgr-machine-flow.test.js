@@ -190,7 +190,7 @@ test("an empty complaint hierarchy reports a system error instead of looping", a
 test("a new filing starts without the previous filing's walk state", async () => {
   const leftOver = {};
   for (const walk of ["complaintType2Step", "boundary"]) {
-    for (const slot of ["Path", "Step", "Grammer", "Picker"]) leftOver[walk + slot] = { stale: true };
+    for (const slot of ["Path", "Step", "Grammer", "Picker", "Levels"]) leftOver[walk + slot] = { stale: true };
   }
 
   const h = harness({ service: happyPathService(), context: leftOver });
