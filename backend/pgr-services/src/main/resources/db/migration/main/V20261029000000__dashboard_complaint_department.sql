@@ -611,12 +611,24 @@ CREATE INDEX ix_cf_ward    ON complaint_facts(ward_code);
 -- dimension for the department tiles. The events grain already has ix_ce_dept.
 CREATE INDEX ix_cf_dept    ON complaint_facts(department_code);
 
+-- ---- grain 3: complaint_open_state_daily ------------------------------------
+-- The scheduler's snapshot insert is ON CONFLICT DO NOTHING, so snapshots taken
+-- before this migration would keep a NULL department and drop out of a department
+-- user's history. Backfill them from the current facts row (as V20260629000000 did).
+UPDATE complaint_open_state_daily d
+   SET department_code = f.department_code
+  FROM complaint_facts f
+ WHERE f.service_request_id = d.service_request_id
+   AND d.department_code IS NULL;
+
 -- mz switched department scoping off on the dashboard because every row had no
 -- department (#1280's opt-out). Rows now carry the complaint's own department, so
--- turn it back on there. No other tenant is touched, and on a fresh install where
--- MDMS isn't seeded yet this updates nothing.
+-- turn it back on there. 'enforced' is the schema's enum value for that, so the
+-- record still validates when it is next saved through mdms-v2. No other tenant is
+-- touched, and on a fresh install where MDMS isn't seeded yet this updates nothing.
 UPDATE eg_mdms_data
-SET data = jsonb_set(data, '{departmentScoping}', '"enabled"'),
+SET data = jsonb_set(data, '{departmentScoping}', '"enforced"'),
+    lastmodifiedby = 'pgr-services-migration',
     lastmodifiedtime = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
 WHERE tenantid = 'mz'
   AND schemacode = 'dss.DashboardConfig'
