@@ -71,16 +71,21 @@ class WalkState extends State {
     return context[this.pathSlot] || [];
   }
 
+  // the walked path as labels ("Saúde › Hospitais") when setTrail(true), else ''
+  renderTrail(context) {
+    if (!this.trail) return '';
+    const { trailBundle } = context[this.stepSlot] || {};
+    return this.getPath(context)
+      .map((code) => (trailBundle && trailBundle[code] ? dialog.get_message(trailBundle[code], context.user.locale) : code))
+      .join(' › ');
+  }
+
   renderPreamble(context) {
-    const { levelLabel, trailBundle } = context[this.stepSlot] || {};
+    const { levelLabel } = context[this.stepSlot] || {};
     let text = this.preamble ? dialog.get_message(this.preamble, context.user.locale) : '';
     text = text.split('{{level}}').join(levelLabel || '');
-    if (this.trail) {
-      const trail = this.getPath(context)
-        .map((code) => (trailBundle && trailBundle[code] ? dialog.get_message(trailBundle[code], context.user.locale) : code))
-        .join(' › ');
-      if (trail) text = `*${trail}*\n${text}`;
-    }
+    const trail = this.renderTrail(context);
+    if (trail) text = `*${trail}*\n${text}`;
     return text;
   }
 
@@ -120,9 +125,11 @@ class WalkState extends State {
               const list = dialog.constructListPromptAndGrammer(options || [], messageBundle || {}, context.user.locale, false, goback);
               context[this.grammerSlot] = list.grammer;
               this.rememberPrompt(context, this.renderPreamble(context) + list.prompt);
-              // the level name heads the picker; the text stays the resume prompt
+              // the level name heads the picker, after the breadcrumb the text shows;
+              // the text stays the resume prompt
               const { levelLabel } = context[this.stepSlot] || {};
-              context[this.pickerSlot] = listPickerMessage(context, levelLabel, list.labels);
+              const heading = [this.renderTrail(context), levelLabel].filter(Boolean).join(' › ');
+              context[this.pickerSlot] = listPickerMessage(context, heading, list.labels);
             }),
             (context) => dialog.sendMessage(context, context[this.pickerSlot]
               ? { ...context[this.pickerSlot], fallbackText: context.lastPrompt }

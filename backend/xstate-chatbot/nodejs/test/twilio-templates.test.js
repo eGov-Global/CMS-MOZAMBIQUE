@@ -213,3 +213,35 @@ test("every new prompt retires the previous prompt's buttons", async () => {
     service.stop();
   }
 });
+
+test("a list picker keeps the breadcrumb the text list shows", async () => {
+  const { State, WalkState } = load(config());
+  const done = new State("done");
+  const step = {
+    options: ["FALTA_MEDICAMENTOS"],
+    messageBundle: { FALTA_MEDICAMENTOS: { pt_PT: "Falta de medicamentos" } },
+    trailBundle: { SAUDE: { pt_PT: "Saúde" } },
+    levelLabel: "Subtipo",
+    isLeafLevel: true,
+  };
+  const walk = (trail) => new WalkState("complaintType2Step")
+    .setPreamble({ pt_PT: "*{{level}}*\n" })
+    .setTrail(trail)
+    .setFetch(async () => step)
+    .setOnError(done)
+    .setOnLeaf(done);
+
+  // one level down: the option plus "Voltar" make a list of 2
+  const withTrail = walk(true);
+  const { outputs, service } = run([withTrail, done], withTrail.key, { [withTrail.pathSlot]: ["SAUDE"] });
+  await settle();
+  assert.match(service.state.context.lastPrompt, /^\*Saúde\*\n\*Subtipo\*/, "the text path, unchanged");
+  assert.deepEqual(outputs[0].params, ["Saúde › Subtipo", "Falta de medicamentos", "Voltar"]);
+  service.stop();
+
+  const withoutTrail = walk(false);
+  const plain = run([withoutTrail, done], withoutTrail.key, { [withoutTrail.pathSlot]: ["SAUDE"] });
+  await settle();
+  assert.equal(plain.outputs[0].params[0], "Subtipo", "a walk without a trail heads with the level alone");
+  plain.service.stop();
+});

@@ -225,6 +225,7 @@ const pgrConfig = {
     delete context[walk.pathSlot];
     delete context[walk.stepSlot];
     delete context[walk.grammerSlot];
+    delete context[walk.pickerSlot];
   }
 }),
 
