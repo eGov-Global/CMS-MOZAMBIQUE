@@ -264,7 +264,8 @@ public class WorkflowService {
      * #193: the search response carries the LATEST workflow step's comment and
      * attachments, and the citizen's complaint page shows those attachments.
      * For a citizen caller they are kept only when the chronology would show
-     * them too: the citizen's own step (APPLY / REOPEN / RATE …) or a step
+     * them too: the citizen's own step (APPLY / REOPEN / RATE …), their filing
+     * even when the chatbot or an officer submitted it (APPLY), or a step
      * addressed to them (ChronologyService.CITIZEN_CONTENT_ACTIONS — RESOLVE,
      * REJECT). Any other step is an internal working step: action and state
      * stay, its comment and documents do not.
@@ -275,8 +276,9 @@ public class WorkflowService {
         String actorUuid = latestStep != null && latestStep.getAssigner() != null ? latestStep.getAssigner().getUuid() : null;
         boolean ownStep = complainantUuid != null && complainantUuid.equals(actorUuid);
         String action = workflow.getAction();
+        boolean filing = APPLY.equals(action);
         boolean addressedToCitizen = action != null && ChronologyService.CITIZEN_CONTENT_ACTIONS.contains(action);
-        if (ownStep || addressedToCitizen)
+        if (ownStep || filing || addressedToCitizen)
             return;
         workflow.setComments(null);
         workflow.setVerificationDocuments(null);
