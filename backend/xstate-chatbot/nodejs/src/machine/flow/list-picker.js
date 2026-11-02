@@ -23,4 +23,4 @@ function listPickerMessage(context, stepLabel, labels) {
   return { type: 'template', output: sid, params: templateParams([stepLabel, ...labels]) };
 }
 
-module.exports = { listPickerMessage };
+module.exports = { listPickerMessage, MIN_ITEMS, MAX_ITEMS };

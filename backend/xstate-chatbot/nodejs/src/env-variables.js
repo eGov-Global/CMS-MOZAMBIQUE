@@ -1,6 +1,30 @@
 require('dotenv').config();
 const os = require('os');
 
+// "2:HX…,3:HX…" -> { 2: 'HX…', 3: 'HX…' }. An entry that is not "count:sid"
+// with a plain count is dropped ("02" would never match a list of 2), and
+// startup-checks.js warns about everything collected in `problems`.
+function parseListPickers(raw) {
+    const pickers = {};
+    const problems = [];
+    const entries = String(raw || '').split(',').map((entry) => entry.trim()).filter(Boolean);
+    for (const entry of entries) {
+        const parts = entry.split(':').map((part) => part.trim());
+        const [count, sid] = parts;
+        if (parts.length !== 2 || !sid || !/^[1-9][0-9]*$/.test(count)) {
+            problems.push(`TWILIO_LIST_PICKERS entry "${entry}" is ignored: expected <option count>:<ContentSid>, the count a plain number such as 2`);
+            continue;
+        }
+        if (pickers[count]) {
+            problems.push(`TWILIO_LIST_PICKERS lists ${count} options more than once; the last SID is used`);
+        }
+        pickers[count] = sid;
+    }
+    return { pickers, problems };
+}
+
+const listPickers = parseListPickers(process.env.TWILIO_LIST_PICKERS);
+
 const envVariables = {
     serviceId: process.env.NAME || 'xstate-chatbot',
     ver: process.env.VERSION || '0.0.1',
@@ -175,12 +199,8 @@ const envVariables = {
         },
         // list-picker ContentSids by option count, "2:HX…,3:HX…". A list whose
         // count has no SID here keeps the plain-text numbered prompt.
-        listPickers: Object.fromEntries(
-            String(process.env.TWILIO_LIST_PICKERS || '')
-                .split(',')
-                .map((pair) => pair.split(':').map((part) => part.trim()))
-                .filter(([count, sid]) => count && sid)
-        ),
+        listPickers: listPickers.pickers,
+        listPickerProblems: listPickers.problems,
     },
 
     // Providers with no signing scheme of their own (ValueFirst, Kaleyra) verify
