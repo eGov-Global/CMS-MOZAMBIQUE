@@ -9,4 +9,7 @@
   `complaint` block is replaced, so keep every role the migrations add listed here.
   Add roles here (OWN/ALL per axis); see docs/2.12/jurisdiction-access-control.md.
 - `inbox-visibility.json` — `RAINMAKER-PGR.InboxVisibilityConfig` (My/All inbox tabs,
-  V1 = "My" is the assignee). Needs PGR_VISIBILITY_ENABLED=true on pgr-services.
+  V1 = "My" is the assignee; `creatorRoles` lists the roles whose "My" also means
+  "filed by me" and who keep seeing their own filings outside their department —
+  schema migration V20261026000000 must run first). Needs PGR_VISIBILITY_ENABLED=true
+  on pgr-services.
