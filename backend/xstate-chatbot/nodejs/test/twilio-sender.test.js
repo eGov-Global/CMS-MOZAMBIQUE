@@ -127,3 +127,37 @@ test("a refused template without a text prompt sends nothing more", async (t) =>
 
   assert.equal(sent.length, 1);
 });
+
+test("the channel reports which message carried the buttons, and nothing when the prompt went out as text", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const accepted = loadProvider("whatsapp:+14155238886");
+  recordSends(accepted, { sid: "SM-template", status: "queued", error_code: null });
+  assert.deepEqual(await accepted.sendMessageToUser(citizen, [template], { tenantId: "mz" }), { messageSid: "SM-template", prompt });
+
+  const refused = loadProvider("whatsapp:+14155238886");
+  recordSends(refused, undefined);
+  assert.equal(await refused.sendMessageToUser(citizen, [template], { tenantId: "mz" }), undefined, "fell back to text");
+
+  assert.equal(await accepted.sendMessageToUser(citizen, ["hello"], { tenantId: "mz" }), undefined, "plain text");
+});
+
+test("a button or list tap names the message it was tapped on; a typed reply does not", async (t) => {
+  const provider = loadProvider("whatsapp:+14155238886");
+  t.mock.method(require(mobilePath), "getConfig", async () => ({ countryCode: "+258", mobileNumberRegex: "^8[0-9]{8}$" }));
+  t.mock.method(console, "log", () => {});
+  const webhook = { From: "whatsapp:+258841234567", To: "whatsapp:+14155238886", OriginalRepliedMessageSid: "SM-buttons" };
+
+  const button = await provider.getUserMessage({ ...webhook, ButtonPayload: "1", ButtonText: "Manter confidencial", Body: "Manter confidencial" });
+  assert.deepEqual(button.message, { input: "1", type: "button", repliedTo: "SM-buttons" });
+
+  const listItem = await provider.getUserMessage({ ...webhook, ListId: "3", ListTitle: "KaMpfumu", Body: "KaMpfumu" });
+  assert.deepEqual(listItem.message, { input: "3", type: "button", repliedTo: "SM-buttons" });
+
+  // WhatsApp also sends the field when a citizen quotes a message and types
+  const quoted = await provider.getUserMessage({ ...webhook, Body: "1" });
+  assert.deepEqual(quoted.message, { input: "1", type: "text" });
+
+  const { OriginalRepliedMessageSid, ...withoutField } = webhook;
+  const bare = await provider.getUserMessage({ ...withoutField, ButtonPayload: "2" });
+  assert.deepEqual(bare.message, { input: "2", type: "button" });
+});

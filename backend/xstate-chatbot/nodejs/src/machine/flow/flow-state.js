@@ -63,6 +63,14 @@ class State {
     return text;
   }
 
+  // records the prompt a resumed session (or a stale tap) is re-sent. A new
+  // prompt also retires the previous one's buttons: lastPromptSid is set only
+  // once the template carrying this prompt has gone out (chat-service.js).
+  rememberPrompt(context, text) {
+    context.lastPrompt = text;
+    delete context.lastPromptSid;
+  }
+
   // sends the prompt's localized text to the citizen. this.prompt may be a
   // single bundle, or an array of {bundle, delay, immediate} for multiple
   // staggered messages. Template tokens filled from this.fill plus extraFill.
@@ -79,7 +87,7 @@ class State {
       const text = this.renderText(item.bundle, fill, context, event);
       // Rendered now rather than on a timer: lastPrompt must be set before this
       // turn's state is persisted, or a resume replays the previous prompt.
-      context.lastPrompt = text;
+      this.rememberPrompt(context, text);
 
       const immediate = item.immediate !== false;
       const wait = Math.max(0, (item.delay || 0) - elapsed);

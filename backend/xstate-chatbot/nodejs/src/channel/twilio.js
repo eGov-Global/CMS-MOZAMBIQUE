@@ -459,7 +459,11 @@ class TwilioWhatsAppProvider {
         const reformattedMessage = {
             message: {
                 input: inputFromType,
-                type: inputType
+                type: inputType,
+                // the message whose button or list item was tapped
+                ...(inputType === INPUT_TYPES.BUTTON && requestBody.OriginalRepliedMessageSid
+                    ? { repliedTo: requestBody.OriginalRepliedMessageSid }
+                    : {})
             },
             user: {
                 mobileNumber: await this.extractPhoneNumber(requestBody.From, tenantId),
@@ -565,6 +569,9 @@ class TwilioWhatsAppProvider {
     async sendMessageToUser(user, messages, extraInfo) {
         const tenantId = (extraInfo && extraInfo.tenantId) || config.rootTenantId;
         let userMobile = user.whatsAppAddress || user.mobileNumber;
+        // the template that carried this batch's buttons, so a later tap can be
+        // matched against it (chat-service.recordPromptSid)
+        let sentTemplate;
 
         for (let i = 0; i < messages.length; i++) {
             let message = messages[i];
@@ -599,7 +606,8 @@ class TwilioWhatsAppProvider {
                         });
                     }
 
-                    await this.sendTemplateWithFallback(userMobile, message, contentVariables, tenantId);
+                    const messageSid = await this.sendTemplateWithFallback(userMobile, message, contentVariables, tenantId);
+                    if (messageSid) sentTemplate = { messageSid, prompt: message.fallbackText };
                 }
                 else if (type === 'image' || type === 'pdf') {
                     // For media messages, get the file URL
@@ -637,6 +645,7 @@ class TwilioWhatsAppProvider {
                 console.error("Twilio - Error sending message:", error);
             }
         }
+        return sentTemplate;
     }
 
     async getTransformMessageForTemplate(reformattedMessages) {

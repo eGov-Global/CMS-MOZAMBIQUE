@@ -119,7 +119,7 @@ class WalkState extends State {
               const goback = this.getPath(context).length > 0;
               const list = dialog.constructListPromptAndGrammer(options || [], messageBundle || {}, context.user.locale, false, goback);
               context[this.grammerSlot] = list.grammer;
-              context.lastPrompt = this.renderPreamble(context) + list.prompt;
+              this.rememberPrompt(context, this.renderPreamble(context) + list.prompt);
               // the level name heads the picker; the text stays the resume prompt
               const { levelLabel } = context[this.stepSlot] || {};
               context[this.pickerSlot] = listPickerMessage(context, levelLabel, list.labels);

@@ -51,12 +51,12 @@ const compile = require(p("src/machine/flow/flow-state-compiler.js"));
 const settle = async () => { for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setImmediate(resolve)); };
 
 /** Starts a machine made of `states` and records what the citizen is sent. */
-function run(states, initial) {
+function run(states, initial, context = {}) {
   const outputs = [];
   const service = interpret(Machine({
     id: "root",
     ...compile(states, initial),
-    context: { user: { locale: "pt_PT" }, extraInfo: {}, slots: { pgr: {} }, chatInterface: { toUser: (user, messages) => outputs.push(...messages) } },
+    context: { user: { locale: "pt_PT" }, extraInfo: {}, slots: { pgr: {} }, chatInterface: { toUser: (user, messages) => outputs.push(...messages) }, ...context },
   })).start();
   return { outputs, service };
 }
@@ -189,4 +189,27 @@ test("a list picker carries the numbered text list the flow stored", async () =>
   assert.equal(outputs[0].fallbackText, service.state.context.lastPrompt);
   assert.match(outputs[0].fallbackText, /\*2\.\*  KAMAXAQUENE/);
   service.stop();
+});
+
+test("every new prompt retires the previous prompt's buttons", async () => {
+  // lastPromptSid names the message whose taps are accepted; it is set again only
+  // once this prompt's own template has gone out (chat-service.recordPromptSid).
+  const { State, QuestionState, WalkState } = load(config());
+  const previous = { lastPrompt: "PREVIOUS", lastPromptSid: "SM-previous" };
+  const done = new State("done");
+
+  const asText = new State("asText").setPrompt({ pt_PT: "Nome da instituição?" });
+  const asTemplate = new QuestionState("asTemplate").setPrompt({ pt_PT: "Menu" }).setTemplate("menu").setOptions(["a", "b"]);
+  const asList = new WalkState("asList")
+    .setFetch(async () => ({ options: ["A", "B"], messageBundle: {}, levelLabel: "Distrito", isLeafLevel: true }))
+    .setOnError(done)
+    .setOnLeaf(done);
+
+  for (const [state, extra] of [[asText, []], [asTemplate, []], [asList, [done]]]) {
+    const { service } = run([state, ...extra], state.key, previous);
+    await settle();
+    assert.notEqual(service.state.context.lastPrompt, "PREVIOUS", state.key);
+    assert.equal(service.state.context.lastPromptSid, undefined, state.key);
+    service.stop();
+  }
 });
