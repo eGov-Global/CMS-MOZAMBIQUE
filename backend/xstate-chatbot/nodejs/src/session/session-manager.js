@@ -147,6 +147,7 @@ class SessionManager {
       // after dispatch had already snapshotted it and moved on.
       .then(() => (delayMs > 0 ? new Promise((resolve) => setTimeout(resolve, delayMs)) : undefined))
       .then(() => channelProvider.sendMessageToUser(user, outputMessages, extraInfo))
+      .then((sent) => this.chatService.recordPromptSid(user.userId, sent))
       .catch((error) =>
         console.error(`Failed to send message to ${user.userId ?? maskMobile(user.mobileNumber)}:`, error))
       .finally(() => {

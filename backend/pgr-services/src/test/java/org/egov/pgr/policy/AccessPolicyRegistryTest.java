@@ -505,6 +505,117 @@ class AccessPolicyRegistryTest {
         assertFalse(evaluator.isAllowed(generated, wrongBoundaryData));
     }
 
+    // Mirrors PgrSearchScope.creatorUuid on the SQL side: an employee whose resolved scope carries
+    // the creator exemption sees the complaints they created outside their department/jurisdiction —
+    // otherwise this re-check drops the rows the SQL scope let through.
+    @Test
+    void getConditionLetsAnExemptCreatorSeeTheComplaintsTheyCreated() {
+        String generated = generatedOwnOwnCondition();
+        PolicyEvaluator evaluator = new PolicyEvaluator();
+
+        assertTrue(evaluator.isAllowed(generated, creatorCase("emp-1", true, "emp-1")));
+        assertFalse(evaluator.isAllowed(generated, creatorCase("emp-1", true, "emp-2")));
+
+        // No uuid on the caller and no creator on the complaint: two missing values must not match.
+        Map<String, Object> noIdentity = Map.of(
+                "user", Map.of("type", "EMPLOYEE", "creatorExempt", true, "attributes", ownOwnAttributes()),
+                "resource", Map.of("complaint", Map.of("department", "NA", "boundary", "WARD_999")));
+        assertFalse(evaluator.isAllowed(generated, noIdentity));
+    }
+
+    // #210 review: the exemption used to be unconditional for every employee. Without the flag a
+    // complaint the caller filed outside their scope is denied like any other.
+    @Test
+    void getConditionGivesNoCreatorExemptionWithoutTheFlag() {
+        String generated = generatedOwnOwnCondition();
+        PolicyEvaluator evaluator = new PolicyEvaluator();
+
+        assertFalse(evaluator.isAllowed(generated, creatorCase("emp-1", false, "emp-1")));
+
+        Map<String, Object> flagAbsent = Map.of(
+                "user", Map.of("uuid", "emp-1", "type", "EMPLOYEE", "attributes", ownOwnAttributes()),
+                "resource", Map.of("complaint", Map.of("department", "NA", "boundary", "WARD_999", "createdBy", "emp-1")));
+        assertFalse(evaluator.isAllowed(generated, flagAbsent));
+    }
+
+    @Test
+    void getConditionGivesNoCreatorExemptionToANonEmployee() {
+        String generated = generatedOwnOwnCondition();
+        Map<String, Object> systemUser = Map.of(
+                "user", Map.of("uuid", "svc-1", "type", "SYSTEM", "creatorExempt", true, "attributes", ownOwnAttributes()),
+                "resource", Map.of("complaint", Map.of("department", "NA", "boundary", "WARD_999", "createdBy", "svc-1")));
+        assertFalse(new PolicyEvaluator().isAllowed(generated, systemUser));
+    }
+
+    /**
+     * Tier-1 / Tier-2 parity for the creator exemption: for every scope the resolver can produce
+     * (exempt or not) and every complaint shape, the generated condition evaluated on
+     * PolicyInputBuilder's real input admits exactly the rows PGRQueryBuilder's
+     * {@code ( ser.createdby = ? OR ( <department> AND <jurisdiction> ) )} admits.
+     */
+    @Test
+    void generatedConditionAgreesWithTheSqlCreatorExemptionInEveryCase() {
+        String generated = generatedOwnOwnCondition();
+        PolicyEvaluator evaluator = new PolicyEvaluator();
+        PolicyInputBuilder inputBuilder = new PolicyInputBuilder();
+        RequestInfo caller = new RequestInfo();
+        caller.setUserInfo(User.builder().uuid("emp-1").type("EMPLOYEE").build());
+
+        for (String creatorUuid : new String[] { null, "emp-1" }) {
+            for (List<String> departments : List.of(List.of("DEPT_1"), List.of(ScopePolicyEngine.UNRESOLVED_SENTINEL))) {
+                PgrSearchScope scope = new PgrSearchScope("pg.city", false, null, departments, List.of("WARD_001"), creatorUuid);
+                Map<String, Object> userDoc = inputBuilder.buildUserDoc(caller, scope);
+                for (String createdBy : new String[] { "emp-1", "emp-2", null }) {
+                    for (String department : new String[] { "DEPT_1", "NA" }) {
+                        for (String boundary : new String[] { "WARD_001", "WARD_999" }) {
+                            Map<String, Object> complaint = new LinkedHashMap<>();
+                            complaint.put("department", department);
+                            complaint.put("boundary", boundary);
+                            complaint.put("createdBy", createdBy);
+                            Map<String, Object> data = Map.of("user", userDoc, "resource", Map.of("complaint", complaint));
+
+                            boolean sqlAdmits = (creatorUuid != null && creatorUuid.equals(createdBy))
+                                    || (departments.contains(department) && "WARD_001".equals(boundary));
+                            assertEquals(sqlAdmits, evaluator.isAllowed(generated, data),
+                                    "creatorUuid=" + creatorUuid + " departments=" + departments + " createdBy=" + createdBy
+                                            + " department=" + department + " boundary=" + boundary);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private String generatedOwnOwnCondition() {
+        Map<String, Object> scope = Map.of(
+                "axes", List.of("department", "jurisdiction"),
+                "default", Map.of("department", "OWN", "jurisdiction", "OWN"));
+        Map<String, Object> action = new LinkedHashMap<>();
+        action.put("id", 2008);
+        action.put("url", AccessPolicyRegistry.PGR_REQUEST_SEARCH_URL);
+        action.put("resource", Map.of("complaint", Map.of("scope", scope)));
+        RequestInfo requestInfo = requestInfo("EMPLOYEE");
+        when(mdmsUtils.fetchAccessControlActions(requestInfo, "pg.city", AccessPolicyRegistry.PGR_REQUEST_SEARCH_URL))
+                .thenReturn(List.of(action));
+        String generated = registry.getCondition(AccessPolicyRegistry.PGR_REQUEST_SEARCH_URL, requestInfo, "pg.city");
+        assertNotNull(generated);
+        return generated;
+    }
+
+    private static Map<String, Object> ownOwnAttributes() {
+        return Map.of(
+                "tenantWide", false,
+                "departments", List.of("DEPT_1"),
+                "jurisdictions", List.of("WARD_001"));
+    }
+
+    /** An employee and a complaint outside their department/jurisdiction, created by {@code createdBy}. */
+    private static Map<String, Object> creatorCase(String uuid, boolean creatorExempt, String createdBy) {
+        return Map.of(
+                "user", Map.of("uuid", uuid, "type", "EMPLOYEE", "creatorExempt", creatorExempt, "attributes", ownOwnAttributes()),
+                "resource", Map.of("complaint", Map.of("department", "NA", "boundary", "WARD_999", "createdBy", createdBy)));
+    }
+
     @Test
     void getConditionFailsClosedOnAnUnsupportedAxisRatherThanSilentlyDroppingIt() {
         // An axis outside ScopePolicy.SUPPORTED_AXES must fail the WHOLE generated condition

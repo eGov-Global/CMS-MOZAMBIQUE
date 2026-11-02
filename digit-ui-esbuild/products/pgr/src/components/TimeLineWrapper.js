@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { PopUp, Timeline, TimelineMolecule, Loader } from '@egovernments/digit-ui-components';
 import { convertEpochFormateToDate } from '../utils';
 import { parseFilestoreEntry } from '../utils/attachmentKind';
+import { chatbotFiler } from '../utils/chatbotFiler';
 
 // NOTE: no useMyContext() here — the citizen route tree has no MyContext
 // provider, and this wrapper renders on BOTH citizen and employee details.
@@ -55,7 +56,9 @@ const isCitizenActor = (person) =>
 // role, and classifying them as "citizen" leaked internal comments and
 // employee identities onto the citizen timeline. Role check is only the
 // fallback when no uuid is available.
-const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPrefix = "", currentStateChildren = null, maskConfidential = false, maskEmployeeContacts = false, hideEmployeeContacts = false, hideInternalNotes = false, complainantUuid = null }) => {
+// complaintSource — the complaint's service.source; the APPLY row shows the
+// complainant instead of its recorded actor only on a chatbot filing.
+const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPrefix = "", currentStateChildren = null, maskConfidential = false, maskEmployeeContacts = false, hideEmployeeContacts = false, hideInternalNotes = false, complainantUuid = null, complainant = null, complaintSource = null }) => {
     const { t } = useTranslation();
     const translateOr = (key, fallback) => {
         const value = t(key);
@@ -264,14 +267,17 @@ const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPre
                 return `${t('CS_COMMON_EMPLOYEE_COMMENTS')} : "${raw}"`;
             };
 
+            const citizenLabel = translateOr("ACCESSCONTROL_ROLES_ROLES_CITIZEN", t("CS_NA"));
+
             // Map API response to timeline steps
             const steps = workflowData.ProcessInstances.map((instance, index) => {
                 const assignee = instance?.assignes?.[0];
-                const personRecord = isAssigningAction(instance?.action) ? assignee : instance?.assigner;
                 // Complainant match by uuid when we have it (role fallback
                 // otherwise) — see the prop doc above for why role alone lies.
                 const isComplainant = (person) =>
                   complainantUuid && person?.uuid ? person.uuid === complainantUuid : isCitizenActor(person);
+                const filer = chatbotFiler(instance, { complaintSource, complainant, complainantUuid, isComplainant, citizenLabel });
+                const personRecord = filer || (isAssigningAction(instance?.action) ? assignee : instance?.assigner);
                 const isEmployeeActor = personRecord && !isComplainant(personRecord);
                 // On the citizen's timeline, only the closing entry (and the
                 // complainant's own actions) keep their comment and attachments.
@@ -294,7 +300,7 @@ const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPre
                 // server-side) is hidden the same way — otherwise
                 // formatPerson(undefined) would print a stray CS_NA caption.
                 const hideThis = hideEmployeeContacts && (isEmployeeActor || !personRecord);
-                const mobile = isAssigningAction(instance?.action) ? assignee?.mobileNumber : instance?.assigner?.mobileNumber;
+                const mobile = filer ? filer.mobileNumber : isAssigningAction(instance?.action) ? assignee?.mobileNumber : instance?.assigner?.mobileNumber;
                 // The backend already masks the mobile per viewer privilege
                 // ("Contact Details: *****0104"). Mirror that decision onto the
                 // NAME: a viewer the backend won't show the number to shouldn't
@@ -334,7 +340,7 @@ const TimelineWrapper = ({ businessId, isWorkFlowLoading, workflowData, labelPre
             });
             setTimelineSteps(steps);
         }
-    }, [workflowData]);
+    }, [workflowData, complainant, complainantUuid, complaintSource]);
 
     return (
         isWorkFlowLoading ? <Loader /> :

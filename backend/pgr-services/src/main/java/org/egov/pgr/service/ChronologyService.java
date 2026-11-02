@@ -27,6 +27,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.egov.pgr.util.PGRConstants.APPLY;
 import static org.egov.pgr.util.PGRConstants.MASK_SENTINEL;
 import static org.egov.pgr.util.PGRConstants.ROLE_CONFIDENTIAL_VIEWER;
 
@@ -52,10 +53,13 @@ import static org.egov.pgr.util.PGRConstants.ROLE_CONFIDENTIAL_VIEWER;
  *    audit mode still forwards them — absent identity must map to the LEAST
  *    privileged view, never to the internal passthrough.
  *  - the COMPLAINANT (and only on their own complaint): their own steps stay
- *    whole; the closing entry (RESOLVE / REJECT) keeps comment and
- *    attachments but loses the employee identity; every other employee step
- *    — the request for information (AWAITINGINFORMATION) included — is
- *    status-only (no comment, no documents, no assigner/assignes).
+ *    whole; the filing (APPLY) is theirs even when someone else submitted it
+ *    (the chatbot's service account, a reception officer) and is shown under
+ *    the complainant's identity, never the submitter's; the closing entry
+ *    (RESOLVE / REJECT) keeps comment and attachments but loses the employee
+ *    identity; every other employee step — the request for information
+ *    (AWAITINGINFORMATION) included — is status-only (no comment, no
+ *    documents, no assigner/assignes).
  *  - any other CITIZEN: an empty list — a citizen has no business reading
  *    another complaint's chronology, and this endpoint must not become an
  *    existence oracle for it.
@@ -275,7 +279,9 @@ public class ChronologyService {
                     instances.remove(i);
                     continue;
                 }
-                filterInstanceForComplainant(pi, contexts.get(businessId).accountId);
+                // The caller IS this complaint's complainant (ownBusinessIds), so their own
+                // identity is the one to show on a filing someone else submitted for them.
+                filterInstanceForComplainant(pi, contexts.get(businessId).accountId, requestInfo.getUserInfo().getName());
             }
             return;
         }
@@ -304,10 +310,20 @@ public class ChronologyService {
      * other employee step becomes status-only. nextActions / state / dates are
      * always preserved — the citizen sees THAT the complaint moved.
      */
-    private static void filterInstanceForComplainant(ObjectNode pi, String accountId) {
+    private static void filterInstanceForComplainant(ObjectNode pi, String accountId, String complainantName) {
         JsonNode assigner = pi.get("assigner");
         String actorUuid = assigner != null && assigner.isObject() ? text((ObjectNode) assigner, "uuid") : null;
         boolean ownStep = accountId != null && accountId.equals(actorUuid);
+        if (!ownStep && accountId != null && APPLY.equals(text(pi, "action"))) {
+            // Filed on the complainant's behalf: the description and attachments are theirs, so
+            // the step is shown as their own. Only their uuid and name replace the submitter —
+            // the chatbot account's or the officer's identity and phone never reach the citizen.
+            ObjectNode complainant = pi.objectNode();
+            complainant.put("uuid", accountId);
+            complainant.put("name", complainantName);
+            pi.set("assigner", complainant);
+            ownStep = true;
+        }
         if (ownStep) {
             // The citizen's own step (APPLY / REOPEN / RATE / their COMMENT):
             // comment, documents and the assigner (which IS the citizen) stay.

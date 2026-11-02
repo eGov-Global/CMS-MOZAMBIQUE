@@ -174,4 +174,172 @@ class PGRQueryBuilderTest {
         assertTrue(query.contains("1 = 0"));
         assertFalse(query.contains("ads.locality IN"));
     }
+
+    // A complaint the caller created passes the department/jurisdiction axes, so a reception
+    // officer sees what they filed for another department (or before it is routed at all).
+    @Test
+    void creatorScopeLetsOwnComplaintsPassTheRestrictedAxes() {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").build();
+        List<Object> preparedStmtList = new ArrayList<>();
+        PgrSearchScope scope = new PgrSearchScope("pg.city", false, null, List.of("SANITATION"), List.of("WARD_5"), "emp-1");
+
+        String query = queryBuilder.getPGRSearchQuery(criteria, preparedStmtList, null, scope);
+
+        assertTrue(query.contains("( ser.createdby = ? OR ( 1 = 1  AND ser.additionaldetails->>'department' IN"));
+        assertTrue(query.contains("ads.locality IN"));
+        assertTrue(query.contains(" ) ) "));
+        assertTrue(preparedStmtList.indexOf("emp-1") < preparedStmtList.indexOf("SANITATION"));
+        assertTrue(preparedStmtList.indexOf("SANITATION") < preparedStmtList.indexOf("WARD_5"));
+    }
+
+    @Test
+    void creatorScopeKeepsTheTenantPredicateOutsideTheException() {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").build();
+        List<Object> preparedStmtList = new ArrayList<>();
+        PgrSearchScope scope = new PgrSearchScope("pg.city", false, null, List.of("SANITATION"), null, "emp-1");
+
+        String query = queryBuilder.getPGRSearchQuery(criteria, preparedStmtList, null, scope);
+
+        assertTrue(query.indexOf("ser.tenantId = ?") < query.indexOf("ser.createdby = ?"));
+    }
+
+    @Test
+    void creatorWithoutRestrictedAxesAddsNoCreatorPredicate() {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").build();
+        List<Object> preparedStmtList = new ArrayList<>();
+        PgrSearchScope scope = new PgrSearchScope("pg.city", false, null, null, null, "emp-1");
+
+        String query = queryBuilder.getPGRSearchQuery(criteria, preparedStmtList, null, scope);
+
+        assertFalse(query.contains("ser.createdby = ?"));
+        assertFalse(preparedStmtList.contains("emp-1"));
+    }
+
+    @Test
+    void countQueryAppliesTheCreatorException() {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").build();
+        List<Object> preparedStmtList = new ArrayList<>();
+        PgrSearchScope scope = new PgrSearchScope("pg.city", false, null, List.of("SANITATION"), null, "emp-1");
+
+        String query = queryBuilder.getCountQuery(criteria, preparedStmtList, null, scope);
+
+        assertTrue(query.contains("ser.createdby = ?"));
+        assertEquals(1, preparedStmtList.stream().filter("emp-1"::equals).count());
+    }
+
+    // #210 review: a creator role's My Complaints used to bind every complaint id they ever filed
+    // or were assigned as IN (...). The filed side is now a createdby predicate; only the assigned
+    // ids are bound.
+    @Test
+    void mineCreatorIsFiledByOrAssignedTo() {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").build();
+        criteria.setMineCreatorUuid("rec-1");
+        criteria.setVisibilityIds(new java.util.LinkedHashSet<>(List.of("PRD-1", "PRD-2")));
+        List<Object> preparedStmtList = new ArrayList<>();
+
+        String query = queryBuilder.getPGRSearchQuery(criteria, preparedStmtList, null, PgrSearchScope.UNRESTRICTED);
+
+        assertTrue(query.contains("(  ser.createdby = ?  OR  ser.serviceRequestId IN ( ? , ? ) )"), query);
+        assertEquals(List.of("pg.city", "rec-1", "PRD-1", "PRD-2"), preparedStmtList.subList(0, 4));
+    }
+
+    @Test
+    void mineCreatorWithNothingAssignedIsFiledByOnly() {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").build();
+        criteria.setMineCreatorUuid("rec-1");
+        criteria.setVisibilityIds(new java.util.HashSet<>());
+        List<Object> preparedStmtList = new ArrayList<>();
+
+        String query = queryBuilder.getPGRSearchQuery(criteria, preparedStmtList, null, PgrSearchScope.UNRESTRICTED);
+
+        assertTrue(query.contains("(  ser.createdby = ?  )"), query);
+        assertFalse(query.contains("ser.serviceRequestId IN"));
+        assertEquals(List.of("pg.city", "rec-1"), preparedStmtList.subList(0, 2));
+    }
+
+    @Test
+    void countQueryAppliesTheSameMinePredicate() {
+        PgrSearchScope scope = new PgrSearchScope("pg.city", false, null, List.of("SANITATION"), null, "rec-1");
+        RequestSearchCriteria searchCriteria = mineCriteria();
+        RequestSearchCriteria countCriteria = mineCriteria();
+        List<Object> searchParams = new ArrayList<>();
+        List<Object> countParams = new ArrayList<>();
+
+        String search = queryBuilder.getPGRSearchQuery(searchCriteria, searchParams, null, scope);
+        String count = queryBuilder.getCountQuery(countCriteria, countParams, null, scope);
+
+        String mine = "(  ser.createdby = ?  OR  ser.serviceRequestId IN ( ? ) )";
+        assertTrue(search.contains(mine), search);
+        assertTrue(count.contains(mine), count);
+        // The count wraps the same filter, without ORDER BY / OFFSET / LIMIT.
+        assertEquals(searchParams.subList(0, countParams.size()), countParams);
+        assertEquals(searchParams.size() - 2, countParams.size());
+    }
+
+    // #210 review: the creator wrapper nests the scope axes inside a parenthesised OR; every shape
+    // must still bind exactly one value per placeholder, on _search and on _count.
+    @Test
+    void placeholderCountMatchesBoundParametersForEveryScopeShape() {
+        List<List<String>> axisShapes = java.util.Arrays.asList(null, List.of(), List.of("D1"), List.of("D1", "D2"));
+        List<List<String>> jurisdictionShapes = java.util.Arrays.asList(null, List.of(), List.of("W1"));
+        java.util.Map<String, Long> slaMap = java.util.Map.of("STREETLIGHT", 172_800_000L);
+        int combinations = 0;
+        for (String tenant : new String[] { "pg.city", "pg" }) {
+            boolean stateLevel = !tenant.contains(".");
+            for (List<String> departments : axisShapes) {
+                for (List<String> jurisdictions : jurisdictionShapes) {
+                    for (String creatorUuid : new String[] { null, "emp-1" }) {
+                        for (String mineCreatorUuid : new String[] { null, "emp-1" }) {
+                            for (boolean assigned : new boolean[] { false, true }) {
+                                PgrSearchScope scope = new PgrSearchScope(tenant, stateLevel, null, departments, jurisdictions, creatorUuid);
+
+                                RequestSearchCriteria searchCriteria = shapedCriteria(tenant, mineCreatorUuid, assigned);
+                                searchCriteria.setSortBy(RequestSearchCriteria.SortBy.sla);
+                                List<Object> searchParams = new ArrayList<>();
+                                String search = queryBuilder.getPGRSearchQuery(searchCriteria, searchParams, slaMap, scope);
+                                String label = "tenant=" + tenant + " departments=" + departments + " jurisdictions=" + jurisdictions
+                                        + " creatorUuid=" + creatorUuid + " mineCreatorUuid=" + mineCreatorUuid + " assigned=" + assigned;
+                                assertEquals(placeholders(search), searchParams.size(), "search " + label);
+
+                                List<Object> countParams = new ArrayList<>();
+                                String count = queryBuilder.getCountQuery(shapedCriteria(tenant, mineCreatorUuid, assigned), countParams, null, scope);
+                                assertEquals(placeholders(count), countParams.size(), "count " + label);
+
+                                assertEquals(count(search, "("), count(search, ")"), "balanced parentheses: " + label);
+                                combinations++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assertEquals(2 * 4 * 3 * 2 * 2 * 2, combinations);
+    }
+
+    private static RequestSearchCriteria mineCriteria() {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg.city").build();
+        criteria.setMineCreatorUuid("rec-1");
+        criteria.setVisibilityIds(new java.util.HashSet<>(List.of("PRD-1")));
+        return criteria;
+    }
+
+    private static RequestSearchCriteria shapedCriteria(String tenant, String mineCreatorUuid, boolean assigned) {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId(tenant)
+                .applicationStatus(java.util.Set.of("PENDINGFORASSIGNMENT"))
+                .limit(10).offset(0).build();
+        criteria.setMineCreatorUuid(mineCreatorUuid);
+        criteria.setVisibilityIds(assigned ? new java.util.LinkedHashSet<>(List.of("PRD-1", "PRD-2")) : new java.util.HashSet<>());
+        return criteria;
+    }
+
+    private static int placeholders(String query) {
+        return count(query, "?");
+    }
+
+    private static int count(String haystack, String needle) {
+        int n = 0;
+        for (int i = haystack.indexOf(needle); i >= 0; i = haystack.indexOf(needle, i + 1))
+            n++;
+        return n;
+    }
 }

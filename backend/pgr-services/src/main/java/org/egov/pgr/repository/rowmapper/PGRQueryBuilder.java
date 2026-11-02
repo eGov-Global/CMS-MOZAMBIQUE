@@ -197,23 +197,29 @@ public class PGRQueryBuilder {
             preparedStmtList.add(criteria.getServiceRequestIdBefore());
         }
 
-        // Visibility (reportee-scoped All): team-assigned complaints OR the
-        // unassigned queues, in one predicate so pagination and count stay
-        // correct. Set only by VisibilityService.
+        // Visibility, in one predicate so pagination and count stay correct. Set only by
+        // VisibilityService: reportee-scoped All = team-assigned complaints OR the unassigned
+        // queues; a creator role's MINE = filed by me OR assigned to me — the filed side stays a
+        // createdby predicate, so the bound list never grows with what the caller has filed.
+        String mineCreatorUuid = criteria.getMineCreatorUuid();
         Set<String> visibilityIds = criteria.getVisibilityIds();
         Set<String> visibilityStates = criteria.getVisibilityUnassignedStates();
-        if (!CollectionUtils.isEmpty(visibilityIds) || !CollectionUtils.isEmpty(visibilityStates)) {
+        if (mineCreatorUuid != null || !CollectionUtils.isEmpty(visibilityIds) || !CollectionUtils.isEmpty(visibilityStates)) {
             addClauseIfRequired(preparedStmtList, builder);
             builder.append(" ( ");
-            boolean hasIds = !CollectionUtils.isEmpty(visibilityIds);
-            if (hasIds) {
-                builder.append(" ser.serviceRequestId IN (").append(createQuery(visibilityIds)).append(")");
+            String or = "";
+            if (mineCreatorUuid != null) {
+                builder.append(" ser.createdby = ? ");
+                preparedStmtList.add(mineCreatorUuid);
+                or = " OR ";
+            }
+            if (!CollectionUtils.isEmpty(visibilityIds)) {
+                builder.append(or).append(" ser.serviceRequestId IN (").append(createQuery(visibilityIds)).append(")");
                 addToPreparedStatement(preparedStmtList, visibilityIds);
+                or = " OR ";
             }
             if (!CollectionUtils.isEmpty(visibilityStates)) {
-                if (hasIds)
-                    builder.append(" OR ");
-                builder.append(" ser.applicationStatus IN (").append(createQuery(visibilityStates)).append(")");
+                builder.append(or).append(" ser.applicationStatus IN (").append(createQuery(visibilityStates)).append(")");
                 addToPreparedStatement(preparedStmtList, visibilityStates);
             }
             builder.append(" ) ");
@@ -311,6 +317,16 @@ public class PGRQueryBuilder {
             preparedStmtList.add(scope.citizenUuid);
         }
 
+        // A complaint the caller created passes the department/jurisdiction axes:
+        // ( createdby = me OR ( 1 = 1 AND <department> AND <jurisdiction> ) ).
+        boolean creatorExempt = scope.creatorUuid != null
+                && (scope.departmentCodes != null || scope.jurisdictionCodes != null);
+        if (creatorExempt) {
+            addClauseIfRequired(preparedStmtList, builder);
+            builder.append(" ( ser.createdby = ? OR ( 1 = 1 ");
+            preparedStmtList.add(scope.creatorUuid);
+        }
+
         // null vs empty is deliberately NOT collapsed via CollectionUtils.isEmpty here: null means
         // "axis not restricted" (skip the clause, matching every other axis's null/no-restriction
         // semantic), but a non-null EMPTY list means "this axis IS restricted and resolved to zero
@@ -336,6 +352,10 @@ public class PGRQueryBuilder {
                 builder.append(" ads.locality IN (").append(createQuery(scope.jurisdictionCodes)).append(")");
                 addToPreparedStatement(preparedStmtList, scope.jurisdictionCodes);
             }
+        }
+
+        if (creatorExempt) {
+            builder.append(" ) ) ");
         }
     }
 

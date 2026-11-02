@@ -5,6 +5,8 @@ import org.egov.common.contract.request.RequestInfo;
 import org.egov.common.contract.request.Role;
 import org.egov.common.contract.request.User;
 import org.egov.pgr.analytics.KpiCatalogService;
+import org.egov.pgr.repository.ServiceRequestRepository;
+import org.egov.pgr.util.CreatorRoles;
 import org.egov.pgr.util.Principals;
 import org.egov.pgr.config.PGRConfiguration;
 import org.egov.pgr.util.MDMSUtils;
@@ -29,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -55,6 +58,8 @@ class PolicyDrivenScopeResolverTest {
     private MDMSUtils mdmsUtils;
     @Mock
     private BoundaryHierarchyExpander boundaryHierarchyExpander;
+    @Mock
+    private ServiceRequestRepository mdmsRepository;
 
     private PolicyDrivenScopeResolver resolver;
 
@@ -73,7 +78,10 @@ class PolicyDrivenScopeResolverTest {
         // covered separately in jurisdictionScopeUnionsInEveryDescendantOfTheAssignedBoundary.
         when(boundaryHierarchyExpander.descendantsOf(any(), any(), any(), any()))
                 .thenAnswer(inv -> java.util.Set.of(inv.getArgument(3, String.class)));
-        resolver = new PolicyDrivenScopeResolver(config, restTemplate, mapper, new Principals(), mdmsUtils, boundaryHierarchyExpander);
+        // Real creator-role gate over a stubbed InboxVisibilityConfig fetch (see stubCreatorRoles);
+        // unstubbed, the fetch returns null, which grants no exemption.
+        resolver = new PolicyDrivenScopeResolver(config, restTemplate, mapper, new Principals(), mdmsUtils, boundaryHierarchyExpander,
+                new CreatorRoles(mdmsRepository, mdmsUtils));
     }
 
     @Test
@@ -211,6 +219,123 @@ class PolicyDrivenScopeResolverTest {
 
         assertEquals(List.of("DEPT_1"), scope.departmentCodes);
         assertEquals(List.of("WARD_5"), scope.jurisdictionCodes);
+    }
+
+    @Test
+    void aCreatorRoleCarriesTheCallerAsCreator() {
+        stubCreatorRoles(List.of("CMS_RECEPTION_OFFICER"));
+        ScopePolicy policy = ScopePolicy.of(List.of("department"), Map.of("department", ScopeLevel.OWN));
+        stubHrms(List.of(Map.of("department", "DEPT_1", "isCurrentAssignment", true)), List.of());
+
+        PgrSearchScope scope = resolver.resolve(requestInfo("emp1", "EMPLOYEE", "CMS_RECEPTION_OFFICER"), "pg.city", 2, policy);
+
+        assertEquals(List.of("DEPT_1"), scope.departmentCodes);
+        assertEquals("emp1", scope.creatorUuid);
+    }
+
+    // #210 review: the exemption was set for every non-citizen caller.
+    @Test
+    void aRoleNotListedAsCreatorGetsNoException() {
+        stubCreatorRoles(List.of("CMS_RECEPTION_OFFICER"));
+        ScopePolicy policy = ScopePolicy.of(List.of("department"), Map.of("department", ScopeLevel.OWN));
+        stubHrms(List.of(Map.of("department", "DEPT_1", "isCurrentAssignment", true)), List.of());
+
+        PgrSearchScope scope = resolver.resolve(requestInfo("emp1", "EMPLOYEE", "CMS_CASE_MANAGER"), "pg.city", 2, policy);
+
+        assertEquals(List.of("DEPT_1"), scope.departmentCodes);
+        assertNull(scope.creatorUuid);
+    }
+
+    @Test
+    void noCreatorRolesConfiguredMeansNoException() {
+        stubCreatorRoles(null);
+        ScopePolicy policy = ScopePolicy.of(List.of("department"), Map.of("department", ScopeLevel.OWN));
+        stubHrms(List.of(Map.of("department", "DEPT_1", "isCurrentAssignment", true)), List.of());
+
+        PgrSearchScope scope = resolver.resolve(requestInfo("emp1", "EMPLOYEE", "CMS_RECEPTION_OFFICER"), "pg.city", 2, policy);
+
+        assertNull(scope.creatorUuid);
+    }
+
+    // The deny paths: a creator role does not keep access to old filings once the policy denies.
+    @Test
+    void noHrmsRecordGivesACreatorRoleNoException() {
+        stubCreatorRoles(List.of("CMS_RECEPTION_OFFICER"));
+        ScopePolicy policy = ScopePolicy.of(List.of("department"), Map.of("department", ScopeLevel.OWN));
+        when(restTemplate.postForObject(any(String.class), any(), eq(Map.class))).thenReturn(Map.of("Employees", List.of()));
+
+        PgrSearchScope scope = resolver.resolve(requestInfo("emp1", "EMPLOYEE", "CMS_RECEPTION_OFFICER"), "pg.city", 2, policy);
+
+        assertEquals(List.of("__scope_denied__"), scope.departmentCodes);
+        assertNull(scope.creatorUuid);
+        verify(mdmsRepository, never()).fetchResult(any(), any());
+    }
+
+    @Test
+    void anHrmsErrorGivesACreatorRoleNoException() {
+        stubCreatorRoles(List.of("CMS_RECEPTION_OFFICER"));
+        ScopePolicy policy = ScopePolicy.of(List.of("department"), Map.of("department", ScopeLevel.ALL));
+        when(restTemplate.postForObject(any(String.class), any(), eq(Map.class))).thenThrow(new RuntimeException("HRMS down"));
+
+        PgrSearchScope scope = resolver.resolve(requestInfo("emp1", "EMPLOYEE", "CMS_RECEPTION_OFFICER"), "pg.city", 2, policy);
+
+        assertNull(scope.creatorUuid);
+        verify(mdmsRepository, never()).fetchResult(any(), any());
+    }
+
+    @Test
+    void noCurrentAssignmentGivesACreatorRoleNoException() {
+        // An HRMS record whose assignment has ended (moved out of the department): the axis
+        // resolves to the deny sentinel, and the filings made while assigned stay out of reach too.
+        stubCreatorRoles(List.of("CMS_RECEPTION_OFFICER"));
+        ScopePolicy policy = ScopePolicy.of(List.of("department"), Map.of("department", ScopeLevel.OWN));
+        stubHrms(List.of(Map.of("department", "DEPT_1", "isCurrentAssignment", false)), List.of());
+
+        PgrSearchScope scope = resolver.resolve(requestInfo("emp1", "EMPLOYEE", "CMS_RECEPTION_OFFICER"), "pg.city", 2, policy);
+
+        assertEquals(List.of("__scope_denied__"), scope.departmentCodes);
+        assertNull(scope.creatorUuid);
+    }
+
+    @Test
+    void anEmptyUserNameGivesACreatorRoleNoException() {
+        stubCreatorRoles(List.of("CMS_RECEPTION_OFFICER"));
+        ScopePolicy policy = ScopePolicy.of(List.of("department"), Map.of("department", ScopeLevel.ALL));
+        RequestInfo requestInfo = requestInfo("emp1", "EMPLOYEE", "CMS_RECEPTION_OFFICER");
+        requestInfo.getUserInfo().setUserName("");
+
+        PgrSearchScope scope = resolver.resolve(requestInfo, "pg.city", 2, policy);
+
+        assertNull(scope.creatorUuid);
+    }
+
+    @Test
+    void citizenScopeHasNoCreatorException() {
+        stubCreatorRoles(List.of("CITIZEN"));
+        ScopePolicy policy = ScopePolicy.of(List.of("department"), Map.of("department", ScopeLevel.OWN));
+        User user = new User();
+        user.setUuid("cit1");
+        user.setType("CITIZEN");
+        user.setTenantId("pg.city");
+        user.setRoles(List.of(Role.builder().code("CITIZEN").build()));
+        RequestInfo requestInfo = new RequestInfo();
+        requestInfo.setUserInfo(user);
+
+        PgrSearchScope scope = resolver.resolve(requestInfo, "pg.city", 2, policy);
+
+        assertEquals("cit1", scope.citizenUuid);
+        assertNull(scope.creatorUuid);
+    }
+
+    @Test
+    void deniedScopeHasNoCreatorException() {
+        stubCreatorRoles(List.of("GRO"));
+        ScopePolicy policy = ScopePolicy.of(List.of("department"), Map.of("department", ScopeLevel.OWN));
+
+        PgrSearchScope scope = resolver.resolve(requestInfo("emp1", "EMPLOYEE", "GRO", "other.city"), "pg.city", 2, policy);
+
+        assertEquals(List.of("__scope_denied__"), scope.departmentCodes);
+        assertNull(scope.creatorUuid);
     }
 
     @Test
@@ -407,6 +532,16 @@ class PolicyDrivenScopeResolverTest {
         defaultScope.forEach((axis, level) -> defaultRaw.put(axis, level.name()));
         raw.put("default", defaultRaw);
         return ScopePolicy.parse(raw).orElseThrow();
+    }
+
+    private void stubCreatorRoles(List<String> creatorRoles) {
+        Map<String, Object> record = new HashMap<>();
+        record.put("code", "INBOX_VISIBILITY");
+        record.put("enabled", true);
+        if (creatorRoles != null)
+            record.put("creatorRoles", creatorRoles);
+        when(mdmsRepository.fetchResult(any(), any()))
+                .thenReturn(Map.of("MdmsRes", Map.of("RAINMAKER-PGR", Map.of("InboxVisibilityConfig", List.of(record)))));
     }
 
     private void stubHrms(List<Map<String, Object>> assignments, List<Map<String, Object>> jurisdictions) {
