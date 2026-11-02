@@ -81,6 +81,15 @@ public class RequestSearchCriteria {
     @JsonIgnore
     private Set<@SafeHtml String> visibilityUnassignedStates;
 
+    /**
+     * Internal (VisibilityService only, never client-bound): set to the caller's uuid when their
+     * role is listed in InboxVisibilityConfig.creatorRoles, making MINE
+     * `(createdby = mineCreatorUuid OR serviceRequestId IN visibilityIds)` — what they filed or
+     * what is assigned to them.
+     */
+    @JsonIgnore
+    private String mineCreatorUuid;
+
     @JsonProperty("slaDeltaMinLimit")
     private Long slaDeltaMinLimit;
 

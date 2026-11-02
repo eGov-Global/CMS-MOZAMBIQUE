@@ -44,8 +44,6 @@ public class PGRQueryBuilder {
 
     private static final String RESOLVED_COMPLAINTS_QUERY = "select count(*) from {schema}.eg_pgr_service_v2 where applicationstatus='CLOSEDAFTERRESOLUTION' and tenantid=? and lastmodifiedtime>? ";
 
-    private static final String CREATED_BY_IDS_QUERY = "select servicerequestid from {schema}.eg_pgr_service_v2 where createdby=? and (tenantid=? or tenantid like ?)";
-
     private static final String AVERAGE_RESOLUTION_TIME_QUERY = "select round(avg(lastmodifiedtime-createdtime)/86400000) from {schema}.eg_pgr_service_v2 where applicationstatus='CLOSEDAFTERRESOLUTION' and tenantid=? ";
 
 
@@ -199,23 +197,29 @@ public class PGRQueryBuilder {
             preparedStmtList.add(criteria.getServiceRequestIdBefore());
         }
 
-        // Visibility (reportee-scoped All): team-assigned complaints OR the
-        // unassigned queues, in one predicate so pagination and count stay
-        // correct. Set only by VisibilityService.
+        // Visibility, in one predicate so pagination and count stay correct. Set only by
+        // VisibilityService: reportee-scoped All = team-assigned complaints OR the unassigned
+        // queues; a creator role's MINE = filed by me OR assigned to me — the filed side stays a
+        // createdby predicate, so the bound list never grows with what the caller has filed.
+        String mineCreatorUuid = criteria.getMineCreatorUuid();
         Set<String> visibilityIds = criteria.getVisibilityIds();
         Set<String> visibilityStates = criteria.getVisibilityUnassignedStates();
-        if (!CollectionUtils.isEmpty(visibilityIds) || !CollectionUtils.isEmpty(visibilityStates)) {
+        if (mineCreatorUuid != null || !CollectionUtils.isEmpty(visibilityIds) || !CollectionUtils.isEmpty(visibilityStates)) {
             addClauseIfRequired(preparedStmtList, builder);
             builder.append(" ( ");
-            boolean hasIds = !CollectionUtils.isEmpty(visibilityIds);
-            if (hasIds) {
-                builder.append(" ser.serviceRequestId IN (").append(createQuery(visibilityIds)).append(")");
+            String or = "";
+            if (mineCreatorUuid != null) {
+                builder.append(" ser.createdby = ? ");
+                preparedStmtList.add(mineCreatorUuid);
+                or = " OR ";
+            }
+            if (!CollectionUtils.isEmpty(visibilityIds)) {
+                builder.append(or).append(" ser.serviceRequestId IN (").append(createQuery(visibilityIds)).append(")");
                 addToPreparedStatement(preparedStmtList, visibilityIds);
+                or = " OR ";
             }
             if (!CollectionUtils.isEmpty(visibilityStates)) {
-                if (hasIds)
-                    builder.append(" OR ");
-                builder.append(" ser.applicationStatus IN (").append(createQuery(visibilityStates)).append(")");
+                builder.append(or).append(" ser.applicationStatus IN (").append(createQuery(visibilityStates)).append(")");
                 addToPreparedStatement(preparedStmtList, visibilityStates);
             }
             builder.append(" ) ");
@@ -510,13 +514,6 @@ public class PGRQueryBuilder {
 		preparedStmtListAverageResolutionTime.add(tenantId);
 
 		return query.toString();
-	}
-
-	public String getCreatedByIds(String tenantId, String createdBy, List<Object> preparedStmtList) {
-		preparedStmtList.add(createdBy);
-		preparedStmtList.add(tenantId);
-		preparedStmtList.add(tenantId + ".%");
-		return CREATED_BY_IDS_QUERY;
 	}
 
 }

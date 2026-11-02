@@ -9,7 +9,6 @@ import org.egov.mdms.model.MdmsCriteriaReq;
 import org.egov.mdms.model.ModuleDetail;
 import org.egov.pgr.config.PGRConfiguration;
 import org.egov.pgr.repository.HrmsProjectionRepository;
-import org.egov.pgr.repository.PGRRepository;
 import org.egov.pgr.repository.ServiceRequestRepository;
 import org.egov.pgr.util.CreatorRoles;
 import org.egov.pgr.web.models.RequestSearchCriteria;
@@ -33,7 +32,8 @@ import static org.egov.pgr.util.PGRConstants.MDMS_INBOX_VISIBILITY_CONFIG;
  * Step-2 reportee core, VISIBILITY-DESIGN.md §4.2).
  *
  * MY  -> assignee = the acting user (PGRService.search/count already resolve
- *        the assignee through workflow).
+ *        the assignee through workflow); for a role listed in
+ *        InboxVisibilityConfig.creatorRoles, filed by OR assigned to them.
  * ALL -> for a user with reportees in the HRMS projection: complaints
  *        assigned to them or their reportee subtree, PLUS the unassigned
  *        queues (states where no assignee exists yet). For everyone else —
@@ -65,20 +65,17 @@ public class VisibilityService {
     private final WorkflowService workflowService;
     private final ServiceRequestRepository serviceRequestRepository;
     private final org.egov.pgr.util.MDMSUtils mdmsUtils;
-    private final PGRRepository pgrRepository;
     private final CreatorRoles creatorRoles;
 
     @Autowired
     public VisibilityService(PGRConfiguration config, HrmsProjectionRepository projectionRepository,
                              WorkflowService workflowService, ServiceRequestRepository serviceRequestRepository,
-                             org.egov.pgr.util.MDMSUtils mdmsUtils, PGRRepository pgrRepository,
-                             CreatorRoles creatorRoles) {
+                             org.egov.pgr.util.MDMSUtils mdmsUtils, CreatorRoles creatorRoles) {
         this.config = config;
         this.projectionRepository = projectionRepository;
         this.workflowService = workflowService;
         this.serviceRequestRepository = serviceRequestRepository;
         this.mdmsUtils = mdmsUtils;
-        this.pgrRepository = pgrRepository;
         this.creatorRoles = creatorRoles;
     }
 
@@ -90,7 +87,7 @@ public class VisibilityService {
         }
 
         String me = requestInfo.getUserInfo() != null ? requestInfo.getUserInfo().getUuid() : null;
-        if (me == null) {
+        if (me == null || me.isBlank()) {
             throw new CustomException("PGR_VISIBILITY_NO_USER", "Inbox visibility requires an authenticated user");
         }
 
@@ -107,13 +104,10 @@ public class VisibilityService {
                 criteria.setAssignee(me);
                 return;
             }
-            Set<String> mine = new HashSet<>(workflowService.getServiceRequestIdsByAssignee(requestInfo, tenantId, me));
-            mine.addAll(pgrRepository.getServiceRequestIdsCreatedBy(tenantId, me));
-            if (mine.isEmpty()) {
-                criteria.setCreatedBy(Collections.singleton(me));
-            } else {
-                criteria.setVisibilityIds(mine);
-            }
+            // Filed by me OR assigned to me. Only the assigned ids are bound; the filed side is a
+            // createdby predicate in PGRQueryBuilder, applied to _search and _count alike.
+            criteria.setVisibilityIds(new HashSet<>(workflowService.getServiceRequestIdsByAssignee(requestInfo, tenantId, me)));
+            criteria.setMineCreatorUuid(me);
             return;
         }
         if (!SCOPE_TEAM.equalsIgnoreCase(scope)) {
