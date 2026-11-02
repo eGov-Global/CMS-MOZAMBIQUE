@@ -11,8 +11,10 @@
 -- One department code per complaint, as the inbox sees it. additionalDetails.department
 -- holds the HRMS department code, or its MDMS name when the name resolved at filing
 -- time, so a name is mapped back to its code. 'NA' and blank mean no department.
-CREATE OR REPLACE VIEW pgr_complaint_department AS
-SELECT s.servicerequestid,
+-- Codes and names are compared verbatim (case-sensitive), as the inbox compares them.
+DROP VIEW IF EXISTS pgr_complaint_department CASCADE;
+CREATE VIEW pgr_complaint_department AS
+SELECT s.tenantid, s.servicerequestid,
        coalesce(by_code.code, by_name.code, raw.value) AS department_code
 FROM eg_pgr_service_v2 s
 CROSS JOIN LATERAL (
@@ -100,8 +102,10 @@ asg AS (
          (array_agg(assignee ORDER BY assignee))[1] AS assignee_uuid
   FROM eg_wf_assignee_v2 GROUP BY processinstanceid
 ),
-mdms AS (   -- #1494: ComplaintHierarchy LEAF rows (was RAINMAKER-PGR.ServiceDefs).
-            -- Dedupe by code preferring the root (shortest) tenant, as before.
+mdms AS (   -- #1494: ComplaintHierarchy LEAF rows (was RAINMAKER-PGR.ServiceDefs), per tenant.
+            -- Resolved below as complaint_facts does: the complaint's own tenant, else its
+            -- nearest ancestor. Deduping by code alone took another tenant's department
+            -- whenever two tenants share a complaint-type code.
             -- Leaf detection is by levelCode against the registry's isLeafServiceCode
             -- level, NOT by "department IS NOT NULL" — a leaf may legitimately carry no
             -- department (the configurator writes 'NA' for a blank onboarding cell), and
@@ -114,7 +118,7 @@ mdms AS (   -- #1494: ComplaintHierarchy LEAF rows (was RAINMAKER-PGR.ServiceDef
             -- in practice (e.g. 'zambezia_csrep' alongside 'CENTER') and are compared
             -- verbatim against the department master and the HRMS codes in RBAC scoping,
             -- so folding case here would break both.
-  SELECT DISTINCT ON (data->>'code')
+  SELECT tenantid,
          data->>'code' AS service_code,
          CASE WHEN upper(btrim(coalesce(data->>'department', data->'departments'->>0))) IN ('NA','')
               THEN NULL
@@ -123,7 +127,6 @@ mdms AS (   -- #1494: ComplaintHierarchy LEAF rows (was RAINMAKER-PGR.ServiceDef
   FROM eg_mdms_data
   WHERE schemacode = 'RAINMAKER-PGR.ComplaintHierarchy' AND isactive
     AND data->>'levelCode' IN (SELECT level_code FROM chlvl)   -- WITH RECURSIVE: forward ref is legal
-  ORDER BY data->>'code', length(tenantid), tenantid
 ),
 chlvl AS (   -- #1079: levelCodes flagged isLeafServiceCode in ComplaintHierarchyDefinition
   SELECT DISTINCT lvl->>'levelCode' AS level_code
@@ -264,8 +267,17 @@ LEFT JOIN LATERAL (                          -- #1028 fix 3: exact tenant, else 
   LIMIT 1
 ) bs ON true
 LEFT JOIN asg ON asg.processinstanceid = tx.event_id
-LEFT JOIN mdms m ON m.service_code = svc.servicecode
-LEFT JOIN pgr_complaint_department cd ON cd.servicerequestid = tx.service_request_id
+LEFT JOIN LATERAL (                          -- exact city hierarchy, then nearest ancestor/state
+  SELECT candidate.department_code
+  FROM mdms candidate
+  WHERE candidate.service_code = svc.servicecode
+    AND (svc.tenantid = candidate.tenantid
+         OR left(svc.tenantid, length(candidate.tenantid) + 1) = candidate.tenantid || '.')
+  ORDER BY array_length(string_to_array(candidate.tenantid, '.'), 1) DESC,
+           candidate.tenantid
+  LIMIT 1
+) m ON true
+LEFT JOIN pgr_complaint_department cd ON cd.tenantid = svc.tenantid AND cd.servicerequestid = svc.servicerequestid
 LEFT JOIN eg_user ua ON ua.uuid = tx.actor_uuid;
 
 CREATE UNIQUE INDEX ux_complaint_events ON complaint_events(event_id);
@@ -518,7 +530,7 @@ LEFT JOIN LATERAL (                          -- exact city hierarchy, then neare
            candidate.tenantid
   LIMIT 1
 ) m ON true
-LEFT JOIN pgr_complaint_department cd ON cd.servicerequestid = s.servicerequestid
+LEFT JOIN pgr_complaint_department cd ON cd.tenantid = s.tenantid AND cd.servicerequestid = s.servicerequestid
 LEFT JOIN cnp ON cnp.code = s.servicecode
 CROSS JOIN LATERAL (                         -- #1079: path-derived complaint-axis fields
   SELECT x.arr[1]                            AS root_code,
