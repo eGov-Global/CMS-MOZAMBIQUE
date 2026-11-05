@@ -53,6 +53,16 @@ class _FakeWebViewController extends PlatformWebViewController {
       void Function(ScrollPositionChange)? onScrollPositionChange) async {}
 
   @override
+  Future<void> addJavaScriptChannel(
+      JavaScriptChannelParams javaScriptChannelParams) async {}
+
+  @override
+  Future<void> removeJavaScriptChannel(String javaScriptChannelName) async {}
+
+  @override
+  Future<void> runJavaScript(String javaScript) async {}
+
+  @override
   Future<bool> canGoBack() async => false;
 
   @override

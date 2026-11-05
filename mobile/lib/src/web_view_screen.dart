@@ -12,8 +12,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'app_config.dart';
+import 'download_bridge.dart';
 
 /// Where the user chose to pull a complaint attachment from.
 enum _PickSource { camera, gallery, files }
@@ -85,6 +88,10 @@ class _WebViewScreenState extends State<WebViewScreen>
           ? JavaScriptMode.unrestricted
           : JavaScriptMode.disabled)
       ..setBackgroundColor(Colors.white)
+      ..addJavaScriptChannel(
+        downloadBridgeChannel,
+        onMessageReceived: _onDownloadMessage,
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) => setState(() {
@@ -98,6 +105,9 @@ class _WebViewScreenState extends State<WebViewScreen>
             });
             _refreshCanGoBack();
             _fireReady();
+            // Downloads (complaint receipt PDF) are produced inside the page
+            // and would otherwise go nowhere in a WebView (#173).
+            _controller.runJavaScript(downloadBridgeScript);
           },
           onWebResourceError: (err) {
             if (err.isForMainFrame != true) return;
@@ -224,6 +234,27 @@ class _WebViewScreenState extends State<WebViewScreen>
       }
     } catch (_) {
       if (mounted) _showSnack('Could not open link');
+    }
+  }
+
+  // ── In-page downloads → system share sheet (#173) ────────────────────────
+
+  Future<void> _onDownloadMessage(JavaScriptMessage message) async {
+    final request = DownloadRequest.parse(message.message);
+    if (request == null) {
+      _showSnack('Could not save the file');
+      return;
+    }
+    try {
+      final file = await request.writeTo(await getTemporaryDirectory());
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path, mimeType: request.mimeType, name: request.name)],
+          subject: request.name,
+        ),
+      );
+    } catch (_) {
+      if (mounted) _showSnack('Could not save the file');
     }
   }
 

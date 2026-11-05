@@ -21,6 +21,17 @@ the canonical source for the mobile app**; do not commit to the old repository.
 - Pull-to-refresh, offline snackbar, page-load error screen, double-back-to-exit.
 - External links (`mailto:` / `tel:` / off-host URLs) open in the OS default app.
 
+## Downloads
+
+The portal builds the complaint receipt PDF inside the page and triggers a
+browser download (`<a download href="blob:…">`). A WebView has no download
+handler, so the app injects a small script after each page load
+([lib/src/download_bridge.dart](lib/src/download_bridge.dart)) that catches
+those downloads, posts the bytes over the `FalaCidadaoDownload` JavaScript
+channel, writes the file to the app's cache and opens the system share sheet.
+From there the citizen can save the PDF, open it in a viewer or send it on
+(#173). Files above 25 MB are refused.
+
 ## Configuration
 
 Everything user-facing is driven from
@@ -188,3 +199,4 @@ in [store/](store/).
 - [lib/src/app_config.dart](lib/src/app_config.dart) — config loader
 - [lib/src/splash_screen.dart](lib/src/splash_screen.dart) — splash UI + version footer
 - [lib/src/web_view_screen.dart](lib/src/web_view_screen.dart) — WebView, error / offline / pull-to-refresh handling
+- [lib/src/download_bridge.dart](lib/src/download_bridge.dart) — in-page downloads (receipt PDF) handed to the system share sheet
