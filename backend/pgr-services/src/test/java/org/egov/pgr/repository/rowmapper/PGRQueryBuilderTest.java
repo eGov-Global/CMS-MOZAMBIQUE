@@ -62,15 +62,42 @@ class PGRQueryBuilderTest {
     }
 
     @Test
-    void stateLevelScopeAddsTenantLikePredicate() {
+    void stateLevelScopeMatchesTheTenantOrItsDottedSubtreeOnly() {
         RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg").build();
         List<Object> preparedStmtList = new ArrayList<>();
         PgrSearchScope scope = new PgrSearchScope("pg", true, null, null, null);
 
         String query = queryBuilder.getPGRSearchQuery(criteria, preparedStmtList, null, scope);
 
-        assertTrue(query.contains("ser.tenantId LIKE ?"));
-        assertTrue(preparedStmtList.contains("pg%"));
+        assertTrue(query.contains("( ser.tenantId = ? OR ser.tenantId LIKE ? )"));
+        assertTrue(preparedStmtList.contains("pg"));
+        assertTrue(preparedStmtList.contains("pg.%"));
+        // A bare 'pg%' prefix would also match a sibling root tenant such as 'pgx.city' (#227).
+        assertFalse(preparedStmtList.contains("pg%"));
+    }
+
+    @Test
+    void stateLevelCriteriaTenantMatchesTheTenantOrItsDottedSubtreeOnly() {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg").build();
+        List<Object> preparedStmtList = new ArrayList<>();
+
+        String query = queryBuilder.getPGRSearchQuery(criteria, preparedStmtList, null, PgrSearchScope.UNRESTRICTED);
+
+        assertTrue(query.contains("( ser.tenantid = ? OR ser.tenantid LIKE ? )"));
+        assertEquals(List.of("pg", "pg.%"), preparedStmtList.subList(0, 2));
+        assertFalse(preparedStmtList.contains("pg%"));
+    }
+
+    @Test
+    void stateLevelCountQueryUsesTheSameSubtreeRule() {
+        RequestSearchCriteria criteria = RequestSearchCriteria.builder().tenantId("pg").build();
+        List<Object> preparedStmtList = new ArrayList<>();
+        PgrSearchScope scope = new PgrSearchScope("pg", true, null, null, null);
+
+        String query = queryBuilder.getCountQuery(criteria, preparedStmtList, null, scope);
+
+        assertTrue(query.contains("( ser.tenantId = ? OR ser.tenantId LIKE ? )"));
+        assertFalse(preparedStmtList.contains("pg%"));
     }
 
     @Test
