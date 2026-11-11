@@ -98,9 +98,12 @@ public class PGRQueryBuilder {
                 String[] tenantIdChunks = tenantId.split("\\.");
 
                 if (tenantIdChunks.length == config.getStateLevelTenantIdLength()) {
+                    // The state tenant itself or its dotted subtree — a bare 'mz%' prefix would
+                    // also match a sibling root such as 'mzx.*' (#227).
                     addClauseIfRequired(preparedStmtList, builder);
-                    builder.append(" ser.tenantid LIKE ? ");
-                    preparedStmtList.add(criteria.getTenantId() + '%');
+                    builder.append(" ( ser.tenantid = ? OR ser.tenantid LIKE ? ) ");
+                    preparedStmtList.add(criteria.getTenantId());
+                    preparedStmtList.add(criteria.getTenantId() + ".%");
                 } else {
                     addClauseIfRequired(preparedStmtList, builder);
                     builder.append(" ser.tenantid=? ");
@@ -297,8 +300,10 @@ public class PGRQueryBuilder {
         if (scope.tenantId != null) {
             addClauseIfRequired(preparedStmtList, builder);
             if (scope.tenantStateLevel) {
-                builder.append(" ser.tenantId LIKE ? ");
-                preparedStmtList.add(scope.tenantId + '%');
+                // Same exact-or-dotted-subtree rule as the criteria tenant filter above (#227).
+                builder.append(" ( ser.tenantId = ? OR ser.tenantId LIKE ? ) ");
+                preparedStmtList.add(scope.tenantId);
+                preparedStmtList.add(scope.tenantId + ".%");
             } else {
                 builder.append(" ser.tenantId = ? ");
                 preparedStmtList.add(scope.tenantId);
