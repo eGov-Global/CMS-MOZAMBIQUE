@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.egov.common.contract.request.RequestInfo;
 import org.egov.common.contract.request.User;
 import org.egov.pgr.config.PGRConfiguration;
-import org.egov.pgr.util.CreatorRoles;
 import org.egov.pgr.util.HrmsScopeSemantics;
 import org.egov.pgr.util.MDMSUtils;
 import org.egov.pgr.util.Principals;
@@ -61,20 +60,17 @@ public class PolicyDrivenScopeResolver {
     private final Principals principals;
     private final MDMSUtils mdmsUtils;
     private final BoundaryHierarchyExpander boundaryHierarchyExpander;
-    private final CreatorRoles creatorRoles;
 
     @Autowired
     public PolicyDrivenScopeResolver(PGRConfiguration config, RestTemplate restTemplate, ObjectMapper mapper,
                                       Principals principals, MDMSUtils mdmsUtils,
-                                      BoundaryHierarchyExpander boundaryHierarchyExpander,
-                                      CreatorRoles creatorRoles) {
+                                      BoundaryHierarchyExpander boundaryHierarchyExpander) {
         this.config = config;
         this.restTemplate = restTemplate;
         this.mapper = mapper;
         this.principals = principals;
         this.mdmsUtils = mdmsUtils;
         this.boundaryHierarchyExpander = boundaryHierarchyExpander;
-        this.creatorRoles = creatorRoles;
     }
 
     /**
@@ -196,17 +192,7 @@ public class PolicyDrivenScopeResolver {
         else
             log.info("PolicyDrivenScopeResolver: userName='{}' departments={} jurisdictions={} (policy-driven)",
                     u.getUserName(), deptList, jurisdictionList);
-
-        // The creator exemption is for a caller the policy actually resolved. With no HRMS record, an
-        // HRMS error, or an axis resolved to the deny sentinel (e.g. no current assignment), the
-        // caller is denied — and that covers the complaints they filed before, too.
-        boolean resolved = noDataReason == null && !isDenied(deptList) && !isDenied(jurisdictionList);
-        String creatorUuid = resolved ? creatorRoles.exemptCreatorUuid(requestInfo, tenantId) : null;
-        return new PgrSearchScope(tenantId, stateLevel, null, deptList, jurisdictionList, creatorUuid);
-    }
-
-    private static boolean isDenied(List<String> axisValues) {
-        return axisValues != null && axisValues.contains(ScopePolicyEngine.UNRESOLVED_SENTINEL);
+        return new PgrSearchScope(tenantId, stateLevel, null, deptList, jurisdictionList);
     }
 
     /**

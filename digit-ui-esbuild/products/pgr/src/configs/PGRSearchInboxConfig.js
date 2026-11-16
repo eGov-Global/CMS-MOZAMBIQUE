@@ -15,11 +15,8 @@ import { receptionOnlyCreatedByUuid } from "./UICustomizations";
  *   feature flag (Visibility V1 My/All tabs). When OFF the legacy
  *   assigned-to-me / assigned-to-all radio is restored in the filter card,
  *   since the tabs that replaced it are not rendered.
- * @param {boolean} visibilityServerSide — InboxVisibilityConfig.serverSide.
- *   When ON, pgr-services resolves My Complaints (created-by for creator
- *   roles), so the reception "only my complaints" checkbox is not rendered.
  */
-const PGRSearchInboxConfig = (visibilityEnabled = true, visibilityServerSide = false) => {
+const PGRSearchInboxConfig = (visibilityEnabled = true) => {
     const tenantId = Digit.ULBService.getCurrentTenantId();
     return {
         label: "CS_COMMON_INBOX",
@@ -159,11 +156,10 @@ const PGRSearchInboxConfig = (visibilityEnabled = true, visibilityServerSide = f
                     ],
                     enableGlobalSearch: false,
                     enableColumnSort: true,
-                    // Must match inboxDefaultSort (utils/inboxVisibility.js),
-                    // the fallback PGRInboxConfig.preProcess sends — lets the
-                    // table seed its sort header icon correctly on first load,
-                    // before the operator has clicked anything. PGRInbox
-                    // overrides both on a creator's My tab.
+                    // Must match PGRInboxConfig.preProcess's own fallback
+                    // (UICustomizations.js) — lets the table seed its sort
+                    // header icon correctly on first load, before the
+                    // operator has clicked anything.
                     defaultSortBy: "sla",
                     defaultSortOrder: "ASC",
                     resultsJsonPath: "items",
@@ -229,7 +225,7 @@ const PGRSearchInboxConfig = (visibilityEnabled = true, visibilityServerSide = f
                         // reception role — the same condition under which the search
                         // scopes to createdBy at all, so the control never appears
                         // without something to control.
-                        ...(!visibilityServerSide && receptionOnlyCreatedByUuid()
+                        ...(receptionOnlyCreatedByUuid()
                             ? [
                                   {
                                       label: "",

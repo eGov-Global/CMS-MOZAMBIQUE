@@ -8,7 +8,6 @@ import { useLocation } from "react-router-dom";
 import useBusinessServiceStates from "../../hooks/pgr/useBusinessServiceStates";
 // import useTabCounts from "../../hooks/pgr/useTabCounts"; // badges disabled — see PGRInboxTabs.js NOTE
 import useInboxVisibility from "../../hooks/pgr/useInboxVisibility";
-import { holdsCreatorRole, inboxDefaultSort } from "../../utils/inboxVisibility";
 import PGRInboxTabs from "../../components/PGRInboxTabs";
 import Urls from "../../utils/urls";
 import { revealMenusIn } from "../../utils/revealMenu";
@@ -76,16 +75,11 @@ const PGRSearchInbox = () => {
   // MDMS). Flag OFF (or master absent) renders the LEGACY inbox — no tabs,
   // assigned-to-me radio restored, OPEN_STATES default — and skips the
   // workflow/_count requests entirely.
-  const { enabled: visibilityEnabled, serverSide: visibilityServerSide, config: visibilityConfig, isLoading: visLoading } = useInboxVisibility();
+  const { enabled: visibilityEnabled, serverSide: visibilityServerSide, isLoading: visLoading } = useInboxVisibility();
   // Opens on My Complaints (issue #207): the workflow checks only the role for
   // Resolve/Reject, so opening on All let a case manager act on a colleague's
   // complaint. Supersedes QA #18's "everyone's complaints" default (e017f16c7).
   const [activeTab, setActiveTab] = useState("MY");
-  // Server-side mode takes the creator roles from the MDMS list pgr-services
-  // reads; the client-side inbox keeps its hard-coded reception role
-  // (receptionOnlyCreatedByUuid).
-  const isCreator =
-    visibilityServerSide && holdsCreatorRole(Digit.UserService.getUser()?.info?.roles, visibilityConfig?.creatorRoles);
   // Both tabs share the same status scope (all open/actionable states); they
   // differ on the assignee axis — My = assigned to me, All = everyone's
   // (PO decision 2026-07-15; the tabs replaced the assigned-to-me radio).
@@ -125,7 +119,7 @@ const PGRSearchInbox = () => {
   // Fallback to static config if MDMS is not available. The static config
   // shape depends on the visibility flag: legacy mode restores the
   // assigned-to-me radio the tabs replaced.
-  let configs = mdmsData || PGRSearchInboxConfig(visibilityEnabled, visibilityServerSide);
+  let configs = mdmsData || PGRSearchInboxConfig(visibilityEnabled);
 
   // Inject mobile validation rules from MDMS into the search config
   if (configs && validationRules && configs.sections?.search?.uiConfig?.fields) {
@@ -249,30 +243,20 @@ const PGRSearchInbox = () => {
   // NOTE: declared before the early Loader return to keep hook order stable.
   const tabConfig = useMemo(() => {
     const c = _.cloneDeep(updatedConfig || {});
-    const creatorMyTab = isCreator && activeTab === "MY";
     c.additionalDetails = {
       ...(c.additionalDetails || {}),
       activeTab,
       allStates,
       serverSide: visibilityServerSide,
-      creatorMyTab,
     };
     // Server mode (InboxVisibilityConfig.serverSide): point the composer at
     // the visibility-aware endpoint; pgr-services resolves the tab scope
-    // (MY = assignee-me, plus created-by-me for creator roles; ALL = reportee
-    // subtree + unassigned queues).
+    // (MY = assignee-me, ALL = reportee subtree + unassigned queues).
     if (visibilityServerSide && c.apiDetails) {
       c.apiDetails.serviceName = Urls.pgr.visibilitySearch;
     }
-    // The table seeds its sort indicator from these, so they follow the order
-    // preProcess sends on this tab (no column is marked: none sorts by date).
-    if (creatorMyTab && c.sections?.searchResult?.uiConfig) {
-      const { sortBy, sortOrder } = inboxDefaultSort(true);
-      c.sections.searchResult.uiConfig.defaultSortBy = sortBy;
-      c.sections.searchResult.uiConfig.defaultSortOrder = sortOrder;
-    }
     return c;
-  }, [updatedConfig, activeTab, allStates, visibilityServerSide, isCreator]);
+  }, [updatedConfig, activeTab, allStates, visibilityServerSide]);
 
   /**
    * Reset or refresh config when the route changes — and when the visibility
@@ -284,7 +268,7 @@ const PGRSearchInbox = () => {
     // The language is a dependency because the Clear label above is baked in
     // as text, not a key the composer translates on each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location, visLoading, visibilityEnabled, visibilityServerSide, i18n?.language]);
+  }, [location, visLoading, visibilityEnabled, i18n?.language]);
 
   // On desktop the filter's fields scroll inside their card (overrides.css);
   // a dropdown opened near its bottom brings its menu into view.

@@ -12,7 +12,6 @@ import org.egov.pgr.policy.PolicyDrivenScopeResolver;
 import org.egov.pgr.policy.ScopePolicy;
 import org.egov.pgr.policy.ScopePolicyEngine;
 import org.egov.pgr.policy.SearchAccessPolicyService;
-import org.egov.pgr.util.CreatorRoles;
 import org.egov.pgr.util.MDMSUtils;
 import org.egov.pgr.util.Principals;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,7 +71,6 @@ class DashboardSearchScopeParityTest {
     @Mock private MDMSUtils mdmsUtils;
     @Mock private KpiCatalogService catalog;
     @Mock private BoundaryHierarchyExpander boundaryHierarchyExpander;
-    @Mock private CreatorRoles creatorRoles;
 
     private SearchAccessPolicyService searchScope;
     private AnalyticsRowScopeResolver dashboardScope;
@@ -92,7 +90,7 @@ class DashboardSearchScopeParityTest {
                 .thenAnswer(inv -> java.util.Set.of(inv.getArgument(3, String.class)));
 
         PolicyDrivenScopeResolver policyResolver = new PolicyDrivenScopeResolver(
-                config, restTemplate, new ObjectMapper(), new Principals(), mdmsUtils, boundaryHierarchyExpander, creatorRoles);
+                config, restTemplate, new ObjectMapper(), new Principals(), mdmsUtils, boundaryHierarchyExpander);
         searchScope = new SearchAccessPolicyService(policyResolver, registry, null, null, config);
         dashboardScope = new AnalyticsRowScopeResolver(searchScope, catalog);
     }

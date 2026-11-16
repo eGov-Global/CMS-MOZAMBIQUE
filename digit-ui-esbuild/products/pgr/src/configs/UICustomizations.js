@@ -2,7 +2,6 @@ import _ from "lodash";
 import Urls from "../utils/urls";
 import { complaintLabel } from "../utils/complaintLabel";
 import { serviceCodesForFilter } from "../utils/complaintCategories";
-import { inboxSort } from "../utils/inboxVisibility";
 import { useLocation, useHistory, Link, useParams } from "react-router-dom";
 import React, { useState, Fragment } from "react";
 import { DeleteIconv2, DownloadIcon, FileIcon, Button, Card, CardSubHeader, EditIcon, ArrowForward, Modal, CloseSvg, Close, } from "@egovernments/digit-ui-react-components";
@@ -113,11 +112,6 @@ function cleanObject(obj) {
 }
 
 /** The createdBy uuid the PGR inbox scopes itself to, or null when it does not.
- *
- *  Client-side inbox only (InboxVisibilityConfig.serverSide off). In
- *  server-side mode pgr-services scopes My Complaints itself, and the inbox
- *  takes the creator roles from InboxVisibilityConfig.creatorRoles
- *  (holdsCreatorRole) rather than this hard-coded role.
  *
  *  Reception officers file complaints on citizens' behalf but are neither the
  *  accountId (that's the citizen) nor ever an assignee, so an unscoped inbox
@@ -1632,10 +1626,8 @@ export const UICustomizations = {
         // slot on mount. pgr-services' SortOrder enum match is case-exact,
         // so a stray lowercase value 400s every search — regardless of
         // whether the operator ever touched a column header.
-        //
-        // A creator's My tab in server-side mode opens newest first instead
-        // (see inboxSort).
-        ...inboxSort(clonedData?.state?.tableForm, additionalDetails?.creatorMyTab),
+        sortBy: clonedData?.state?.tableForm?.sortBy || "sla",
+        sortOrder: (clonedData?.state?.tableForm?.sortOrder || "ASC").toUpperCase(),
       };
 
       // Reception-officer inbox: a CMS_RECEPTION_OFFICER files complaints on
@@ -1655,7 +1647,7 @@ export const UICustomizations = {
       // `!== false` default would report "checked" no matter what the user did.
       const ownCreatedByUuid = receptionOnlyCreatedByUuid();
       const onlyMyComplaints = filterForm?.onlyMyComplaints !== false;
-      if (ownCreatedByUuid && onlyMyComplaints && !additionalDetails?.serverSide) params.createdBy = ownCreatedByUuid;
+      if (ownCreatedByUuid && onlyMyComplaints) params.createdBy = ownCreatedByUuid;
 
       // Search form fields
       if (searchForm.complaintNumber) {
@@ -1729,9 +1721,7 @@ export const UICustomizations = {
       const isComplaintLookup = Boolean(params.serviceRequestId);
       if (statuses.length > 0) {
         params.applicationStatus = statuses;
-      } else if (!isComplaintLookup && !additionalDetails?.creatorMyTab) {
-        // A creator's My tab (server-side mode, set by PGRInbox) has no
-        // status default: it lists what they filed, closed ones included.
+      } else if (!isComplaintLookup) {
         params.applicationStatus = allStates.length > 0 ? allStates : OPEN_STATES;
       }
 
