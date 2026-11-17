@@ -5,6 +5,7 @@ import com.jayway.jsonpath.JsonPath;
 import lombok.extern.slf4j.Slf4j;
 import org.egov.common.contract.request.RequestInfo;
 import org.egov.pgr.policy.PgrSearchScope;
+import org.egov.pgr.policy.ScopePolicyEngine;
 import org.egov.pgr.config.PGRConfiguration;
 import org.egov.pgr.policy.AccessPolicyRegistry;
 import org.egov.pgr.policy.FieldVisibilityService;
@@ -204,12 +205,13 @@ public class PGRService {
 
         criteria.setIsPlainSearch(false);
 
-        List<ServiceWrapper> serviceWrappers = repository.getServiceWrappers(criteria, scope);
+        PgrSearchScope rowScope = scopeForOwnFilings(requestInfo, criteria, scope);
+        List<ServiceWrapper> serviceWrappers = repository.getServiceWrappers(criteria, rowScope);
 
         if(CollectionUtils.isEmpty(serviceWrappers))
             return new ArrayList<>();;
 
-        serviceWrappers = searchAccessPolicyService.enforce(requestInfo, tenantIdForScope, scope, serviceWrappers);
+        serviceWrappers = searchAccessPolicyService.enforce(requestInfo, tenantIdForScope, rowScope, serviceWrappers);
 
         if(CollectionUtils.isEmpty(serviceWrappers))
             return new ArrayList<>();
@@ -395,7 +397,7 @@ public class PGRService {
 
         String tenantIdForScope = criteria.getTenantId() != null ? criteria.getTenantId() : requestInfo.getUserInfo().getTenantId();
         PgrSearchScope scope = searchAccessPolicyService.resolveScope(requestInfo, tenantIdForScope, config.getStateLevelTenantIdLength());
-        Integer count = repository.getCount(criteria, scope);
+        Integer count = repository.getCount(criteria, scopeForOwnFilings(requestInfo, criteria, scope));
         return count;
     }
 
@@ -409,18 +411,15 @@ public class PGRService {
      * Skipped entirely when {@code criteria.isSkipEmployeeDepartmentScope()} — set by
      * AdminComplaintSearchService for the SUPERUSER cross-department admin search, whose
      * explicitly chosen departmentCodes must not be overwritten by the caller's own HRMS
-     * department just because they also happen to hold a scoped role. Also skipped when
-     * {@code criteria.getCreatedBy()} is set — that filter already targets a specific filer,
-     * so forcing the caller's own department onto it would just drop unrelated results.
+     * department just because they also happen to hold a scoped role. Also skipped for an
+     * own-filings search (see {@link #isOwnFilingsSearch}).
      */
     private boolean applyEmployeeDepartmentScope(RequestInfo requestInfo, RequestSearchCriteria criteria) {
         if (criteria.isSkipEmployeeDepartmentScope())
             return true;
 
-        // A createdBy search targets a specific complaint-filer, not the caller's own department —
-        // forcing the caller's department onto it would silently drop results filed under a
-        // different department, defeating the point of searching by createdBy at all.
-        if (!CollectionUtils.isEmpty(criteria.getCreatedBy()))
+        // The caller's own filings are not limited to their department.
+        if (isOwnFilingsSearch(requestInfo, criteria))
             return true;
 
         if (requestInfo.getUserInfo() == null
@@ -441,10 +440,8 @@ public class PGRService {
         if (criteria.isSkipEmployeeJurisdictionScope())
             return true;
 
-        // A createdBy search targets a specific complaint-filer, not the caller's own jurisdiction —
-        // forcing the caller's jurisdiction onto it would silently drop results filed under a
-        // different jurisdiction, defeating the point of searching by createdBy at all.
-        if (!CollectionUtils.isEmpty(criteria.getCreatedBy()))
+        // The caller's own filings are not limited to their jurisdiction.
+        if (isOwnFilingsSearch(requestInfo, criteria))
             return true;
 
         if (requestInfo.getUserInfo() == null
@@ -454,6 +451,40 @@ public class PGRService {
         String scopeTenantId = criteria.getTenantId() != null
                 ? criteria.getTenantId() : requestInfo.getUserInfo().getTenantId();
         return employeeJurisdictionScopeService.applyScope(requestInfo, scopeTenantId, criteria);
+    }
+
+    /**
+     * True when an employee searches for exactly the complaints they filed: {@code createdBy} is
+     * their own uuid and nothing else.
+     */
+    private boolean isOwnFilingsSearch(RequestInfo requestInfo, RequestSearchCriteria criteria) {
+        if (requestInfo.getUserInfo() == null
+                || !USERTYPE_EMPLOYEE.equalsIgnoreCase(requestInfo.getUserInfo().getType()))
+            return false;
+
+        String uuid = requestInfo.getUserInfo().getUuid();
+        return uuid != null && Collections.singleton(uuid).equals(criteria.getCreatedBy());
+    }
+
+    /**
+     * The row scope for {@code scope}: for an own-filings search, the department and jurisdiction
+     * limits are dropped and the tenant and citizen limits kept. The query and {@code enforce()}
+     * both read the returned object, so they relax together and counts and paging stay consistent;
+     * the {@code createdby} filter still limits the rows to the caller's own filings. A denied
+     * scope is returned unchanged. Field masking keeps using the original scope.
+     */
+    private PgrSearchScope scopeForOwnFilings(RequestInfo requestInfo, RequestSearchCriteria criteria, PgrSearchScope scope) {
+        if (scope == null || scope == PgrSearchScope.UNRESTRICTED || !isOwnFilingsSearch(requestInfo, criteria))
+            return scope;
+
+        if (isDenied(scope.departmentCodes) || isDenied(scope.jurisdictionCodes))
+            return scope;
+
+        return new PgrSearchScope(scope.tenantId, scope.tenantStateLevel, scope.citizenUuid, null, null);
+    }
+
+    private static boolean isDenied(List<String> codes) {
+        return codes != null && codes.contains(ScopePolicyEngine.UNRESOLVED_SENTINEL);
     }
 
 
