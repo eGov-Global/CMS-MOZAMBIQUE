@@ -4,6 +4,9 @@
   action (both ACCESSCONTROL action masters). Replaces the old env-based
   `PGR_DEPARTMENT_SCOPE_ROLES=CMS_SUPERVISOR,CMS_CASE_MANAGER,CMS_RECEPTION_OFFICER`
   with the same behaviour: those roles see their own department, everyone else is
-  open. Add roles here (OWN/ALL per axis); see docs/2.12/jurisdiction-access-control.md.
+  open. `CMS_CENTRAL_ACCESS` (central department staff, pgr-services migration
+  V20261029000001) is ALL/ALL; the most open role a caller holds wins. The whole
+  `complaint` block is replaced, so keep every role the migrations add listed here.
+  Add roles here (OWN/ALL per axis); see docs/2.12/jurisdiction-access-control.md.
 - `inbox-visibility.json` — `RAINMAKER-PGR.InboxVisibilityConfig` (My/All inbox tabs,
   V1 = "My" is the assignee). Needs PGR_VISIBILITY_ENABLED=true on pgr-services.

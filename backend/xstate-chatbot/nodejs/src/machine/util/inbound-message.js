@@ -25,6 +25,8 @@ class InboundMessage {
     this.rawInput = message.input;
     this.input = typeof message.input === 'string' ? message.input : '';
     this.type = message.type;
+    // Twilio's OriginalRepliedMessageSid on a button or list tap
+    this.repliedTo = message.repliedTo;
   }
 
   static create(message) {

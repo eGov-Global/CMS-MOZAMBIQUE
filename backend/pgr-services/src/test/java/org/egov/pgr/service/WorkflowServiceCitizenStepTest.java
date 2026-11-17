@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * #193 — what the citizen's complaint search keeps of the latest workflow step:
- * the same rule as the chronology (own step, or RESOLVE / REJECT).
+ * the same rule as the chronology (own step, the filing, or RESOLVE / REJECT).
  */
 class WorkflowServiceCitizenStepTest {
 
@@ -74,6 +74,16 @@ class WorkflowServiceCitizenStepTest {
             assertEquals(1, wf.getVerificationDocuments().size(), action);
             assertEquals("note on " + action, wf.getComments(), action);
         }
+    }
+
+    @Test
+    void theFilingStaysWholeWhoeverSubmittedIt() {
+        // The chatbot / a reception officer files with their own account; the description and
+        // attachments are still the citizen's, as in the chronology.
+        Workflow wf = workflow("APPLY");
+        WorkflowService.hideInternalStepContent(wf, stepBy(OFFICER), COMPLAINANT);
+        assertEquals(1, wf.getVerificationDocuments().size());
+        assertEquals("note on APPLY", wf.getComments());
     }
 
     @Test

@@ -460,5 +460,11 @@
         "message": "funções",
         "module": "rainmaker-common",
         "locale": "pt_PT"
+    },
+    {
+        "code": "ACCESSCONTROL_ROLES_ROLES_CITIZEN",
+        "message": "Cidadão",
+        "module": "rainmaker-common",
+        "locale": "pt_PT"
     }
 ]

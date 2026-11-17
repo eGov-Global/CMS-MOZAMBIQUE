@@ -8,6 +8,8 @@
 const { assign } = require('xstate');
 const dialog = require('../util/dialog');
 const State = require('./flow-state');
+const config = require('../../env-variables');
+const { templateParams } = require('./template-params');
 
 class QuestionState extends State {
   // stores the choices this state offers: a static array (plain strings or
@@ -28,6 +30,26 @@ class QuestionState extends State {
   setOnUnknown(state, set) {
     this.onUnknown = { state, set };
     return this;
+  }
+
+  // sends this question as a Twilio quick-reply template instead of text. key names
+  // its SID in config.twilio.templates, read at send time; params (optional) is a
+  // function(context) returning the {{1}}..{{n}} values in order.
+  setTemplate(key, params) {
+    this.template = { key, params };
+    return this;
+  }
+
+  // the template message to send in place of the text prompt, or null when the
+  // provider, the citizen's locale or a missing SID calls for plain text
+  templateMessage(context) {
+    const sid = this.template && ((config.twilio || {}).templates || {})[this.template.key];
+    if (!sid) return null;
+    if (config.whatsAppProvider !== 'Twilio') return null;
+    if (!config.twilio.templatesEnabled) return null;
+    if (context.user.locale !== config.twilio.templateLocale) return null;
+    const params = this.template.params ? templateParams(this.template.params(context)) : [];
+    return { type: 'template', output: sid, params };
   }
 
 
@@ -83,7 +105,15 @@ class QuestionState extends State {
         question: {
           entry: [
             assign((context) => { context[this.optionsSlot] = this.resolveOptions(context); }),
-            (context, event) => this.enter(context, { options: () => this.renderOptionsList(context[this.optionsSlot] || []) }, event)
+            (context, event) => {
+              const fill = { options: () => this.renderOptionsList(context[this.optionsSlot] || []) };
+              const template = this.templateMessage(context);
+              if (!template) return this.enter(context, fill, event);
+              // the citizen gets the buttons; the rendered text stays the resume prompt,
+              // and is what the channel sends instead if Twilio refuses the template
+              this.rememberPrompt(context, this.renderText(this.prompt, { ...this.fill, ...fill }, context, event));
+              dialog.sendMessage(context, { ...template, fallbackText: context.lastPrompt });
+            }
           ],
           on: { USER_MESSAGE: 'process' }
         },

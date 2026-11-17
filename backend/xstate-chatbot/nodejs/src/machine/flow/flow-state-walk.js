@@ -6,6 +6,7 @@
 const { assign } = require('xstate');
 const dialog = require('../util/dialog');
 const State = require('./flow-state');
+const { listPickerMessage } = require('./list-picker.js');
 
 // A bare function is shorthand for { set: fn }; a step may have neither.
 function normalizeOutcome(state, options) {
@@ -64,21 +65,50 @@ class WalkState extends State {
   get pathSlot() { return this.key + 'Path'; }
   get stepSlot() { return this.key + 'Step'; }
   get grammerSlot() { return this.key + 'Grammer'; }
+  get pickerSlot() { return this.key + 'Picker'; }
+  get levelsSlot() { return this.key + 'Levels'; }
 
   getPath(context) {
     return context[this.pathSlot] || [];
   }
 
+  // the name of the level each walked code was picked at, index-aligned with the path
+  getLevels(context) {
+    return context[this.levelsSlot] || [];
+  }
+
+  // records `code` as picked at the current level, along with that level's name.
+  // Re-aligned on every step, so a session walked partly before levels were
+  // recorded leaves blanks rather than shifting every later name.
+  descend(context, code) {
+    const path = this.getPath(context);
+    const levels = this.getLevels(context);
+    const { levelLabel } = context[this.stepSlot] || {};
+    context[this.levelsSlot] = [...path.map((_, i) => levels[i] || ''), levelLabel || ''];
+    context[this.pathSlot] = [...path, code];
+  }
+
+  ascend(context) {
+    const path = this.getPath(context);
+    context[this.pathSlot] = path.slice(0, -1);
+    context[this.levelsSlot] = this.getLevels(context).slice(0, path.length - 1);
+  }
+
+  // the walked path as labels ("Saúde › Hospitais") when setTrail(true), else ''
+  renderTrail(context) {
+    if (!this.trail) return '';
+    const { trailBundle } = context[this.stepSlot] || {};
+    return this.getPath(context)
+      .map((code) => (trailBundle && trailBundle[code] ? dialog.get_message(trailBundle[code], context.user.locale) : code))
+      .join(' › ');
+  }
+
   renderPreamble(context) {
-    const { levelLabel, trailBundle } = context[this.stepSlot] || {};
+    const { levelLabel } = context[this.stepSlot] || {};
     let text = this.preamble ? dialog.get_message(this.preamble, context.user.locale) : '';
     text = text.split('{{level}}').join(levelLabel || '');
-    if (this.trail) {
-      const trail = this.getPath(context)
-        .map((code) => (trailBundle && trailBundle[code] ? dialog.get_message(trailBundle[code], context.user.locale) : code))
-        .join(' › ');
-      if (trail) text = `*${trail}*\n${text}`;
-    }
+    const trail = this.renderTrail(context);
+    if (trail) text = `*${trail}*\n${text}`;
     return text;
   }
 
@@ -117,9 +147,16 @@ class WalkState extends State {
               const goback = this.getPath(context).length > 0;
               const list = dialog.constructListPromptAndGrammer(options || [], messageBundle || {}, context.user.locale, false, goback);
               context[this.grammerSlot] = list.grammer;
-              context.lastPrompt = this.renderPreamble(context) + list.prompt;
+              this.rememberPrompt(context, this.renderPreamble(context) + list.prompt);
+              // the level name heads the picker, after the breadcrumb the text shows;
+              // the text stays the resume prompt
+              const { levelLabel } = context[this.stepSlot] || {};
+              const heading = [this.renderTrail(context), levelLabel].filter(Boolean).join(' › ');
+              context[this.pickerSlot] = listPickerMessage(context, heading, list.labels);
             }),
-            (context) => dialog.sendMessage(context, context.lastPrompt)
+            (context) => dialog.sendMessage(context, context[this.pickerSlot]
+              ? { ...context[this.pickerSlot], fallbackText: context.lastPrompt }
+              : context.lastPrompt)
           ],
 
           on: { USER_MESSAGE: 'process' }
@@ -132,7 +169,7 @@ class WalkState extends State {
             {
               target: 'fetch',
               cond: (context) => context.intention === dialog.INTENTION_GOBACK,
-              actions: assign((context) => { context[this.pathSlot] = this.getPath(context).slice(0, -1); })
+              actions: assign((context) => { this.ascend(context); })
             },
             {
               target: '#' + this.onLeaf.state.key,
@@ -145,14 +182,14 @@ class WalkState extends State {
               },
               actions: assign((context) => {
                 if (this.onLeaf.slot) context.slots.pgr[this.onLeaf.slot] = context.intention;
-                context[this.pathSlot] = [...this.getPath(context), context.intention];
+                this.descend(context, context.intention);
                 if (this.onLeaf.set) this.onLeaf.set(context);
               })
             },
             {
               target: 'fetch',
               cond: (context) => context.intention !== dialog.INTENTION_UNKOWN,
-              actions: assign((context) => { context[this.pathSlot] = [...this.getPath(context), context.intention]; })
+              actions: assign((context) => { this.descend(context, context.intention); })
             },
             { target: 'retry' }
           ]

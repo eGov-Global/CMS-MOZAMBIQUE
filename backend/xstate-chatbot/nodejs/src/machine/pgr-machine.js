@@ -49,27 +49,64 @@ const labelForCode = (context, code, prefix = '') => {
   return (bundle && dialog.get_message(bundle, context.user.locale)) || code;
 };
 
-// the final review shown before the complaint is submitted. Hierarchy levels
-// come from the walked path (deeper hierarchies simply add no extra lines),
-// so this stays correct whether the citizen walked two levels or three.
-const confirmationSummary = (context) => {
+// Boundary level names with a localised confirmation label, keyed without case
+// or accents so a tenant's "Municipio" is shown as "Município".
+const boundaryLevelBundles = (() => {
+  const { province, district, municipality } = messages.fileComplaint.confirmSubmission;
+  return { provincia: province, province, distrito: district, district, municipio: municipality, municipality };
+})();
+
+// one [label, value] per walked boundary level, in walk order, each labelled by
+// the level it was picked at: its localised label when the name is known, else
+// the name the walk prompt showed, else "Local" for a level with no name
+const locationFields = (context) => {
+  const fields = messages.fileComplaint.confirmSubmission;
+  const text = (bundle) => dialog.get_message(bundle, context.user.locale);
+  const levels = context[walkBoundaries.levelsSlot] || [];
+  return (context[walkBoundaries.pathSlot] || []).map((code, i) => {
+    const bundle = boundaryLevelBundles[dialog.normalizeUtterance(levels[i])];
+    return [bundle ? text(bundle) : (levels[i] || text(fields.location)), labelForCode(context, code)];
+  });
+};
+
+// the values the citizen reviews before submitting, as [label, value] pairs.
+// Hierarchy levels come from the walked path, so a two-level hierarchy simply
+// leaves the subject empty.
+const confirmationFields = (context) => {
   const fields = messages.fileComplaint.confirmSubmission;
   const text = (bundle) => dialog.get_message(bundle, context.user.locale);
   const path = context[walkComplaintTypes.pathSlot] || [];
   const hierarchy = (code) => labelForCode(context, code && String(code).toUpperCase(), 'COMPLAINT_HIERARCHY.');
+  const field = (bundle, value) => [text(bundle), value];
 
-  return [
-    [fields.type, hierarchy(path[0])],
-    [fields.category, hierarchy(path[1])],
-    [fields.subject, hierarchy(path[2])],
-    [fields.location, labelForCode(context, context.slots.pgr.locality)],
-    [fields.institution, context.slots.pgr.instituteName],
-    [fields.description, context.slots.pgr.description],
-    [fields.confidentiality, text(context.slots.pgr.isConfidential ? fields.yes : fields.no)]
-  ]
+  return {
+    type: field(fields.type, hierarchy(path[0])),
+    category: field(fields.category, hierarchy(path[1])),
+    subject: field(fields.subject, hierarchy(path[2])),
+    location: locationFields(context),
+    institution: field(fields.institution, context.slots.pgr.instituteName),
+    description: field(fields.description, context.slots.pgr.description),
+    confidentiality: field(fields.confidentiality, text(context.slots.pgr.isConfidential ? fields.yes : fields.no))
+  };
+};
+
+// the final review shown as text before the complaint is submitted
+const confirmationSummary = (context) => {
+  const f = confirmationFields(context);
+  return [f.type, f.category, f.subject, ...f.location, f.institution, f.description, f.confidentiality]
     .filter(([, value]) => value)
-    .map(([bundle, value]) => `*${text(bundle)}:* ${value}`)
+    .map(([label, value]) => `*${label}:* ${value}`)
     .join('\n');
+};
+
+// the confirmation template's {{1}}..{{8}}
+const confirmationParams = (context) => {
+  const f = confirmationFields(context);
+  const value = ([, fieldValue]) => fieldValue;
+  // {{4}} {{5}} = the two deepest walked boundary levels (Distrito, Município on mz), '-' for a level not walked
+  const location = ['-', '-', ...f.location.map(value)].slice(-2);
+  return [f.type, f.category, f.subject].map(value)
+    .concat(location, [f.institution, f.description, f.confidentiality].map(value));
 };
 
 // -- steps ----------------------------------------------------------------
@@ -105,6 +142,7 @@ const fileComplaintGroup = new Group('fileComplaint')
 
 menu
   .setPrompt(messages.menu.singleOptionQuestion)
+  .setTemplate('menu')
   .setOptions(['fileComplaint', 'cancel'])
   .setConditionalNext(fileComplaintGroup, (context) => context.intention === 'fileComplaint')
   .setConditionalNext(cancelSession, (context) => context.intention === 'cancel');
@@ -164,6 +202,7 @@ askForAttachments
 
 askConsent
   .setPrompt(messages.fileComplaint.consent.question)
+  .setTemplate('consent')
   .setFill({ statements: consentStatements })
   .setOptions(yesNoOptions(choices.accept, choices.decline))
   .setConditionalNext(askConfidentiality, (context) => context.intention === 'Yes')
@@ -179,6 +218,7 @@ cancelSession
 
 askConfidentiality
   .setPrompt(messages.fileComplaint.confidentiality.question)
+  .setTemplate('confidentiality')
   .setFill({ label: messages.fileComplaint.confidentiality.label, hint: messages.fileComplaint.confidentiality.hint })
   .setOptions(yesNoOptions(choices.confidential, choices.notConfidential))
   .setConditionalNext(confirmSubmission, (context) => context.intention === 'Yes', (context) => { context.slots.pgr.isConfidential = true; })
@@ -186,6 +226,7 @@ askConfidentiality
 
 confirmSubmission
   .setPrompt(messages.fileComplaint.confirmSubmission.question)
+  .setTemplate('confirmSubmission', confirmationParams)
   .setFill({ summary: confirmationSummary })
   .setOptions(yesNoOptions(choices.submit, choices.cancel))
   .setConditionalNext(persistComplaint, (context) => context.intention === 'Yes')
@@ -209,6 +250,8 @@ const pgrConfig = {
     delete context[walk.pathSlot];
     delete context[walk.stepSlot];
     delete context[walk.grammerSlot];
+    delete context[walk.pickerSlot];
+    delete context[walk.levelsSlot];
   }
 }),
 

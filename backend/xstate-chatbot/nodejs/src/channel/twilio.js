@@ -459,7 +459,11 @@ class TwilioWhatsAppProvider {
         const reformattedMessage = {
             message: {
                 input: inputFromType,
-                type: inputType
+                type: inputType,
+                // the message whose button or list item was tapped
+                ...(inputType === INPUT_TYPES.BUTTON && requestBody.OriginalRepliedMessageSid
+                    ? { repliedTo: requestBody.OriginalRepliedMessageSid }
+                    : {})
             },
             user: {
                 mobileNumber: await this.extractPhoneNumber(requestBody.From, tenantId),
@@ -518,6 +522,23 @@ class TwilioWhatsAppProvider {
         return this.sendTwilioRequest(params);
     }
 
+    // Sends a quick-reply or list-picker template and returns the sent message's
+    // SID. The flow is already waiting for the answer by now, so when Twilio
+    // refuses the template (wrong or unapproved SID, a variable Meta rejects, the
+    // request failing) the citizen gets the same prompt as numbered text rather
+    // than nothing. Twilio's own error is logged by sendTwilioRequest. A throw
+    // before the request (no sender, an unaddressable number) is left to the
+    // caller: the text would fail the same way.
+    async sendTemplateWithFallback(to, message, contentVariables, tenantId = null) {
+        const response = await this.sendTemplateMessage(to, message.output, contentVariables, tenantId);
+        if (response && response.sid && !response.error_code) return response.sid;
+
+        console.error(`Twilio - template ${message.output} was not sent` +
+            (message.fallbackText ? '; sending its prompt as text' : ''));
+        if (message.fallbackText) await this.sendTextMessage(to, message.fallbackText, tenantId);
+        return undefined;
+    }
+
     async sendTwilioRequest(params) {
         try {
             const response = await fetch(this.baseUrl, {
@@ -548,6 +569,9 @@ class TwilioWhatsAppProvider {
     async sendMessageToUser(user, messages, extraInfo) {
         const tenantId = (extraInfo && extraInfo.tenantId) || config.rootTenantId;
         let userMobile = user.whatsAppAddress || user.mobileNumber;
+        // the template that carried this batch's buttons, so a later tap can be
+        // matched against it (chat-service.recordPromptSid)
+        let sentTemplate;
 
         for (let i = 0; i < messages.length; i++) {
             let message = messages[i];
@@ -582,7 +606,8 @@ class TwilioWhatsAppProvider {
                         });
                     }
 
-                    await this.sendTemplateMessage(userMobile, templateId, contentVariables, tenantId);
+                    const messageSid = await this.sendTemplateWithFallback(userMobile, message, contentVariables, tenantId);
+                    if (messageSid) sentTemplate = { messageSid, prompt: message.fallbackText };
                 }
                 else if (type === 'image' || type === 'pdf') {
                     // For media messages, get the file URL
@@ -620,6 +645,7 @@ class TwilioWhatsAppProvider {
                 console.error("Twilio - Error sending message:", error);
             }
         }
+        return sentTemplate;
     }
 
     async getTransformMessageForTemplate(reformattedMessages) {

@@ -43,7 +43,7 @@ function loadLiveMachine({ service, localisation }) {
   return require(p("src/machine/pgr-machine.js"));
 }
 
-function harness({ service, localisation = { getMessageBundleForCode: () => undefined, getLocales: () => [] } }) {
+function harness({ service, localisation = { getMessageBundleForCode: () => undefined, getLocales: () => [] }, context = {} }) {
   const outputs = [];
   const pgr = loadLiveMachine({ service, localisation });
 
@@ -55,6 +55,7 @@ function harness({ service, localisation = { getMessageBundleForCode: () => unde
       extraInfo: { tenantId: "mz", whatsAppBusinessNumber: "258840000001" },
       slots: { pgr: {} },
       chatInterface: { toUser: (user, messages) => outputs.push(...messages) },
+      ...context,
     },
     states: {
       pgr: pgr.config,
@@ -184,4 +185,19 @@ test("an empty complaint hierarchy reports a system error instead of looping", a
   await settle(20);
 
   assert.ok(h.outputs.includes("SYSTEM_ERROR"), "the citizen is told, and returned to the menu");
+});
+
+test("a new filing starts without the previous filing's walk state", async () => {
+  const leftOver = {};
+  for (const walk of ["complaintType2Step", "boundary"]) {
+    for (const slot of ["Path", "Step", "Grammer", "Picker", "Levels"]) leftOver[walk + slot] = { stale: true };
+  }
+
+  const h = harness({ service: happyPathService(), context: leftOver });
+  h.service.start();
+  await settle();
+
+  for (const slot of Object.keys(leftOver)) {
+    assert.equal(h.service.state.context[slot], undefined, slot);
+  }
 });

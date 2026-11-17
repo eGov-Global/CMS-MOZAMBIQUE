@@ -28,6 +28,7 @@ class ChronologyServiceTest {
     private static final String COMPLAINANT = "citizen-uuid-1";
     private static final String OFFICER = "officer-uuid-9";
     private static final String BID = "PG-PGR-2026-09-08-000001";
+    private static final String CHATBOT = "chatbot-svc-uuid";
 
     private ObjectNode fixture() {
         try {
@@ -69,6 +70,21 @@ class ChronologyServiceTest {
         RequestInfo ri = new RequestInfo();
         ri.setUserInfo(u);
         return ri;
+    }
+
+    private RequestInfo complainant(String name) {
+        RequestInfo ri = requester("CITIZEN", COMPLAINANT, "CITIZEN");
+        ri.getUserInfo().setName(name);
+        return ri;
+    }
+
+    /** The fixture with its APPLY step submitted by someone other than the complainant. */
+    private ObjectNode filedBy(String uuid, String name, String mobile) {
+        ObjectNode root = fixture();
+        ((ObjectNode) root.get("ProcessInstances").get(2)).set("assigner", M.createObjectNode()
+                .put("uuid", uuid).put("name", name).put("userName", mobile).put("mobileNumber", mobile)
+                .set("roles", M.createArrayNode().add(M.createObjectNode().put("code", "EMPLOYEE"))));
+        return root;
     }
 
     private Map<String, ComplaintContext> ctx(boolean confidential) {
@@ -180,6 +196,63 @@ class ChronologyServiceTest {
         assertEquals("my own words", own.get("comment").asText(), "own comment stays");
         assertEquals("Maria Cossa", own.get("assigner").get("name").asText(), "the citizen's own identity stays");
         assertTrue(own.get("assignes").isNull(), "but the officer it was routed to must be stripped");
+    }
+
+    // #215: the chatbot (and a reception officer) file with their own account, so the workflow
+    // records them as the APPLY actor. To the complainant the filing is still their own step.
+    @Test
+    void complainantSeesAFilingSubmittedForThemAsTheirOwn() {
+        ObjectNode root = filedBy(CHATBOT, "WhatsApp Bot", "849999999");
+        ChronologyService.filterForRequester(root, complainant("Maria Cossa"), ctx(false));
+        JsonNode apply = root.get("ProcessInstances").get(2);
+        assertEquals(COMPLAINANT, apply.get("assigner").get("uuid").asText());
+        assertEquals("Maria Cossa", apply.get("assigner").get("name").asText());
+        assertEquals("my own words", apply.get("comment").asText(), "the filing's description is the citizen's");
+        assertEquals("my-file-2", apply.get("documents").get(0).get("fileStoreId").asText());
+        assertTrue(apply.get("assignes").isNull());
+        String payload = root.toString();
+        assertFalse(payload.contains(CHATBOT), "the submitting account's uuid must not reach the citizen");
+        assertFalse(payload.contains("WhatsApp Bot"));
+        assertFalse(payload.contains("849999999"), "nor its phone");
+    }
+
+    @Test
+    void aFilingByAReceptionOfficerCarriesOnlyTheComplainantsIdentity() {
+        ObjectNode root = filedBy("reception-uuid-4", "Reception Officer Four", "840000004");
+        ChronologyService.filterForRequester(root, complainant("Maria Cossa"), ctx(true));
+        JsonNode assigner = root.get("ProcessInstances").get(2).get("assigner");
+        assertEquals(COMPLAINANT, assigner.get("uuid").asText());
+        assertEquals("Maria Cossa", assigner.get("name").asText(), "the complainant sees their own identity, confidential or not");
+        assertFalse(assigner.has("mobileNumber"));
+        assertFalse(assigner.has("userName"));
+        assertFalse(root.toString().contains("Reception Officer Four"));
+    }
+
+    @Test
+    void onlyTheFilingIsTreatedAsTheComplainants() {
+        // Another step an officer performs is still internal: no content, no identity.
+        ObjectNode root = filedBy(CHATBOT, "WhatsApp Bot", "849999999");
+        ((ObjectNode) root.get("ProcessInstances").get(2)).put("action", "ASSIGN");
+        ChronologyService.filterForRequester(root, complainant("Maria Cossa"), ctx(false));
+        JsonNode step = root.get("ProcessInstances").get(2);
+        assertTrue(step.get("assigner").isNull());
+        assertTrue(step.get("comment").isNull());
+        assertTrue(step.get("documents").isNull());
+    }
+
+    @Test
+    void employeeStillSeesWhoSubmittedTheFiling() {
+        ObjectNode root = filedBy(CHATBOT, "WhatsApp Bot", "849999999");
+        String before = root.toString();
+        ChronologyService.filterForRequester(root, requester("EMPLOYEE", OFFICER, "EMPLOYEE"), ctx(false));
+        assertEquals(before, root.toString(), "the employee chronology is unchanged");
+
+        // Confidential: the submitter is not the complainant, so nothing on that step is masked.
+        ObjectNode confidential = filedBy(CHATBOT, "WhatsApp Bot", "849999999");
+        ChronologyService.filterForRequester(confidential, requester("EMPLOYEE", OFFICER, "EMPLOYEE"), ctx(true));
+        JsonNode assigner = confidential.get("ProcessInstances").get(2).get("assigner");
+        assertEquals(CHATBOT, assigner.get("uuid").asText());
+        assertEquals("WhatsApp Bot", assigner.get("name").asText());
     }
 
     @Test

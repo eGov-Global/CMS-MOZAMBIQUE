@@ -1,4 +1,5 @@
 const config = require('./env-variables');
+const { MIN_ITEMS, MAX_ITEMS } = require('./machine/flow/list-picker');
 
 // Credentials default to empty strings, so a misconfigured deployment starts
 // happily and fails on the first citizen instead — a 403 on inbound, or an
@@ -75,6 +76,7 @@ function warnings() {
         'anyone who learns the URL. Intended for local console testing only.'
       );
     }
+    found.push(...templateWarnings(config.twilio));
   }
 
   if (config.repoProvider === 'InMemory') {
@@ -85,6 +87,30 @@ function warnings() {
     );
   }
 
+  return found;
+}
+
+// A wrong template setting only shows once a citizen reaches that question, and
+// then only as buttons that never appear (the prompt falls back to text).
+function templateWarnings(twilio) {
+  const found = [...(twilio.listPickerProblems || [])];
+  const notContentSid = (sid) => !String(sid).startsWith('HX');
+
+  for (const [key, sid] of Object.entries(twilio.templates || {})) {
+    if (sid && notContentSid(sid)) {
+      const name = 'TWILIO_TEMPLATE_' + key.replace(/[A-Z]/g, (letter) => '_' + letter).toUpperCase();
+      found.push(`${name} is not a Content SID (HX…); Twilio will refuse it and the question goes out as text`);
+    }
+  }
+
+  for (const [count, sid] of Object.entries(twilio.listPickers || {})) {
+    if (Number(count) < MIN_ITEMS || Number(count) > MAX_ITEMS) {
+      found.push(`TWILIO_LIST_PICKERS has a SID for ${count} options; a list holds ${MIN_ITEMS} to ${MAX_ITEMS}, so it is never used`);
+    }
+    if (notContentSid(sid)) {
+      found.push(`TWILIO_LIST_PICKERS SID for ${count} options is not a Content SID (HX…); Twilio will refuse it and the list goes out as text`);
+    }
+  }
   return found;
 }
 

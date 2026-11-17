@@ -47,6 +47,12 @@ class ChatService {
     await chatStateRepository.updateSessionId(sessionUserId, config.avgSessionTime);
     telemetry.log(sessionUserId, "from_user", inboundRequestModel);
 
+    if (this.isStaleTap(chatState, inboundRequestModel)) {
+      console.debug(`Ignoring a tap on an earlier message from ${sessionUserId}; re-sending the current prompt`);
+      this.sessionManager.toUser(session.user, [chatState.context.lastPrompt], inboundRequestModel.extraInfo);
+      return;
+    }
+
     const stateMachineService = this.getStateMachineServiceFor(chatState, inboundRequestModel);
 
     const message = inboundRequestModel.getMessage();
@@ -57,6 +63,43 @@ class ChatService {
     const settled = await waitUntilSettled(stateMachineService);
     if (!settled) this.abandonStalledSession(session, inboundRequestModel);
     return pendingPersist(sessionUserId);
+  }
+
+  // A button or list item answers with its number, so a tap is only trusted on
+  // the message carrying the current prompt's buttons. Any other is an earlier
+  // question's answer arriving late - a double tap queued behind its first copy
+  // - and applied here it would answer this question instead: "1" keeps the
+  // details confidential, and one step later "1" submits. At the start gate
+  // nothing is being asked, so any message there simply begins a conversation.
+  isStaleTap(chatState, inboundRequestModel) {
+    const message = inboundRequestModel.getMessage();
+    const context = chatState.context || {};
+    return message.type === "button"
+      && Boolean(message.repliedTo)
+      && Boolean(context.lastPrompt)
+      && chatState.value !== "start"
+      && message.repliedTo !== context.lastPromptSid;
+  }
+
+  // Twilio returns the template's message SID only once the send completes,
+  // after this turn's state was written, so it is patched into the stored
+  // state: queued behind that write, and only while the stored prompt is still
+  // the one the template carried. Should the patch fail, a tap on that prompt
+  // is answered with its text, whose numbers still work.
+  recordPromptSid(userId, sent) {
+    if (!userId || !sent || !sent.messageSid) return undefined;
+    return enqueuePersist(userId, () =>
+      this.patchPromptSid(userId, sent).catch((error) =>
+        console.error(`Could not record the prompt's message SID for ${userId}: ${error.message}`)
+      )
+    );
+  }
+
+  async patchPromptSid(userId, { messageSid, prompt }) {
+    const chatState = await chatStateRepository.getActiveStateForUserId(userId);
+    if (!chatState || chatState.context.lastPrompt !== prompt) return;
+    chatState.context.lastPromptSid = messageSid;
+    await chatStateRepository.updateState(userId, true, chatState.state, new Date().getTime());
   }
 
   /**
