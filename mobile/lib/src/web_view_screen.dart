@@ -17,6 +17,7 @@ import 'package:share_plus/share_plus.dart';
 
 import 'app_config.dart';
 import 'download_bridge.dart';
+import 'server_switch.dart';
 
 /// Where the user chose to pull a complaint attachment from.
 enum _PickSource { camera, gallery, files }
@@ -38,6 +39,11 @@ class _WebViewScreenState extends State<WebViewScreen>
   bool _canGoBack = false;
   String _currentUrl = '';
   String? _pageError;
+  // True while a test-server (UAT) page is on screen. Never stored, so every
+  // launch starts on production.
+  bool _onTestServer = false;
+  // A flag check or a switch dialog is under way.
+  bool _switchBusy = false;
   DateTime? _lastBackTime;
   StreamSubscription<List<ConnectivityResult>>? _connSub;
 
@@ -55,7 +61,12 @@ class _WebViewScreenState extends State<WebViewScreen>
     widget.onReady?.call();
   }
 
-  String get _primaryHost => Uri.parse(widget.config.url).host;
+  String get _primaryHost => _onTestServer
+      ? widget.config.testHost
+      : Uri.parse(widget.config.url).host;
+
+  String get _startUrl =>
+      _onTestServer ? widget.config.testStartUrl : widget.config.startUrl;
 
   @override
   void initState() {
@@ -97,17 +108,23 @@ class _WebViewScreenState extends State<WebViewScreen>
           onPageStarted: (url) => setState(() {
             _currentUrl = url;
             _pageError = null;
+            _onTestServer = widget.config.isTestPage(url);
           }),
           onPageFinished: (url) {
             setState(() {
               _currentUrl = url;
               _hasLoadedOnce = true;
+              _onTestServer = widget.config.isTestPage(url);
             });
             _refreshCanGoBack();
             _fireReady();
             // Downloads (complaint receipt PDF) are produced inside the page
             // and would otherwise go nowhere in a WebView (#173).
             _controller.runJavaScript(downloadBridgeScript);
+            // Ten taps on a login page's logo offer the test server.
+            if (widget.config.hasTestServer && !_onTestServer) {
+              _controller.runJavaScript(serverSwitchScript);
+            }
           },
           onWebResourceError: (err) {
             if (err.isForMainFrame != true) return;
@@ -130,8 +147,7 @@ class _WebViewScreenState extends State<WebViewScreen>
             // a data fetch the app makes after loading.
             final failedUrl = err.request?.uri.toString();
             final isMainDocument = failedUrl != null &&
-                (failedUrl == _currentUrl ||
-                    failedUrl == widget.config.startUrl);
+                (failedUrl == _currentUrl || failedUrl == _startUrl);
             if (!isMainDocument) return;
             setState(() {
               _pageError = 'Server error ($code). Please try again later.';
@@ -141,8 +157,14 @@ class _WebViewScreenState extends State<WebViewScreen>
           },
           onNavigationRequest: _onNavigation,
         ),
-      )
-      ..loadRequest(Uri.parse(widget.config.startUrl));
+      );
+
+    if (widget.config.hasTestServer) {
+      controller.addJavaScriptChannel(
+        serverSwitchChannel,
+        onMessageReceived: _onServerSwitchMessage,
+      );
+    }
 
     if (!kIsWeb && controller.platform is AndroidWebViewController) {
       final android = controller.platform as AndroidWebViewController;
@@ -162,6 +184,7 @@ class _WebViewScreenState extends State<WebViewScreen>
     });
 
     _controller = controller;
+    controller.loadRequest(Uri.parse(widget.config.startUrl));
   }
 
   void _onPointerDown(PointerDownEvent e) {
@@ -256,6 +279,87 @@ class _WebViewScreenState extends State<WebViewScreen>
     } catch (_) {
       if (mounted) _showSnack('Could not save the file');
     }
+  }
+
+  // ── Test server switch for Play review (server_switch.dart) ──────────────
+
+  ServerSwitchText get _switchText => ServerSwitchText.forLanguage(
+      WidgetsBinding.instance.platformDispatcher.locale.languageCode);
+
+  Future<void> _onServerSwitchMessage(JavaScriptMessage message) async {
+    if (message.message != serverSwitchRequest ||
+        _onTestServer ||
+        _switchBusy ||
+        !mounted) {
+      return;
+    }
+    _switchBusy = true;
+    try {
+      final from = _currentUrl;
+      // Turned off remotely: the taps do nothing.
+      final on = await fetchServerSwitchFlag(
+        widget.config.testFlagUrl,
+        widget.config.testTenantId,
+      );
+      if (!on || !mounted) return;
+      final text = _switchText;
+      final go = await _confirm(
+        title: text.switchTitle,
+        message: text.switchMessage,
+        action: text.switchAction,
+      );
+      if (!go || !mounted) return;
+      await _controller
+          .loadRequest(Uri.parse(widget.config.testLoginFor(from)));
+    } finally {
+      _switchBusy = false;
+    }
+  }
+
+  Future<void> _confirmLeaveTestServer() async {
+    if (_switchBusy) return;
+    _switchBusy = true;
+    try {
+      final from = _currentUrl;
+      final text = _switchText;
+      final go = await _confirm(
+        title: text.leaveTitle,
+        message: text.leaveMessage,
+        action: text.leaveAction,
+      );
+      if (!go || !mounted) return;
+      await _controller.loadRequest(Uri.parse(widget.config.loginFor(from)));
+    } finally {
+      _switchBusy = false;
+    }
+  }
+
+  Future<bool> _confirm({
+    required String title,
+    required String message,
+    required String action,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(_switchText.cancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: widget.config.primaryColor,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(action),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   // ── Native permission & picker bridges (Android) ─────────────────────────
@@ -494,7 +598,7 @@ class _WebViewScreenState extends State<WebViewScreen>
       _pageError = null;
     });
     if (freshStart) {
-      await _controller.loadRequest(Uri.parse(widget.config.startUrl));
+      await _controller.loadRequest(Uri.parse(_startUrl));
     } else {
       await _controller.reload();
     }
@@ -580,14 +684,68 @@ class _WebViewScreenState extends State<WebViewScreen>
       ],
     );
 
-    if (!widget.config.pullToRefresh) return stack;
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: _onPointerDown,
-      onPointerMove: _onPointerMove,
-      onPointerUp: _onPointerEnd,
-      onPointerCancel: _onPointerEnd,
-      child: stack,
+    final page = !widget.config.pullToRefresh
+        ? stack
+        : Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: _onPointerDown,
+            onPointerMove: _onPointerMove,
+            onPointerUp: _onPointerEnd,
+            onPointerCancel: _onPointerEnd,
+            child: stack,
+          );
+    // The key keeps the WebView's element when the banner comes and goes.
+    return Column(
+      children: [
+        if (_onTestServer)
+          _TestServerBanner(text: _switchText, onTap: _confirmLeaveTestServer),
+        Expanded(key: const ValueKey('page'), child: page),
+      ],
+    );
+  }
+}
+
+/// Shown above every test-server page so nobody mistakes UAT for the real
+/// service; a tap offers the way back to production.
+class _TestServerBanner extends StatelessWidget {
+  final ServerSwitchText text;
+  final VoidCallback onTap;
+  const _TestServerBanner({required this.text, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: text.bannerSemantics,
+      excludeSemantics: true,
+      child: Material(
+        color: const Color(0xFFFFB300),
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.science_outlined,
+                    size: 16, color: Colors.black87),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    text.banner,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.black87,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
