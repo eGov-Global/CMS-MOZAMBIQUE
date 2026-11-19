@@ -15,7 +15,7 @@ import { useLandingCopy } from "./useLandingCopy";
 import { UtilityBar, DEFAULT_LANGUAGES } from "./components/UtilityBar";
 import { LandingHeader } from "./components/LandingHeader";
 import { LandingFooter } from "./components/LandingFooter";
-import { DEFAULT_LANDING_ROUTES, LandingRoutes } from "./routes";
+import { DEFAULT_LANDING_ROUTES, DELETE_ACCOUNT_ANCHOR, LandingRoutes } from "./routes";
 import type { LandingCopyKey } from "./content";
 
 const EMBLEM_URL = "/digit-ui/emblem.png";
@@ -51,6 +51,7 @@ export function PGRTutorialPage({ routes: routeOverrides }: TutorialPageProps) {
       CITIZEN_LOGIN: `/${ctx}/citizen/login`,
       EMPLOYEE_LOGIN: `/${ctx}/employee`,
       PRIVACY: `/${ctx}/privacy-policy`,
+      DELETE_ACCOUNT: `/${ctx}/privacy-policy#${DELETE_ACCOUNT_ANCHOR}`,
       TRAINING: `/${ctx}/tutorial`,
       ...routeOverrides,
     }),

@@ -10,6 +10,7 @@
 
 import * as React from "react";
 import PGRLandingPage from "./index";
+import { DELETE_ACCOUNT_ANCHOR } from "./routes";
 import type { LandingRoutes } from "./routes";
 
 export function PGRLandingEntry() {
@@ -23,6 +24,7 @@ export function PGRLandingEntry() {
       CITIZEN_LOGIN: `/${ctx}/citizen/login`,
       EMPLOYEE_LOGIN: `/${ctx}/employee`,
       PRIVACY: `/${ctx}/privacy-policy`,
+      DELETE_ACCOUNT: `/${ctx}/privacy-policy#${DELETE_ACCOUNT_ANCHOR}`,
       TRAINING: `/${ctx}/tutorial`,
     }),
     [ctx]

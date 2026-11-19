@@ -194,6 +194,29 @@ export const LANDING_COPY = {
     en: "Your information will be retained only for the period necessary to process your complaint, comply with legal obligations and maintain official government records. You may request access to or correction of your personal information, subject to applicable law and any restrictions necessary to protect ongoing investigations.",
   },
 
+  // Account deletion (section of the privacy policy page, anchor
+  // DELETE_ACCOUNT_ANCHOR; its URL is the account deletion URL declared on
+  // Google Play). Process details are overridable via PGR_LANDING_* keys.
+  DELETE_ACCOUNT_TITLE: { pt: "Eliminar a sua conta", en: "Delete your account" },
+  DELETE_ACCOUNT_P1: {
+    pt: "Pode pedir, a qualquer momento, a eliminação da sua conta na Plataforma Fala Cidadão (aplicação e portal) e dos dados pessoais do seu perfil.",
+    en: "You can ask at any time for your Fala Cidadão account (app and portal) and the personal data in your profile to be deleted.",
+  },
+  DELETE_ACCOUNT_HOW: {
+    pt: "Como pedir: envie um e-mail para o endereço abaixo com o assunto «Eliminar conta Fala Cidadão», indicando o número de telemóvel que usa na Plataforma.",
+    en: "How to ask: email the address below with the subject “Delete Fala Cidadão account”, giving the mobile number you use on the Platform.",
+  },
+  DELETE_ACCOUNT_EMAIL: { pt: "dpi@digital.gov.mz", en: "dpi@digital.gov.mz" },
+  DELETE_ACCOUNT_SUBJECT: { pt: "Eliminar conta Fala Cidadão", en: "Delete Fala Cidadão account" },
+  DELETE_ACCOUNT_DELETED: {
+    pt: "O que é eliminado: o seu nome, número de telemóvel, endereço de e-mail e os restantes dados do perfil.",
+    en: "What is deleted: your name, mobile number, email address and the rest of your profile.",
+  },
+  DELETE_ACCOUNT_KEPT: {
+    pt: "O que é conservado: as reclamações já apresentadas e o respetivo histórico fazem parte dos registos oficiais do Governo e são conservados pelo período exigido por lei, como descrito nesta Política de Privacidade.",
+    en: "What is kept: complaints already submitted and their history are part of the Government's official records and are kept for the period the law requires, as described in this Privacy Policy.",
+  },
+
   // Tutorial (full page) -----------------------------------------------------
   TUTORIAL_PAGE_TITLE: { pt: "Tutorial", en: "Tutorial" },
   TUTORIAL_VIDEO_LABEL: {
@@ -243,6 +266,7 @@ export const LANDING_COPY = {
   FOOTER_CITIZEN_LOGIN: { pt: "Entrar como Cidadão", en: "Citizen Sign in" },
   FOOTER_EMPLOYEE_LOGIN: { pt: "Acesso de Funcionário", en: "Employee Access" },
   FOOTER_PRIVACY: { pt: "Política de Privacidade", en: "Privacy Policy" },
+  FOOTER_DELETE_ACCOUNT: { pt: "Eliminar a minha conta", en: "Delete my account" },
   FOOTER_TERMS: { pt: "Termos de Utilização", en: "Terms of Use" },
   FOOTER_ACCESSIBILITY: { pt: "Acessibilidade", en: "Accessibility" },
   FOOTER_COPYRIGHT: {

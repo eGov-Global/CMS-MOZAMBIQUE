@@ -44,20 +44,23 @@
     // form components run scrollIntoView during mount, pulling a long
     // form's first input into view (~450px down) so the user lands
     // mid-form. Override every scroll for the first 3s after a route
-    // change OR until the user explicitly scrolls.
+    // change OR until the user explicitly scrolls. An explicit #anchor
+    // (e.g. /privacy-policy#eliminar-conta) is a requested position, so
+    // those navigations are left alone.
     (function () {
       var lastUrl = location.href;
       var clamping = false;
       var clampUntil = 0;
       var userScrolled = false;
       function startClamp() {
+        if (location.hash) { clamping = false; return; }
         userScrolled = false;
         clamping = true;
         clampUntil = Date.now() + 3000;
         if (window.scrollY !== 0) window.scrollTo(0, 0);
         function tick() {
           if (!clamping) return;
-          if (userScrolled) { clamping = false; return; }
+          if (userScrolled || location.hash) { clamping = false; return; }
           if (Date.now() > clampUntil) { clamping = false; return; }
           if (window.scrollY !== 0) window.scrollTo(0, 0);
           requestAnimationFrame(tick);
