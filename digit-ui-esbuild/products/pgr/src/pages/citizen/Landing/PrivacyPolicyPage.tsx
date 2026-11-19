@@ -2,11 +2,16 @@
 // /${contextPath}/privacy-policy and linked from the landing's PRIVACY route +
 // footer. Text resolves via useLandingCopy (built-in deck in content.ts,
 // overridable by PGR_LANDING_* localisation keys).
+//
+// The "Delete your account" section (#eliminar-conta, the landing's
+// DELETE_ACCOUNT route) is the account deletion page Google Play requires for
+// apps where users create an account.
 import * as React from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Mail } from "lucide-react";
 import { buildTokenStyle, CONTAINER } from "./tokens";
 import { useLandingCopy } from "./useLandingCopy";
 import { LandingLink } from "./components/LandingLink";
+import { DELETE_ACCOUNT_ANCHOR } from "./routes";
 
 const BODY_KEYS = [
   "PRIVACY_PAGE_P1",
@@ -41,6 +46,22 @@ export function PGRPrivacyPolicyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Arriving at #eliminar-conta (footer link or the URL given to Google Play):
+  // the section renders after the browser's own anchor jump, and core App.js
+  // scrolls to the top on every route change in an effect that runs after
+  // this one — so scroll in a task queued behind both. (A timer, not
+  // requestAnimationFrame, which never fires while the tab is hidden.)
+  React.useEffect(() => {
+    if (typeof window === "undefined" || window.location.hash !== `#${DELETE_ACCOUNT_ANCHOR}`) return;
+    const timer = window.setTimeout(() =>
+      document.getElementById(DELETE_ACCOUNT_ANCHOR)?.scrollIntoView()
+    );
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const deletionEmail = c("DELETE_ACCOUNT_EMAIL");
+  const deletionMailto = `mailto:${deletionEmail}?subject=${encodeURIComponent(c("DELETE_ACCOUNT_SUBJECT"))}`;
+
   return (
     <div className="v2-scope pgr-landing min-h-screen bg-[hsl(var(--pgrl-page))]" style={buildTokenStyle()}>
       <header className="bg-[hsl(var(--pgrl-deep))] text-[hsl(var(--pgrl-on-primary))]">
@@ -63,6 +84,26 @@ export function PGRPrivacyPolicyPage() {
             </p>
           ))}
         </div>
+
+        <section
+          id={DELETE_ACCOUNT_ANCHOR}
+          aria-labelledby={`${DELETE_ACCOUNT_ANCHOR}-title`}
+          className="mt-10 flex max-w-3xl scroll-mt-4 flex-col gap-4 rounded-[var(--pgrl-radius)] border border-solid border-[hsl(var(--pgrl-line))] border-l-4 border-l-[hsl(var(--pgrl-primary))] bg-[hsl(var(--pgrl-surface))] p-6"
+        >
+          <h2 id={`${DELETE_ACCOUNT_ANCHOR}-title`} className="m-0 text-xl font-bold text-[hsl(var(--pgrl-ink))]">
+            {c("DELETE_ACCOUNT_TITLE")}
+          </h2>
+          <p className="m-0 text-base leading-relaxed text-[hsl(var(--pgrl-ink-soft))]">{c("DELETE_ACCOUNT_P1")}</p>
+          <p className="m-0 text-base leading-relaxed text-[hsl(var(--pgrl-ink-soft))]">{c("DELETE_ACCOUNT_HOW")}</p>
+          <LandingLink
+            to={deletionMailto}
+            className="inline-flex items-center gap-2 self-start text-base font-semibold !text-[hsl(var(--pgrl-primary))] underline"
+          >
+            <Mail aria-hidden className="h-5 w-5" /> {deletionEmail}
+          </LandingLink>
+          <p className="m-0 text-base leading-relaxed text-[hsl(var(--pgrl-ink-soft))]">{c("DELETE_ACCOUNT_DELETED")}</p>
+          <p className="m-0 text-base leading-relaxed text-[hsl(var(--pgrl-ink-soft))]">{c("DELETE_ACCOUNT_KEPT")}</p>
+        </section>
       </main>
     </div>
   );
