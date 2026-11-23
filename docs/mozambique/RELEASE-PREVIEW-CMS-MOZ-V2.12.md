@@ -307,7 +307,6 @@ The roles follow the layered model from the [solution design](https://github.com
 | Matomo (self-hosted) | Analytics; one-command provisioning, admin UI bound to localhost | New ([`1abef50f`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/1abef50f)) — opt-in |
 | PostHog / GA4 / custom | Analytics destinations configured as data | New ([`e9a0f0e4`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/e9a0f0e4)) — off by default |
 | Nominatim / CARTO / OpenFreeMap | Geocoding + map tiles | Upstream, tuned |
-| youtube-nocookie | Tutorial video streaming on the public site | New ([`cec2b6fe`](https://github.com/eGov-Global/CMS-MOZAMBIQUE/commit/cec2b6fe)) |
 
 ---
 
