@@ -25,7 +25,9 @@ import {
   Field as V2Field,
 } from "@egovernments/digit-ui-components-v2";
 import { Phone } from "lucide-react";
+import { Link } from "react-router-dom";
 import Header from "../../../components/Header";
+import { privacyLinks } from "../../../components/privacyLinks";
 
 const SelectMobileNumber = ({
   t,
@@ -171,10 +173,28 @@ const SelectMobileNumber = ({
             {stepText(config?.texts?.nextText, "Continue")}
           </V2Button>
         </form>
+        <PrivacyLinksRow t={t} />
       </SignInCard>
     </V2LoginShell>
   );
 };
+
+/**
+ * The privacy policy link under the sign-in button, so it can be read inside
+ * the mobile app before signing in. (Account deletion is in Edit Profile.)
+ * Nothing when the deployment has no privacy page.
+ */
+function PrivacyLinksRow({ t }) {
+  const links = privacyLinks(t);
+  if (!links) return null;
+  return (
+    <p style={{ margin: 0, textAlign: "center", fontSize: "0.8125rem", lineHeight: "1.5rem" }}>
+      <Link to={links.privacy.url} style={{ color: "var(--color-text-secondary, #6B7280)", textDecoration: "underline" }}>
+        {links.privacy.label}
+      </Link>
+    </p>
+  );
+}
 
 /**
  * A sign-in step's own text. Login/index.js hands every step its texts already

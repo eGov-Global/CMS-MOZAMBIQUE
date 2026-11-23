@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { insertModuleSections, isCitizenHome, mdmsLinkRows, publicDashboardEnabled } from "./navSections";
+import { privacyLinks } from "../../privacyLinks";
 
 const iconOf = (icon) => ({ icon, width: "1.5rem", height: "1.5rem" });
 
@@ -11,7 +12,8 @@ const iconOf = (icon) => ({ icon, width: "1.5rem", height: "1.5rem" });
  * `PGRCitizenSidebarSection`, the citizen twin of `PGRSidebarSection`), then
  * the links a tenant configures in MDMS (`linkData`, the same rows the home
  * page reads), then the public dashboard once the tenant has published it,
- * then Helpline, and Login for a visitor who is not signed in. Edit Profile and
+ * then Helpline, the privacy policy, and Login for a visitor who is not
+ * signed in. Edit Profile and
  * Logout are not rows here: on desktop they live in the top bar's account
  * menu, as they do for employees, and the phone drawer adds its own.
  */
@@ -39,6 +41,8 @@ export const useCitizenNavItems = (linkData) => {
     select: (data) => data?.dss?.DashboardConfig,
     enabled: !!stateId,
   });
+
+  const privacy = privacyLinks(t);
 
   const base = [
     {
@@ -68,6 +72,11 @@ export const useCitizenNavItems = (linkData) => {
     // the citizen can read it off as well as tap it.
     ...(helpline
       ? [{ key: "helpline", label: `${t("CS_COMMON_HELPLINE")} ${helpline}`, icon: iconOf("Call"), navigationUrl: `tel:${helpline}` }]
+      : []),
+    // Account deletion is not a row: it lives in the signed-in citizen's Edit
+    // Profile.
+    ...(privacy
+      ? [{ key: "privacy-policy", label: privacy.privacy.label, icon: iconOf("PrivacyTip"), navigationUrl: privacy.privacy.url }]
       : []),
     ...(signedIn
       ? []
