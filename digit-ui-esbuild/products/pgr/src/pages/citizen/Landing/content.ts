@@ -202,19 +202,43 @@ export const LANDING_COPY = {
     pt: "Pode pedir, a qualquer momento, a eliminação da sua conta na Plataforma Fala Cidadão (aplicação e portal) e dos dados pessoais do seu perfil.",
     en: "You can ask at any time for your Fala Cidadão account (app and portal) and the personal data in your profile to be deleted.",
   },
-  DELETE_ACCOUNT_HOW: {
-    pt: "Como pedir: envie um e-mail para o endereço abaixo com o assunto «Eliminar conta Fala Cidadão», indicando o número de telemóvel que usa na Plataforma.",
-    en: "How to ask: email the address below with the subject “Delete Fala Cidadão account”, giving the mobile number you use on the Platform.",
-  },
   DELETE_ACCOUNT_EMAIL: { pt: "dpi@digital.gov.mz", en: "dpi@digital.gov.mz" },
   DELETE_ACCOUNT_SUBJECT: { pt: "Eliminar conta Fala Cidadão", en: "Delete Fala Cidadão account" },
-  DELETE_ACCOUNT_DELETED: {
-    pt: "O que é eliminado: o seu nome, número de telemóvel, endereço de e-mail e os restantes dados do perfil.",
-    en: "What is deleted: your name, mobile number, email address and the rest of your profile.",
+  // The same process drawn as steps, for citizens who read pictures faster
+  // than paragraphs. Only steps the process really has: no deadlines or
+  // confirmations are promised until the government team sets them.
+  DELETE_ACCOUNT_STEPS_TITLE: { pt: "Como funciona", en: "How it works" },
+  DELETE_ACCOUNT_STEP1_TITLE: { pt: "Envie o pedido por e-mail", en: "Send the request by email" },
+  DELETE_ACCOUNT_STEP1_TEXT: {
+    pt: "Toque no botão abaixo. O endereço e o assunto já vêm preenchidos.",
+    en: "Tap the button below. The address and subject are filled in for you.",
   },
-  DELETE_ACCOUNT_KEPT: {
-    pt: "O que é conservado: as reclamações já apresentadas e o respetivo histórico fazem parte dos registos oficiais do Governo e são conservados pelo período exigido por lei, como descrito nesta Política de Privacidade.",
-    en: "What is kept: complaints already submitted and their history are part of the Government's official records and are kept for the period the law requires, as described in this Privacy Policy.",
+  DELETE_ACCOUNT_STEP2_TITLE: { pt: "Indique o seu número", en: "Give your number" },
+  DELETE_ACCOUNT_STEP2_TEXT: {
+    pt: "Escreva o número de telemóvel que usa na Plataforma, para que a sua conta seja encontrada.",
+    en: "Write the mobile number you use on the Platform, so your account can be found.",
+  },
+  DELETE_ACCOUNT_STEP3_TITLE: { pt: "A conta é eliminada", en: "Your account is deleted" },
+  DELETE_ACCOUNT_STEP3_TEXT: {
+    pt: "A equipa da Plataforma recebe o pedido e elimina a sua conta e os dados do seu perfil.",
+    en: "The Platform team receives the request and deletes your account and profile data.",
+  },
+  DELETE_ACCOUNT_SEND: { pt: "Enviar pedido por e-mail", en: "Send request by email" },
+  DELETE_ACCOUNT_MAIL_BODY: { pt: "Número de telemóvel: ", en: "Mobile number: " },
+  DELETE_ACCOUNT_OR_WRITE: { pt: "Ou escreva para", en: "Or write to" },
+  DELETE_ACCOUNT_DELETED_TITLE: { pt: "É eliminado", en: "Deleted" },
+  DELETE_ACCOUNT_DELETED_ITEMS: {
+    pt: "O seu nome|O número de telemóvel|O endereço de e-mail|Os restantes dados do perfil",
+    en: "Your name|Your mobile number|Your email address|The rest of your profile",
+  },
+  DELETE_ACCOUNT_KEPT_TITLE: { pt: "É conservado", en: "Kept" },
+  DELETE_ACCOUNT_KEPT_ITEMS: {
+    pt: "As reclamações já apresentadas|O histórico dessas reclamações",
+    en: "Complaints already submitted|The history of those complaints",
+  },
+  DELETE_ACCOUNT_KEPT_WHY: {
+    pt: "Fazem parte dos registos oficiais do Governo e são conservados pelo período exigido por lei.",
+    en: "They are part of the Government's official records and are kept for the period the law requires.",
   },
 
   // Tutorial (full page) -----------------------------------------------------
