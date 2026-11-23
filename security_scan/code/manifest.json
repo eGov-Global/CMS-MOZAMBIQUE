@@ -1,6 +1,32 @@
 {
  "runs": [
   {
+   "file": "data/pradeepkumarcm-egov---23rd-Nov-2026-06-48-UTC.json",
+   "label": "pradeepkumarcm-egov - 23rd Nov 2026, 06:48 UTC",
+   "repo": "eGov-Global/CMS-MOZAMBIQUE",
+   "runner": "pradeepkumarcm-egov",
+   "branch": "master",
+   "ts": "2026-11-23T06:48:56.649040+00:00",
+   "date": "2026-11-23 06:48 UTC",
+   "shaShort": "634005e",
+   "pr": null,
+   "occurrences": 533,
+   "types": 484,
+   "occBySeverity": {
+    "CRITICAL": 45,
+    "HIGH": 202,
+    "MEDIUM": 176,
+    "LOW": 61
+   },
+   "typesBySeverity": {
+    "CRITICAL": 45,
+    "HIGH": 202,
+    "MEDIUM": 176,
+    "LOW": 61
+   },
+   "xlsxUrl": ""
+  },
+  {
    "file": "data/pradeepkumarcm-egov---23rd-Nov-2026-05-22-UTC.json",
    "label": "pradeepkumarcm-egov - 23rd Nov 2026, 05:22 UTC",
    "repo": "eGov-Global/CMS-MOZAMBIQUE",
