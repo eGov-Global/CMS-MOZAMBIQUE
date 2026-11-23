@@ -40,6 +40,9 @@ export interface LandingRoutes {
   FAQ: string;
   /** Privacy policy. */
   PRIVACY: string;
+  /** Account deletion request: the privacy policy's DELETE_ACCOUNT_ANCHOR
+   *  section, also declared on Google Play as the account deletion URL. */
+  DELETE_ACCOUNT: string;
   /** Terms of use. */
   TERMS: string;
   /** Accessibility statement. */
@@ -76,6 +79,7 @@ export const DEFAULT_LANDING_ROUTES: LandingRoutes = {
   CONTACTS: "#",
   FAQ: "#",
   PRIVACY: "#",
+  DELETE_ACCOUNT: "#",
   TERMS: "#",
   ACCESSIBILITY: "#",
   NEWS: "#",
@@ -89,6 +93,9 @@ export const DEFAULT_LANDING_ROUTES: LandingRoutes = {
   GREEN_LINE: "tel:8007777",
   PHONE: "tel:+258214900000",
 };
+
+/** Element id of the account deletion section on the privacy policy page. */
+export const DELETE_ACCOUNT_ANCHOR = "eliminar-conta";
 
 export function mergeRoutes(overrides?: Partial<LandingRoutes>): LandingRoutes {
   return { ...DEFAULT_LANDING_ROUTES, ...overrides };

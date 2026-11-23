@@ -52,6 +52,7 @@ const GROUPS: FooterGroup[] = [
     titleKey: "FOOTER_LEGAL",
     links: [
       { labelKey: "FOOTER_PRIVACY", route: "PRIVACY" },
+      { labelKey: "FOOTER_DELETE_ACCOUNT", route: "DELETE_ACCOUNT" },
       { labelKey: "FOOTER_TERMS", route: "TERMS" },
       { labelKey: "FOOTER_ACCESSIBILITY", route: "ACCESSIBILITY" },
     ],
