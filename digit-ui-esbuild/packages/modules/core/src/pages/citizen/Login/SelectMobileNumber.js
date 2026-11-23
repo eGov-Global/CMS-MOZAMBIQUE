@@ -25,7 +25,9 @@ import {
   Field as V2Field,
 } from "@egovernments/digit-ui-components-v2";
 import { Phone } from "lucide-react";
+import { Link } from "react-router-dom";
 import Header from "../../../components/Header";
+import { privacyLinks } from "../../../components/privacyLinks";
 
 const SelectMobileNumber = ({
   t,
@@ -171,10 +173,35 @@ const SelectMobileNumber = ({
             {stepText(config?.texts?.nextText, "Continue")}
           </V2Button>
         </form>
+        <PrivacyLinksRow t={t} />
       </SignInCard>
     </V2LoginShell>
   );
 };
+
+/**
+ * The privacy policy and account deletion links under the sign-in button, so
+ * both are reachable inside the mobile app before signing in (Google Play's
+ * in-app deletion path). Nothing when the deployment has no privacy page.
+ */
+function PrivacyLinksRow({ t }) {
+  const links = privacyLinks(t);
+  if (!links) return null;
+  const linkStyle = { color: "var(--color-text-secondary, #6B7280)", textDecoration: "underline" };
+  return (
+    <p style={{ margin: 0, textAlign: "center", fontSize: "0.8125rem", lineHeight: "1.5rem" }}>
+      <Link to={links.privacy.url} style={linkStyle}>
+        {links.privacy.label}
+      </Link>
+      <span aria-hidden style={{ margin: "0 8px", color: "var(--color-text-secondary, #6B7280)" }}>
+        ·
+      </span>
+      <Link to={links.deleteAccount.url} style={linkStyle}>
+        {links.deleteAccount.label}
+      </Link>
+    </p>
+  );
+}
 
 /**
  * A sign-in step's own text. Login/index.js hands every step its texts already
