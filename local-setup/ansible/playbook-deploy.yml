@@ -6683,6 +6683,24 @@
               'General.proxy_client_headers[]="HTTP_X_FORWARDED_FOR"'
             CHANGED=1
           fi
+          {% if matomo_dashboard | default(false) %}
+          # matomo_dashboard serves the whole UI under /matomo/ with Host set to
+          # the portal's own host (nginx-site.conf.j2). Matomo refuses to render
+          # for a Host missing from trusted_hosts, and without proxy_uri_header
+          # it builds links from its own root, dropping the /matomo prefix that
+          # nginx passes in X-Forwarded-Uri. Until now only
+          # `ccrs-migrate --matomo-dashboard` set these, so a plain deploy with
+          # the flag on rendered the location but served a broken dashboard.
+          if ! docker exec digit-matomo grep -q 'trusted_hosts\[\] *= *"{{ domain }}"' "$CFG"; then
+            docker exec digit-matomo php /var/www/html/console config:set \
+              'General.trusted_hosts[]="{{ domain }}"'
+            CHANGED=1
+          fi
+          if ! docker exec digit-matomo grep -q '^proxy_uri_header *= *1' "$CFG"; then
+            docker exec digit-matomo php /var/www/html/console config:set 'General.proxy_uri_header=1'
+            CHANGED=1
+          fi
+          {% endif %}
           [ "$CHANGED" -eq 0 ] && echo "NOCHANGE matomo settings already applied"
           exit 0
         executable: /bin/bash
@@ -6696,7 +6714,8 @@
     - name: Show Matomo status
       ansible.builtin.debug:
         msg: >-
-          Matomo: {{ 'settings applied (trusted_hosts + proxy_client_headers)'
+          Matomo: {{ ('settings applied (trusted_hosts + proxy_client_headers'
+                      ~ (' + dashboard at /matomo/' if (matomo_dashboard | default(false)) else '') ~ ')')
                      if ('SKIP' not in (matomo_settings.stdout | default('')))
                      else 'NOT INSTALLED YET — tunnel to it and run the browser installer:
                            ssh -L ' ~ (upstream_matomo_port | default(18081)) ~ ':127.0.0.1:'

@@ -134,6 +134,9 @@ def r_matomo(cfg):
     if exposed and not enabled:
         yield (FAIL, "nginx_features.matomo: true requires enable_matomo: true "
                      "(otherwise /matomo/matomo.php proxies to nothing and 502s).")
+    if get(cfg, "matomo_dashboard") is True and not exposed:
+        yield (FAIL, "matomo_dashboard: true requires nginx_features.matomo: true "
+                     "(otherwise /matomo/ is never rendered and falls through to Kong).")
 
 
 @rule(
@@ -440,6 +443,12 @@ SELF_TEST_CASES = [
      {"matomo-combo"}),
     ("matomo fully wired is clean",
      {"enable_matomo": True, "nginx_features": {"matomo": True}},
+     set()),
+    ("matomo dashboard without the nginx feature fires",
+     {"enable_matomo": True, "matomo_dashboard": True},
+     {"matomo-combo"}),
+    ("matomo dashboard fully wired is clean",
+     {"enable_matomo": True, "nginx_features": {"matomo": True}, "matomo_dashboard": True},
      set()),
     ("empty config is clean", {}, set()),
 ]

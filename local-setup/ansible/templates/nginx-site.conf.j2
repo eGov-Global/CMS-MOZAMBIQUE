@@ -305,7 +305,7 @@ server {
   # ── Matomo DASHBOARD under the /matomo/ prefix ──────────────────────────
   # Host is $host (not the pin) so Matomo's
   # absolute URLs carry the portal host; X-Forwarded-Uri + Matomo's own
-  # proxy_uri_header=1 (set by `ccrs-migrate --matomo --matomo-dashboard`) keep
+  # proxy_uri_header=1 (set by the deploy's Matomo settings task) keep
   # the /matomo prefix on generated links. This publishes an ADMIN CONSOLE with
   # visitor data on the public domain — protect it with a strong password, and
   # consider an allow/deny below. Off unless matomo_dashboard: true.
