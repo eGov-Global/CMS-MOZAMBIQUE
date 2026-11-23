@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Test server switch for Google Play review: ten quick taps on a login page's
+  logo, then a confirmation, open the UAT login page, where a test number and
+  fixed code work. An amber banner marks every UAT page and leads back; every
+  launch starts on production. Its dialogs and banner follow the phone's
+  language: Portuguese, or English otherwise. On by default; it can be turned
+  off and on remotely with the MDMS record `MobileApp.Settings` /
+  `TEST_SERVER_SWITCH` on the test server (`tools/test_server_switch.py`),
+  read only after the ten taps. New config keys `testUrl` / `testCitizenUrl` /
+  `testTenantId`.
+
 - Downloads started inside the page (the complaint receipt PDF) now reach the
   citizen: the app catches them and opens the system share sheet to save or
   view the file (#173). Adds `path_provider` and `share_plus`.

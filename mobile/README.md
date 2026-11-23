@@ -49,6 +49,45 @@ Everything user-facing is driven from
 | `javascriptEnabled` | Toggle JS in the WebView |
 | `showAppBar` | Show an app bar with refresh button |
 | `pullToRefresh` | Enable pull-to-refresh gesture |
+| `testUrl` / `testCitizenUrl` | Employee / citizen login on the test server behind the hidden switch below; omit both to remove the switch from a build |
+| `testTenantId` | State tenant on the test server holding the switch's remote on/off flag (default `mz`) |
+
+### Test server switch (Play review)
+
+Google Play's reviewers cannot receive the SMS code a citizen signs in with,
+and production is never changed for a review. The production build therefore
+carries a disclosed way onto UAT: **tap the logo on a login page ten times
+quickly**, then confirm *Mudar*. The app opens the matching UAT login page
+(citizen or employee), where the test number and fixed code from the Play
+Console "App access" notes work.
+
+- An amber **SERVIDOR DE TESTE (UAT)** banner sits above every UAT page; a
+  tap on it offers the way back to production.
+- The dialogs and the banner are in Portuguese on a phone set to Portuguese
+  and in English otherwise (*TEST SERVER (UAT)*, *Switch*), so a reviewer's
+  phone shows the English the "App access" notes describe.
+- Nothing is stored: every launch starts on production. Pull-to-refresh
+  stays on the current server.
+- The website itself is unchanged; only the app counts the taps
+  ([lib/src/server_switch.dart](lib/src/server_switch.dart)). The UAT build
+  (`config/environments/uat.json`) has no switch.
+
+**Remote on/off.** The switch is **on by default**. After the ten taps the
+app reads the MDMS record `MobileApp.Settings` / `TEST_SERVER_SWITCH` on the
+**test server** (never production): `"enabled": false` turns the switch off
+and the taps then do nothing. No record, `true`, an error or no network leave
+it on. Nothing is requested during ordinary use. Manage it with
+[tools/test_server_switch.py](tools/test_server_switch.py):
+
+```bash
+tools/test_server_switch.py status                                 # no login
+MDMS_USER=… MDMS_PASSWORD=… tools/test_server_switch.py off        # or on
+```
+
+The first `off` registers the schema and creates the record. Keep the switch
+**on whenever Google may review the app** — every new version is reviewed
+with the "App access" notes, and a switch that does nothing there can get the
+update rejected.
 
 ### Environments (DEV / UAT / PROD)
 
