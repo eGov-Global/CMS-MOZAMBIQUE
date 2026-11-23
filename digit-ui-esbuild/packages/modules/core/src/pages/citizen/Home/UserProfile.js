@@ -24,12 +24,13 @@ import {
   Input as V2Input,
   Select as V2Select,
 } from "@egovernments/digit-ui-components-v2";
-import { Camera, Phone, Save } from "lucide-react";
+import { Camera, Phone, Save, UserX } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
 import UploadDrawer from "./ImageUpload/UploadDrawer";
 import ImageComponent from "../../../components/ImageComponent";
+import { privacyLinks } from "../../../components/privacyLinks";
 
 const DEFAULT_TENANT = Digit?.ULBService?.getStateId?.();
 // CCSD-1989: strict email shape (blank ok) so "a@b." fails client-side with a
@@ -120,6 +121,39 @@ const defaultValidationConfig = {
 };
 
 const PREFERENCE_CODE = "USER_NOTIFICATION_PREFERENCES";
+
+/**
+ * The signed-in citizen's way to ask for their account to be deleted, the
+ * in-app path Google Play requires. Deletion is a request by email for now, so
+ * the button opens the privacy policy's deletion section, which says how to
+ * ask and what is deleted and kept. Nothing when the deployment has no
+ * privacy page.
+ */
+function DeleteAccountCard({ t, history }) {
+  const links = privacyLinks(t);
+  if (!links) return null;
+  const { deleteAccount } = links;
+  return (
+    <V2Card style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
+      <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-heading, #1D2433)" }}>
+        {deleteAccount.label}
+      </h2>
+      <p style={{ margin: 0, fontSize: "0.875rem", lineHeight: 1.5, color: "var(--color-text-secondary, #6B7280)" }}>
+        {deleteAccount.description}
+      </p>
+      <div>
+        <V2Button
+          variant="outline"
+          type="button"
+          leading={<UserX className="h-4 w-4" />}
+          onClick={() => history.push(deleteAccount.url)}
+        >
+          {deleteAccount.label}
+        </V2Button>
+      </div>
+    </V2Card>
+  );
+}
 
 const UserProfile = ({ stateCode, userType, cityDetails }) => {
   const history = useHistory();
@@ -1219,6 +1253,8 @@ const UserProfile = ({ stateCode, userType, cityDetails }) => {
               })}
             </V2Card>
           ) : null}
+
+          <DeleteAccountCard t={t} history={history} />
         </div>
         <div
           style={{

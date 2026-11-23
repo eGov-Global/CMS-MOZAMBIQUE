@@ -180,24 +180,17 @@ const SelectMobileNumber = ({
 };
 
 /**
- * The privacy policy and account deletion links under the sign-in button, so
- * both are reachable inside the mobile app before signing in (Google Play's
- * in-app deletion path). Nothing when the deployment has no privacy page.
+ * The privacy policy link under the sign-in button, so it can be read inside
+ * the mobile app before signing in. (Account deletion is in Edit Profile.)
+ * Nothing when the deployment has no privacy page.
  */
 function PrivacyLinksRow({ t }) {
   const links = privacyLinks(t);
   if (!links) return null;
-  const linkStyle = { color: "var(--color-text-secondary, #6B7280)", textDecoration: "underline" };
   return (
     <p style={{ margin: 0, textAlign: "center", fontSize: "0.8125rem", lineHeight: "1.5rem" }}>
-      <Link to={links.privacy.url} style={linkStyle}>
+      <Link to={links.privacy.url} style={{ color: "var(--color-text-secondary, #6B7280)", textDecoration: "underline" }}>
         {links.privacy.label}
-      </Link>
-      <span aria-hidden style={{ margin: "0 8px", color: "var(--color-text-secondary, #6B7280)" }}>
-        ·
-      </span>
-      <Link to={links.deleteAccount.url} style={linkStyle}>
-        {links.deleteAccount.label}
       </Link>
     </p>
   );

@@ -1,9 +1,10 @@
 /**
  * The privacy policy and account deletion links a citizen can reach from
- * inside the app (sign-in screen, side menu). Google Play wants account
- * deletion reachable in the app as well as on the web, and the app never
- * opens the landing page, whose footer is the only other place with these
- * links.
+ * inside the app. Google Play wants account deletion reachable in the app as
+ * well as on the web, and the app never opens the landing page, whose footer
+ * is the only other place with these links. The privacy policy sits on the
+ * sign-in screen and in the side menu; account deletion only in a signed-in
+ * citizen's Edit Profile.
  *
  * Both point at the public privacy page the PGR product registers
  * (`PGRPrivacyPolicy`, mounted by App.js at /<contextPath>/privacy-policy).
@@ -34,6 +35,12 @@ export const privacyLinks = (t) => {
     deleteAccount: {
       url: `${privacyUrl}#${DELETE_ACCOUNT_ANCHOR}`,
       label: label(t, "CORE_DELETE_MY_ACCOUNT", "Eliminar a minha conta", "Delete my account"),
+      description: label(
+        t,
+        "CORE_DELETE_MY_ACCOUNT_INFO",
+        "Pode pedir a eliminação da sua conta e dos dados do seu perfil. Veja como pedir e o que é conservado.",
+        "You can ask for your account and your profile data to be deleted. See how to ask and what is kept."
+      ),
     },
   };
 };
