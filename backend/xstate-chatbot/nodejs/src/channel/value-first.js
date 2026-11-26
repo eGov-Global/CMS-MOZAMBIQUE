@@ -11,6 +11,7 @@ var geturl = require("url");
 var path = require("path");
 const exifr = require("exifr");
 const { verifySharedSecret } = require("./shared-secret");
+const { withFilestoreAuth } = require("./filestore-auth");
 require("url-search-params-polyfill");
 
 // ValueFirst answers with an HTML error page on some failures and an empty
@@ -75,11 +76,15 @@ class ValueFirstWhatsAppProvider {
       filename: fileName,
       contentType: "image/jpg",
     });
-    let response = await axios.post(url, form, {
-      headers: {
-        ...form.getHeaders(),
-      },
-    });
+    // Filestore needs a login (VAPT #223): service-account token.
+    let response = await withFilestoreAuth((auth) =>
+      axios.post(url, form, {
+        headers: {
+          ...form.getHeaders(),
+          ...auth,
+        },
+      }),
+    );
 
     var filestore = response.data;
     return filestore["files"][0]["fileStoreId"];
@@ -281,7 +286,10 @@ class ValueFirstWhatsAppProvider {
       origin: "*",
     };
     //console.log("Filestore URL", url)
-    let response = await fetch(url, options);
+    // Filestore needs a login (VAPT #223): service-account token.
+    let response = await withFilestoreAuth((auth) =>
+      fetch(url, { ...options, headers: { ...auth } }),
+    );
     response = await response.json();
     //console.log("getFileForFileStoreId Response", response);
     var fileURL = response["fileStoreIds"][0]["url"].split(",");

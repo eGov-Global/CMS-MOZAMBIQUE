@@ -6,6 +6,7 @@ var FormData = require("form-data");
 const mediaTypes = require('../media-types');
 const { maskMobile, summarizeInbound } = require('../privacy');
 const { isValidTwilioSignature } = require('./twilio-signature');
+const { withFilestoreAuth } = require('./filestore-auth');
 
 // The only host inbound media is fetched from, and the only path shape accepted
 // on it. See twilioMediaUrl below.
@@ -48,12 +49,14 @@ class TwilioWhatsAppProvider {
             contentType: mediaTypes.filestoreContentType(fileName) || contentType || 'application/octet-stream'
         });
         
-        const response = await axios.post(url, form, {
+        // Filestore needs a login (VAPT #223): service-account token.
+        const response = await withFilestoreAuth((auth) => axios.post(url, form, {
             cancelToken,
             headers: {
-                ...form.getHeaders()
+                ...form.getHeaders(),
+                ...auth
             }
-        });
+        }));
 
         var filestore = response.data;
         return filestore['files'][0]['fileStoreId'];
@@ -118,7 +121,9 @@ class TwilioWhatsAppProvider {
         }
         
         try {
-            let response = await fetch(url, { ...options, timeout: config.timeouts.request });
+            // Filestore needs a login (VAPT #223): service-account token.
+            let response = await withFilestoreAuth((auth) =>
+                fetch(url, { ...options, headers: { ...options.headers, ...auth }, timeout: config.timeouts.request }));
             
             if (!response.ok) {
                 console.error("Twilio - Filestore API error:", response.status, response.statusText);

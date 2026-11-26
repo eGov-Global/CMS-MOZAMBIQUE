@@ -14,6 +14,7 @@ const TtlCache = require("../../ttl-cache");
 var geturl = require("url");
 var path = require("path");
 const userService = require('../../session/user-service');
+const { withFilestoreAuth } = require("../../channel/filestore-auth");
 const { ExternalServiceError } = require("../../session/errors");
 require("url-search-params-polyfill");
 
@@ -951,11 +952,17 @@ class PGRService {
 
     const writer = fs.createWriteStream(filename);
 
-    const response = await axios({
+    // A filestore API URL (the /files/id fallback) needs a login (VAPT #223);
+    // a signed storage link does not, and must not get the token.
+    const download = (auth) => axios({
       url,
       method: "GET",
       responseType: "stream",
+      headers: { ...auth },
     });
+    const response = /\/filestore\/v1\//.test(String(url))
+      ? await withFilestoreAuth(download)
+      : await download({});
 
     response.data.pipe(writer);
 
@@ -975,11 +982,15 @@ class PGRService {
       filename: fileName,
       contentType: mediaTypes.filestoreContentType(fileName) || contentType || "image/jpg",
     });
-    let response = await axios.post(url, form, {
-      headers: {
-        ...form.getHeaders(),
-      },
-    });
+    // Filestore needs a login (VAPT #223): service-account token.
+    let response = await withFilestoreAuth((auth) =>
+      axios.post(url, form, {
+        headers: {
+          ...form.getHeaders(),
+          ...auth,
+        },
+      }),
+    );
 
     var filestore = response.data;
     return filestore["files"][0]["fileStoreId"];
@@ -999,7 +1010,10 @@ class PGRService {
       origin: "*",
     };
 
-    let response = await fetch(url, { ...options, timeout: config.timeouts.request });
+    // Filestore needs a login (VAPT #223): service-account token.
+    let response = await withFilestoreAuth((auth) =>
+      fetch(url, { ...options, headers: { ...auth }, timeout: config.timeouts.request }),
+    );
     response = await response.json();
 
     // Handle the correct response structure based on actual API response
