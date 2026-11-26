@@ -376,7 +376,13 @@ if want ui; then
     info "digit-ui: building"
     (cd "$UI_WORK" && GLOBAL_CONFIGS="$GLOBAL_CONFIGS" node esbuild.build.js >>"$UI_LOG" 2>&1) \
       && grep -q "Build complete" "$UI_LOG" || fail "digit-ui build failed (log: $UI_LOG); nothing deployed"
-    grep -oh 'Filefetch:async.\{0,700\}' "$UI_WORK"/build/index.js "$UI_WORK"/build/chunks/*.js 2>/dev/null | grep -q 'auth-token' \
+    # Only files that exist (this build has no chunks/), and no pipe: under
+    # pipefail a missing file or grep -q closing the pipe early fails the check
+    # even when the token is there.
+    UI_JS=("$UI_WORK/build/index.js")
+    for f in "$UI_WORK"/build/chunks/*.js; do [ -f "$f" ] && UI_JS+=("$f"); done
+    FILEFETCH=$(grep -aoh 'Filefetch:async.\{0,700\}' "${UI_JS[@]}" 2>/dev/null || true)
+    [[ "$FILEFETCH" == *auth-token* ]] \
       || fail "built digit-ui does not send the token with photo requests (is this the right branch?); nothing deployed"
     NEW_ID=$(sed -n 's/.*"buildId":"\([^"]*\)".*/\1/p' "$UI_WORK/build/build-info.json" 2>/dev/null)
     ok "digit-ui built (build $NEW_ID; photo requests send the token)"
