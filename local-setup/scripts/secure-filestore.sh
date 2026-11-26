@@ -384,8 +384,10 @@ if want ui; then
     FILEFETCH=$(grep -aoh 'Filefetch:async.\{0,700\}' "${UI_JS[@]}" 2>/dev/null || true)
     [[ "$FILEFETCH" == *auth-token* ]] \
       || fail "built digit-ui does not send the token with photo requests (is this the right branch?); nothing deployed"
-    NEW_ID=$(sed -n 's/.*"buildId":"\([^"]*\)".*/\1/p' "$UI_WORK/build/build-info.json" 2>/dev/null)
-    ok "digit-ui built (build $NEW_ID; photo requests send the token)"
+    # Not every digit-ui build writes build-info.json; without `|| true` a
+    # missing file ends the script silently under set -e.
+    NEW_ID=$(sed -n 's/.*"buildId":"\([^"]*\)".*/\1/p' "$UI_WORK/build/build-info.json" 2>/dev/null || true)
+    ok "digit-ui built (build ${NEW_ID:-no build-info.json}; photo requests send the token)"
 
     # configurator — the Ansible build_configurator path.
     if ! $SKIP_CONF; then
@@ -411,9 +413,15 @@ if want ui; then
       rsync -a --exclude=config.js --exclude=telemetry-config.js "$CONF_DIST/" "$CONF_DIR/" \
         || fail "could not copy the configurator into $CONF_DIR (backup: $BACKUP/configurator)"
     fi
-    LIVE_ID=$(curl -s -m 15 "$BASE_URL/digit-ui/build-info.json" | sed -n 's/.*"buildId":"\([^"]*\)".*/\1/p')
-    if [ -n "$NEW_ID" ] && [ "$LIVE_ID" = "$NEW_ID" ]; then ok "digit-ui deployed and served (build $LIVE_ID)"
-    else warn "digit-ui copied, but $BASE_URL serves build '${LIVE_ID:-?}' (expected $NEW_ID); check --url"; fi
+    if [ -z "$NEW_ID" ]; then
+      # No build id to compare: check the served bundle carries the token code.
+      if docker exec "$UI_CTR" grep -qs '"auth-token"' "$UI_WEB/index.js"; then ok "digit-ui deployed (served index.js sends the token)"
+      else warn "digit-ui copied, but $UI_CTR:$UI_WEB/index.js does not show the token code; check the container"; fi
+    else
+      LIVE_ID=$(curl -s -m 15 "$BASE_URL/digit-ui/build-info.json" 2>/dev/null | sed -n 's/.*"buildId":"\([^"]*\)".*/\1/p' || true)
+      if [ "$LIVE_ID" = "$NEW_ID" ]; then ok "digit-ui deployed and served (build $LIVE_ID)"
+      else warn "digit-ui copied, but $BASE_URL serves build '${LIVE_ID:-?}' (expected $NEW_ID); check --url"; fi
+    fi
     if ! $SKIP_CONF; then
       [ "$(code "$BASE_URL/configurator/")" = 200 ] && ok "configurator deployed and served" || warn "configurator copied, but $BASE_URL/configurator/ did not answer 200"
     fi
